@@ -1,15 +1,14 @@
 /*
  * @samva/editor chrome styles — imported by the host AFTER its own
- * `@import "tailwindcss"` (the dashboard owns Tailwind + the base design tokens:
+ * `@import "tailwindcss"` (the host owns Tailwind + the base design tokens:
  * --background, --foreground, --muted, --border, --primary, --surface-*,
  * --placeholder, --status-*, --shadow-*). This file adds ONLY the editor-specific
- * tokens the dashboard lacks plus the workspace chrome that the shell layout needs. The dev
- * harness supplies the base tokens itself (dev/base-tokens.css); apps/web already
- * has them.
+ * tokens plus the workspace chrome that the shell layout needs. The dev harness
+ * supplies the base tokens itself (dev/styles.css).
  *
  * `@source` registers this package's code for content detection so hosts do not
- * hand-write package-relative globs. Paths are relative to this file, which ships
- * beside the TS/TSX in `src` and the built JS in `dist`.
+ * hand-write package-relative globs. Paths are relative to this file, which sits
+ * beside the package's JS in both `src` and the published `dist`.
  */
 @source "./**/*.{js,ts,tsx}";
 

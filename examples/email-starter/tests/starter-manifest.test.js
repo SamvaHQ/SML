@@ -96,8 +96,8 @@ const verifyPackedInstall = async (destination, name, tarball) => {
 
 test("@samva/markup keeps a template project's dependency graph to rendering and checking", async () => {
   // This project pins the published authoring releases, so whatever @samva/markup declares
-  // is what a template author installs, and apps/agents/src/editor/template-project-starter.ts
-  // ships the resolved lockfile verbatim into every hosted project. The package carries what
+  // is what a template author installs, and Samva's hosted editor ships the resolved lockfile
+  // verbatim into every hosted project. The package carries what
   // rendering needs and what `samva templates check` needs to compile a template (Babel, the
   // Tailwind compiler, css-tree, the client matrix) and nothing more. The lockfile carries the
   // dependency block of the release on npm; the workspace package is the source
@@ -128,7 +128,7 @@ test("the starter manifest describes the exact canonical payload", async () => {
   assert.equal(await digestFiles(root, manifest.files), manifest.sha256);
 });
 
-test("the complete starter installs and checks outside the monorepo", async () => {
+test("the complete starter installs and checks outside the repository", async () => {
   // Release auditing supplies both exact local packs; ordinary consumers verify the registry lock.
   // oxlint-disable-next-line node/no-process-env -- Standalone release audit supplies the exact local package artifact.
   const markupPack = process.env.SAMVA_STARTER_MARKUP_TARBALL;
