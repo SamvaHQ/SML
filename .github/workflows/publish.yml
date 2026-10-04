@@ -28,7 +28,6 @@ jobs:
         contains(github.event.pull_request.labels.*.name, 'release')))
     runs-on: ubuntu-latest
     permissions:
-      actions: write
       contents: write
       id-token: write
       pull-requests: write

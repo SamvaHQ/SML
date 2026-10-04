@@ -54,6 +54,10 @@ publishes to npm from GitHub Actions with provenance, after `scripts/check-packa
 audits every tarball. A publish that includes `@samva/markup` or `@samva/vite` then opens a pull
 request that pins the starter to the new versions.
 
+Both pull requests come from the workflow token, so GitHub holds their `check` run until a
+maintainer approves it from the pull request's Checks tab. A later push to the same branch starts
+no run; close and reopen the pull request to check the new head.
+
 ## License
 
 [MIT](LICENSE)
