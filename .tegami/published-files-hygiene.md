@@ -23,3 +23,10 @@ that installs both resolves one copy of the compiler.
 
 `@samva/editor/mock` addresses its sample brand at `nimbus.example` instead of a registered domain.
 The mock's logo URL no longer resolves, so the demo shows its alt text.
+
+## The editor keeps up with rapid saves on Linux
+
+`samvaEditor()` turns on the watcher's pending-write tracking unless the project configures its
+own, so a save that lands within 50 ms of the previous one still reaches the editor on Linux. Event
+streams load the template catalog before they connect, so the first edit after opening the editor
+is reported as a change.

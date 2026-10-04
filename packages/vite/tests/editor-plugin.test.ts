@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { inspectSourceElement } from "@samva/markup/edit";
 import type { EmailElementSelection } from "@samva/markup/render";
-import { createServer, type ViteDevServer } from "vite";
+import { createServer, resolveConfig, type ViteDevServer } from "vite";
 
 import { EDITOR_SOURCE_TOO_LARGE_MESSAGE } from "../src/editor-store";
 import { samvaEditor, type SamvaEditorPluginOptions } from "../src/index";
@@ -715,7 +715,6 @@ describe("samvaEditor vite plugin", () => {
 
   it("keeps a document that stops compiling, with a null render and the findings, and recovers", async () => {
     const path = join(root, "templates", "welcome.tsx");
-    await json(origin, `${ROUTE}/api/templates`);
     const broken = await subscribeToChanges(
       `${origin}${ROUTE}/api/events?id=templates/welcome.tsx`,
     );
@@ -844,6 +843,40 @@ describe("samvaEditor vite plugin", () => {
       await new Promise<void>((done) => authed.http.close(() => done()));
       await authed.server.close();
     }
+  });
+});
+
+describe("samvaEditor watcher configuration", () => {
+  it("tracks pending writes even when the host chooses its own bind address", async () => {
+    const config = await resolveConfig(
+      { configFile: false, plugins: [samvaEditor()], server: { host: "127.0.0.2" } },
+      "serve",
+    );
+    expect(config.server.host).toBe("127.0.0.2");
+    expect(config.server.watch).toMatchObject({
+      awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 10 },
+    });
+  });
+
+  it("preserves explicit watcher options", async () => {
+    const watch = {
+      ignored: ["**/custom-cache/**"],
+      ignoreInitial: true,
+      awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 20 },
+    };
+    const config = await resolveConfig(
+      { configFile: false, plugins: [samvaEditor()], server: { watch } },
+      "serve",
+    );
+    expect(config.server.watch).toMatchObject(watch);
+  });
+
+  it("preserves a disabled watcher", async () => {
+    const config = await resolveConfig(
+      { configFile: false, plugins: [samvaEditor()], server: { watch: null } },
+      "serve",
+    );
+    expect(config.server.watch).toBeNull();
   });
 });
 
