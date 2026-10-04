@@ -94,6 +94,6 @@ export default defineConfig({
   build: {
     outDir: fileURLToPath(new URL("../dist/editor", import.meta.url)),
     emptyOutDir: true,
-    sourcemap: true,
+    sourcemap: false,
   },
 });

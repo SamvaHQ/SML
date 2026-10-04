@@ -14,7 +14,7 @@ export default defineConfig({
   outDir: "dist",
   // Scope the declaration build to what the package publishes; see tsconfig.build.json.
   dts: { tsconfig: "tsconfig.build.json" },
-  sourcemap: true,
+  sourcemap: false,
   clean: true,
   // The editor runs in the browser; hosts bundle it.
   platform: "browser",
