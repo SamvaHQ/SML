@@ -17,6 +17,7 @@ jobs:
     name: draft versions
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
       pull-requests: write
     steps:
@@ -42,3 +43,13 @@ jobs:
         run: bun run tegami version
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      # The workflow token's push starts no runs, so the Version Packages pull request would never
+      # get the required `check` status; a dispatch is the one trigger that token may start.
+      - name: check the version branch
+        run: |
+          if git ls-remote --exit-code --heads origin tegami/version-packages >/dev/null; then
+            gh workflow run check.yml --ref tegami/version-packages
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
