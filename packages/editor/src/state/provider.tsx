@@ -1,10 +1,10 @@
 import type { AsyncEditorHost } from "@samva/editor/host";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 
 import { EditorIconsProvider } from "../chrome/icon-context";
 import { DEFAULT_EDITOR_ICONS, type EditorIcons } from "../chrome/icon-set";
 import { EditorBundleContext } from "./context";
-import { createEditorBundle } from "./store";
+import { createEditorBundle, type UserSelection } from "./store";
 import type { CheckItem } from "./types";
 
 /** Stable empty checks default so an omitted prop doesn't churn the synced state. */
@@ -16,6 +16,11 @@ export interface EditorProviderProps {
   readonly checks?: ReadonlyArray<CheckItem> | undefined;
   /** Icons that replace the editor's defaults, by name. Keep the object stable across renders. */
   readonly icons?: Partial<EditorIcons> | undefined;
+  /**
+   * Called when the user selects an element (a canvas click or an outline row), with the render the
+   * selection was made in. A selection the editor rebinds to a newer render is not reported again.
+   */
+  readonly onSelectElement?: ((selection: UserSelection) => void) | undefined;
   readonly children: ReactNode;
 }
 
@@ -26,7 +31,13 @@ export interface EditorProviderProps {
  * creation is side-effect free; the session opens in the mount effect, so
  * StrictMode's double-invoke opens and disposes cleanly.
  */
-export function EditorProvider({ host, checks = NO_CHECKS, icons, children }: EditorProviderProps) {
+export function EditorProvider({
+  host,
+  checks = NO_CHECKS,
+  icons,
+  onSelectElement,
+  children,
+}: EditorProviderProps) {
   const [bundle, setBundle] = useState(() => createEditorBundle(host, { hostChecks: checks }));
   // React-sanctioned derived-state reset: recreate the bundle during render when
   // the host changes (e.g. the vite dev app re-authenticates). React discards
@@ -44,6 +55,11 @@ export function EditorProvider({ host, checks = NO_CHECKS, icons, children }: Ed
   useEffect(() => {
     bundle.store.getState().actions.setHostChecks(checks);
   }, [bundle, checks]);
+
+  useLayoutEffect(() => {
+    bundle.setUserSelectListener(onSelectElement);
+    return () => bundle.setUserSelectListener(undefined);
+  }, [bundle, onSelectElement]);
 
   const iconSet = useMemo(
     () => (icons === undefined ? DEFAULT_EDITOR_ICONS : { ...DEFAULT_EDITOR_ICONS, ...icons }),

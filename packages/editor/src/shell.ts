@@ -6,6 +6,7 @@
 // reads the instance store directly.
 export { EditorProvider } from "./state/provider";
 export type { EditorProviderProps } from "./state/provider";
+export type { UserSelection } from "./state/store";
 export type { CheckItem, CheckSeverity } from "./state/types";
 export { EditorShell } from "./chrome/shell";
 export type { EditorContribution, EditorSlot } from "./chrome/contributions";

@@ -20,7 +20,10 @@ export default defineConfig({
   platform: "browser",
   // The stylesheet ships beside the entries. Its `@source` glob is relative to the file, so Tailwind
   // scans the built JavaScript in `dist` as it scans the TypeScript in `src`.
-  copy: [{ from: "src/styles.css", to: "dist" }],
+  copy: [
+    { from: "src/styles.css", to: "dist" },
+    { from: "src/base.css", to: "dist" },
+  ],
   // Emit `.js` (not `.mjs`) so the package's `exports` map to plain `.js`; the package is
   // `type: module`, so `.js` is ESM.
   outExtensions: () => ({ js: ".js" }),

@@ -21,6 +21,10 @@ boundaries—not compiler transforms—provide render isolation.
   code transform of the static TSX at that span, saved through `DocumentWriter.save`. A selection
   the document has moved past is dropped or explicitly re-resolved, never applied to whatever now
   sits at that path.
+- `EditorProvider`'s `onSelectElement` reports only the user's own selection (a canvas click or
+  outline row), never the editor rebinding a selection to a newer render. A host that forwards a
+  selection elsewhere treats it as a gesture and treats any other selection change as following
+  the document.
 - A visual edit never leaves the static profile. `applySourceReplacements` runs with a
   `ProfileGuard`, so `checkStaticProfile` compares the file before and after and refuses an edit
   that introduces an error the source did not already have; the reason reaches the author through

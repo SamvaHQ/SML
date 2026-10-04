@@ -15,6 +15,7 @@ recipient receives.
 | `@samva/editor/channels`    | SMS/WhatsApp form reads and exact source edits over the authored TSX                      |
 | `@samva/editor/mock`        | An in-memory host + sample document for the harness and tests                             |
 | `@samva/editor/styles.css`  | The chrome's editor-specific tokens + component CSS (see below)                           |
+| `@samva/editor/base.css`    | Optional neutral light/dark base tokens for hosts without their own theme                 |
 
 ## Writing a host
 
@@ -31,7 +32,6 @@ speaks Effect's own types, so it follows Effect's major versions.
 ## Using the shell
 
 ```tsx
-import "@samva/editor/styles.css";
 import { EditorProvider, EditorShell, LockedAction } from "@samva/editor/shell";
 
 <EditorProvider host={host} checks={checks} icons={{ eye: MyEyeIcon }}>
@@ -96,6 +96,24 @@ pinned to the revision and fixture it was taken in. Switching fixtures is a
 `fixtures` host capability — a re-render of the same revision, never a document
 mutation.
 
+`EditorProvider` accepts `onSelectElement`, called when the user selects an element through the
+canvas or outline. Its `UserSelection` value, exported from `@samva/editor/shell`, contains
+`instancePath`, `revision` and `fixture`, pinned to the render the user selected. Automatic
+selection rebinding after a document change does not call it. Replacing the callback keeps the
+same document session when `host` stays stable.
+
+```tsx
+import { EditorProvider, EditorShell, type UserSelection } from "@samva/editor/shell";
+
+const selectElement = (selection: UserSelection) => {
+  hostSelection(selection.instancePath, selection.revision, selection.fixture);
+};
+
+<EditorProvider host={host} onSelectElement={selectElement}>
+  <EditorShell />
+</EditorProvider>;
+```
+
 Persisted publish/version/restore behavior is an optional `lifecycle`
 capability. It is deliberately separate from the editor's local undo/redo
 history, which represents unsaved interaction history rather than stored
@@ -106,10 +124,10 @@ template versions.
 The shell is authored in Tailwind v4 against a set of base design token names
 (`--color-background`, `--color-muted`, `--color-border`, `--color-primary`,
 `--color-surface-*`, `--color-placeholder`, `--color-status-*`, `--shadow-*`). The
-host owns `@import "tailwindcss"` and defines those base tokens, so the package
-deliberately does **not** ship them — importing the package must never fight the
-host theme. `@samva/vite`'s embedded editor (`packages/vite/editor/src/styles.css`)
-is a complete example of a host theme.
+host owns `@import "tailwindcss"` and either defines those base tokens or imports the optional
+`@samva/editor/base.css` neutral light/dark theme. Hosts with their own tokens omit that
+stylesheet. `@samva/vite`'s embedded editor (`packages/vite/editor/src/styles.css`) is a complete
+example of a host theme.
 
 `@samva/editor/styles.css` ships only the editor's own additions:
 
@@ -124,15 +142,21 @@ is a complete example of a host theme.
 - the **chrome component CSS** — the workspace grid backdrop, scoped scrollbars, and
   the agent-pulse animation, all under a `samva-editor-*` prefix.
 
-The host imports it once, after its own Tailwind import. The standalone dev harness
-stands in a neutral base theme itself (`dev/styles.css`) so `bun run dev` renders
-fully; production hosts never load that file.
+The host imports it once, after its own Tailwind import and base tokens. The standalone dev
+harness (`dev/styles.css`) imports the packaged neutral base theme so `bun run dev` renders fully.
 
 ## Host integration
 
-The stylesheet is not a plain CSS file — its `@theme` block only compiles when
-Tailwind processes it as part of the host's own Tailwind graph. So a host MUST wire
-it into its Tailwind **root** CSS, not import it from a component:
+The stylesheets contain `@theme` blocks that compile as part of the host's Tailwind graph. Wire
+them into the Tailwind **root** CSS, not a React component. A host using the neutral theme imports:
+
+```css
+@import "tailwindcss";
+@import "@samva/editor/base.css";
+@import "@samva/editor/styles.css";
+```
+
+A host with its own base tokens imports:
 
 ```css
 @import "tailwindcss";
@@ -140,7 +164,7 @@ it into its Tailwind **root** CSS, not import it from a component:
 @import "@samva/editor/styles.css";
 ```
 
-One import covers both concerns. The `@import` (resolved through the package exports, after
+The editor stylesheet import covers both concerns. The `@import` (resolved through the package exports, after
 `@import "tailwindcss"`) registers the `@theme` block **and** the package-owned `@source`
 glob so chrome utilities (`bg-accent-email`, `sel-*`, `chip-*`, `samva-editor-*`) generate —
 hosts do not hand-write content paths into `node_modules`.
