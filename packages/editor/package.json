@@ -54,7 +54,8 @@
       "types": "./dist/mock.d.ts",
       "import": "./dist/mock.js"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/styles.css",
+    "./base-theme.css": "./dist/base-theme.css"
   },
   "publishConfig": {
     "access": "public"

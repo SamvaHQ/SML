@@ -274,6 +274,21 @@ export interface EditorBundle {
   readonly host: AsyncEditorHost;
   readonly store: EditorStore;
   readonly spine: EditorSpine;
+  /**
+   * Listen for the user's own selection of an element (a canvas click, an outline row). A document
+   * change that rebinds an existing selection to a newer render is not reported, so a host can
+   * tell a gesture from the editor keeping up with the document. Pass `undefined` to stop.
+   */
+  readonly setUserSelectListener: (
+    listener: ((selection: UserSelection) => void) | undefined,
+  ) => void;
+}
+
+/** The element the user just selected, pinned to the render it was selected in. */
+export interface UserSelection {
+  readonly instancePath: string;
+  readonly revision: RevisionToken;
+  readonly fixture: string;
 }
 
 export interface CreateEditorBundleOptions {
@@ -290,6 +305,7 @@ export const createEditorBundle = (
   // The spine is wired after the store below; nothing dereferences it until an
   // action or the provider's open effect fires, both post-creation.
   let spine!: EditorSpine;
+  let userSelectListener: ((selection: UserSelection) => void) | undefined;
 
   /** An uneditable host, readonly document, or active lifecycle operation rejects mutations. */
   const gated = (state: EditorState): boolean =>
@@ -528,7 +544,7 @@ export const createEditorBundle = (
         spine.retrySave();
       },
 
-      select: (instancePath) =>
+      select: (instancePath) => {
         set((current) => {
           if (instancePath === null) return { selection: DOCUMENT_SELECTION };
           const { render, doc } = current;
@@ -554,7 +570,16 @@ export const createEditorBundle = (
             },
             expandedLayers: expanded,
           };
-        }),
+        });
+        const { selection } = get();
+        if (selection.kind === "element") {
+          userSelectListener?.({
+            instancePath: selection.instancePath,
+            revision: selection.revision,
+            fixture: selection.fixture,
+          });
+        }
+      },
       selectDocument: () => set({ selection: DOCUMENT_SELECTION }),
       selectEnvelope: () => set({ selection: ENVELOPE_SELECTION }),
 
@@ -843,5 +868,12 @@ export const createEditorBundle = (
     onSessionError: (reason) => store.setState({ storageError: reason }),
   });
 
-  return { host, store, spine };
+  return {
+    host,
+    store,
+    spine,
+    setUserSelectListener: (listener) => {
+      userSelectListener = listener;
+    },
+  };
 };
