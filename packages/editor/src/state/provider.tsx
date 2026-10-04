@@ -1,5 +1,5 @@
 import type { AsyncEditorHost } from "@samva/editor/host";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 
 import { EditorIconsProvider } from "../chrome/icon-context";
 import { DEFAULT_EDITOR_ICONS, type EditorIcons } from "../chrome/icon-set";
@@ -56,7 +56,7 @@ export function EditorProvider({
     bundle.store.getState().actions.setHostChecks(checks);
   }, [bundle, checks]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     bundle.setUserSelectListener(onSelectElement);
     return () => bundle.setUserSelectListener(undefined);
   }, [bundle, onSelectElement]);

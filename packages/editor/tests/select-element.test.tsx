@@ -5,9 +5,12 @@
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { MOCK_FIXTURE_NAMES, NIMBUS_WELCOME_TSX } from "@samva/editor/mock";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { createRef, useLayoutEffect, type RefObject } from "react";
 
-import { useEditorStore } from "../src/state/context";
-import { EditorProvider } from "../src/state/provider";
+import { LayersPane } from "../src/chrome/left-rail";
+import { useEditorStore, useEditorStoreApi } from "../src/state/context";
+import { EditorProvider, type EditorProviderProps } from "../src/state/provider";
+import type { EditorStore } from "../src/state/store";
 import { emitChange, mockEditor } from "./mock-host";
 
 afterEach(cleanup);
@@ -34,7 +37,94 @@ function SelectButton() {
   );
 }
 
+function CaptureStore({ storeRef }: { storeRef: RefObject<EditorStore | null> }) {
+  const store = useEditorStoreApi();
+  useLayoutEffect(() => {
+    storeRef.current = store;
+    return () => {
+      storeRef.current = null;
+    };
+  }, [store, storeRef]);
+  return null;
+}
+
+function CommitSelection({
+  storeRef,
+  selectDuringCommit,
+  ...provider
+}: EditorProviderProps & {
+  storeRef: RefObject<EditorStore | null>;
+  selectDuringCommit: boolean;
+}) {
+  // Ancestor layout effects follow the provider's layout commit and precede passive effects.
+  useLayoutEffect(() => {
+    if (selectDuringCommit) storeRef.current!.getState().actions.select(HEADING_PATH);
+  }, [selectDuringCommit, storeRef]);
+  return (
+    <EditorProvider {...provider}>
+      <CaptureStore storeRef={storeRef} />
+      {provider.children}
+    </EditorProvider>
+  );
+}
+
 describe("onSelectElement", () => {
+  it("uses the committed callback before an ancestor layout effect selects", async () => {
+    const editor = await mockEditor();
+    const first = vi.fn();
+    const second = vi.fn();
+    const storeRef = createRef<EditorStore>();
+    const view = render(
+      <CommitSelection
+        host={editor.host}
+        onSelectElement={first}
+        storeRef={storeRef}
+        selectDuringCommit={false}
+      >
+        <SelectButton />
+      </CommitSelection>,
+    );
+    await waitFor(() => expect(storeRef.current?.getState().render?.revision).toBe("rev_1"));
+    const store = storeRef.current;
+    view.rerender(
+      <CommitSelection
+        host={editor.host}
+        onSelectElement={second}
+        storeRef={storeRef}
+        selectDuringCommit
+      >
+        <SelectButton />
+      </CommitSelection>,
+    );
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledExactlyOnceWith({
+      instancePath: HEADING_PATH,
+      revision: "rev_1",
+      fixture: MOCK_FIXTURE_NAMES[0],
+    });
+    expect(storeRef.current).toBe(store);
+  });
+
+  it("reports an actual outline row selection through the provider", async () => {
+    const editor = await mockEditor();
+    const onSelectElement = vi.fn();
+    const view = render(
+      <EditorProvider host={editor.host} onSelectElement={onSelectElement}>
+        <LayersPane />
+      </EditorProvider>,
+    );
+    await waitFor(() => expect(view.getByTestId(`layers.node.${HEADING_PATH}`)).toBeTruthy());
+    expect(onSelectElement).not.toHaveBeenCalled();
+    await act(async () => {
+      view.getByTestId(`layers.node.${HEADING_PATH}`).click();
+    });
+    expect(onSelectElement).toHaveBeenCalledExactlyOnceWith({
+      instancePath: HEADING_PATH,
+      revision: "rev_1",
+      fixture: MOCK_FIXTURE_NAMES[0],
+    });
+  });
+
   it("reports the user's selection with the render it was made in, and not the editor keeping up", async () => {
     const editor = await mockEditor();
     const onSelectElement = vi.fn();
