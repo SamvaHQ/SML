@@ -1,6 +1,12 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "import", "jsx-a11y", "node"],
+  "jsPlugins": [
+    {
+      "name": "samva",
+      "specifier": "./scripts/oxlint-plugin-samva.js"
+    }
+  ],
   "categories": {
     "correctness": "error",
     "suspicious": "warn",
@@ -48,17 +54,24 @@
     "jsx-a11y/no-noninteractive-tabindex": "off",
     "jsx-a11y/no-static-element-interactions": "off",
     "jsx-a11y/prefer-tag-over-role": "off",
-    "typescript/no-explicit-any": "error"
+    "typescript/no-explicit-any": "error",
+    "samva/no-try-catch-or-throw": "error",
+    "samva/no-error-constructor": "error",
+    "samva/no-copy-string-selector": "error",
+    "samva/no-hand-rolled-object-guard": "error",
+    "samva/no-unsafe-type-assertion": "error"
   },
   "overrides": [
     {
       "files": [
-        "**/{vite,vitest,drizzle,sst,wrangler,turbo,oxlint,pagegraph}.config.{ts,mts,cts}",
+        "**/{vite,vitest,oxlint}.config.{ts,mts,cts}",
         "scripts/**/*.{ts,js,mts,mjs}",
-        "{apps,packages}/*/scripts/**/*.{ts,js,mts,mjs}"
+        "packages/*/scripts/**/*.{ts,js,mts,mjs}"
       ],
       "rules": {
-        "node/no-process-env": "off"
+        "node/no-process-env": "off",
+        "samva/no-try-catch-or-throw": "off",
+        "samva/no-error-constructor": "off"
       }
     },
     {
@@ -78,11 +91,13 @@
     {
       "files": ["**/tests/**/*.{ts,tsx}", "**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
       "rules": {
-        "eslint/no-await-in-loop": "off"
+        "eslint/no-await-in-loop": "off",
+        "samva/no-try-catch-or-throw": "off",
+        "samva/no-error-constructor": "off"
       }
     },
     {
-      "files": ["scripts/**/*.{ts,js,mts}", "{apps,packages}/*/scripts/**/*.{ts,js,mts}"],
+      "files": ["scripts/**/*.{ts,js,mts}", "packages/*/scripts/**/*.{ts,js,mts}"],
       "rules": {
         "eslint/no-await-in-loop": "off"
       }
@@ -115,12 +130,5 @@
       }
     }
   ],
-  "ignorePatterns": [
-    "node_modules",
-    "dist",
-    "build",
-    ".turbo",
-    "*.gen.ts",
-    "packages/markup/src/json-schema"
-  ]
+  "ignorePatterns": ["node_modules", "dist", "build", "*.gen.ts", "packages/markup/src/json-schema"]
 }
