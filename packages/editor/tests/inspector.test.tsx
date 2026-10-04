@@ -77,7 +77,7 @@ describe("Inspector envelope scope", () => {
     expect(view.container.textContent).toContain("Ada, your first bag is on us");
     expect(view.container.textContent).toContain("Freshly roasted, free shipping, no strings.");
     expect((view.getByTestId("inspector.envelope.from-email") as HTMLInputElement).value).toBe(
-      "hello@nimbus.coffee",
+      "hello@nimbus.example",
     );
   });
 });

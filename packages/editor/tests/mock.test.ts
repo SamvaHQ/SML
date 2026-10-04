@@ -61,7 +61,7 @@ describe("mock document", () => {
     expect(doc.diagnostics).toStrictEqual([]);
     expect(doc.variables.map((variable) => variable.name)).toStrictEqual(["firstName", "claimUrl"]);
     expect(doc.metadata.fromDefault).toStrictEqual({
-      email: "hello@nimbus.coffee",
+      email: "hello@nimbus.example",
       name: "Nimbus Coffee",
     });
   });

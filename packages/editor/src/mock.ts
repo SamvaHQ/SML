@@ -42,7 +42,7 @@ export default function WelcomeEmail({ firstName, claimUrl }) {
   return (
     <Email subject={\`\${firstName}, your first bag is on us\`}>
       <Container>
-        <Image src="https://assets.nimbus.coffee/logo.png" alt="Nimbus Coffee" />
+        <Image src="https://assets.nimbus.example/logo.png" alt="Nimbus Coffee" />
         <Heading>{firstName}, your first bag is on us</Heading>
         <Text>
           We roast in small batches and ship within a day, so every bag lands fresh.
@@ -124,7 +124,7 @@ const documentTree = (heading: string): MockNode => ({
           tag: "img",
           authored: true,
           origins: [at(19, 9), CONTAINER_CALL, EMAIL_CALL],
-          attrs: { src: "https://assets.nimbus.coffee/logo.png", alt: "Nimbus Coffee" },
+          attrs: { src: "https://assets.nimbus.example/logo.png", alt: "Nimbus Coffee" },
         },
         {
           tag: "h1",
@@ -149,7 +149,7 @@ const documentTree = (heading: string): MockNode => ({
               tag: "a",
               authored: true,
               origins: [at(24, 9), CONTAINER_CALL, EMAIL_CALL],
-              attrs: { href: "https://nimbus.coffee/claim/ada" },
+              attrs: { href: "https://nimbus.example/claim/ada" },
               text: "Claim your free bag",
             },
           ],
@@ -257,12 +257,12 @@ const BROKEN_ENTRY: EmailDiagnostic = {
 
 const VARIABLES: ReadonlyArray<Variable> = [
   { name: "firstName", sample: "Ada", required: true },
-  { name: "claimUrl", sample: "https://nimbus.coffee/claim/ada", required: true },
+  { name: "claimUrl", sample: "https://nimbus.example/claim/ada", required: true },
 ];
 
 const INITIAL_METADATA: EditableEmailDocument["metadata"] = {
-  fromDefault: { email: "hello@nimbus.coffee", name: "Nimbus Coffee" },
-  replyToDefault: ["support@nimbus.coffee"],
+  fromDefault: { email: "hello@nimbus.example", name: "Nimbus Coffee" },
+  replyToDefault: ["support@nimbus.example"],
 };
 
 interface MockState {

@@ -28,8 +28,8 @@ const IDENTITY = {
   origin: ORIGIN,
   variables: [{ name: "firstName", sample: "Ada", required: true }],
   metadata: {
-    fromDefault: { email: "hello@nimbus.coffee", name: "Nimbus Coffee" },
-    replyToDefault: ["support@nimbus.coffee"],
+    fromDefault: { email: "hello@nimbus.example", name: "Nimbus Coffee" },
+    replyToDefault: ["support@nimbus.example"],
   },
 } as const;
 
