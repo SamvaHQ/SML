@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Self-contained, so the package type-checks from its own directory. The flags match
+  // tsconfig.base.json at the repository root; keep them in step.
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "jsx": "react-jsx",
+    "types": ["node"],
+    "paths": {
+      "@samva/markup": ["./src/index.ts"],
+      "@samva/markup/*": ["./src/*.ts"]
+    }
+  },
+  "include": ["src", "tests", "scripts", "samva-brand.d.ts", "vitest.config.ts"]
+}

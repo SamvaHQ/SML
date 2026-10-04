@@ -1,0 +1,33 @@
+/* Acme's email theme — the shape `samva theme pull` writes. */
+
+@theme {
+  /* Brand */
+  --color-brand: #4f46e5;
+  --color-brand-foreground: #ffffff;
+  --color-accent: #f59e0b;
+  --color-surface: #f9fafb;
+
+  /* Shape + type */
+  --radius-card: 12px;
+  --radius-button: 6px;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-body: -apple-system, "Segoe UI", sans-serif;
+  --font-weight-heading: 700;
+  --text-hero: 36px/40px;
+  --text-fine: 12px;
+  --leading-airy: 1.75;
+  --tracking-caps: 0.05em;
+  --tracking-snug: -0.025em;
+
+  /* Layout */
+  --spacing: 4px;
+  --container-email: 600px;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-brand: #818cf8;
+    --color-brand-foreground: #171717;
+    --color-surface: #111827;
+  }
+}

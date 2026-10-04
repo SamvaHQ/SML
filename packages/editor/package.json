@@ -1,0 +1,107 @@
+{
+  "name": "@samva/editor",
+  "version": "0.11.1",
+  "description": "Embeddable editor for Samva template projects written in TSX",
+  "keywords": [
+    "editor",
+    "email",
+    "react",
+    "samva",
+    "sml",
+    "templates",
+    "tsx"
+  ],
+  "homepage": "https://samva.dev",
+  "bugs": {
+    "url": "https://github.com/SamvaHQ/SML/issues"
+  },
+  "license": "MIT",
+  "author": "Arya Labs, Inc.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SamvaHQ/SML.git",
+    "directory": "packages/editor"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "package.json",
+    "README.md",
+    "CHANGELOG.md",
+    "AGENTS.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    "./host": {
+      "types": "./dist/host.d.ts",
+      "import": "./dist/host.js"
+    },
+    "./host/effect": {
+      "types": "./dist/host/effect.d.ts",
+      "import": "./dist/host/effect.js"
+    },
+    "./shell": {
+      "types": "./dist/shell.d.ts",
+      "import": "./dist/shell.js"
+    },
+    "./channels": {
+      "types": "./dist/channels.d.ts",
+      "import": "./dist/channels.js"
+    },
+    "./mock": {
+      "types": "./dist/mock.d.ts",
+      "import": "./dist/mock.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "build:dependencies": "bun run --filter @samva/markup build",
+    "prepack": "bun run build",
+    "dev": "vite --config dev/vite.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:browser": "bun run build:dependencies && playwright test --config playwright.config.ts --project chromium",
+    "test:browser:cross": "bun run build:dependencies && playwright test --config playwright.config.ts"
+  },
+  "dependencies": {
+    "@babel/parser": "^8.0.4",
+    "@hugeicons/core-free-icons": "^4.3.5",
+    "@hugeicons/react": "^1.1.10",
+    "@samva/markup": "workspace:*",
+    "clsx": "^2.1.1",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@base-ui/react": "^1.6.0",
+    "@effect/vitest": "4.0.0",
+    "@playwright/test": "1.63.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "effect": "4.0.0",
+    "happy-dom": "^20.14.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwindcss": "^4.3.3",
+    "tsdown": "^0.22.13",
+    "typescript": "^7.0.2",
+    "vite": "~8.3.0",
+    "vitest": "^5.0.3"
+  },
+  "peerDependencies": {
+    "@base-ui/react": "^1.6.0",
+    "effect": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

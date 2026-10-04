@@ -1,0 +1,1788 @@
+{
+  "contract": 1,
+  "irVersion": 1,
+  "template": {
+    "extension": ".tsx",
+    "directories": ["templates", "emails"],
+    "jsxImportSource": "@samva/markup/email",
+    "definition": {
+      "import": "@samva/markup",
+      "name": "defineTemplate"
+    },
+    "fields": ["id", "schema", "fixtures", "locale?", "email?", "sms?", "whatsapp?"],
+    "idPattern": "^(?=.{1,100}$)[a-z0-9]+(?:-[a-z0-9]+)*$",
+    "emailBody": "{ subject, preheader?, body }, each a function of the validated input",
+    "schema": "Any Standard JSON Schema converter, or a literal jsonSchema<Input>({ ... }); portable JSON Schema 2020-12. It validates every send and drives the binding checker. No coercion and no inserted defaults.",
+    "fixtures": "Named payloads that must validate. At least one. Each is a preview and a publish check.",
+    "execution": "Nothing runs at send time. A template compiles to IR and the send path renders the IR against the input. Locale and time zone are send options."
+  },
+  "profile": {
+    "forms": [
+      {
+        "form": "Text binding",
+        "example": "{input.name}",
+        "compilesTo": "bind"
+      },
+      {
+        "form": "Attribute binding",
+        "example": "{input.trackingUrl && <a href={input.trackingUrl}>Track</a>}",
+        "compilesTo": "bind on the attribute"
+      },
+      {
+        "form": "Template string",
+        "example": "`Order ${input.orderId}`",
+        "compilesTo": "concat"
+      },
+      {
+        "form": "Conditional",
+        "example": "{input.trackingUrl && <p>Track it</p>}",
+        "compilesTo": "if"
+      },
+      {
+        "form": "Either/or",
+        "example": "{input.vip ? <p>Gold</p> : <p>Standard</p>}",
+        "compilesTo": "if / else"
+      },
+      {
+        "form": "Conditions",
+        "example": "{input.items.length > 1 && input.total !== 0 && <p>Many</p>}",
+        "compilesTo": "a predicate (===, !==, <, >, !, &&, ||, .length)"
+      },
+      {
+        "form": "Loop",
+        "example": "{input.items.map((item, index) => <li key={index}>{item.title}</li>)}",
+        "compilesTo": "each"
+      },
+      {
+        "form": "Filtered loop or count",
+        "example": "{input.items.filter((item) => item.qty > 1).length}",
+        "compilesTo": "each with a where predicate, or a count"
+      },
+      {
+        "form": "Grid",
+        "example": "<Columns each={input.items} per={2}>{(item) => <Column><p>{item.title}</p></Column>}</Columns>",
+        "compilesTo": "each with a chunk size, one row per chunk"
+      },
+      {
+        "form": "Formatter",
+        "example": "{fmt.money(input.total, input.currency)}",
+        "compilesTo": "format"
+      },
+      {
+        "form": "Arithmetic",
+        "example": "{fmt.money(input.total * 2, input.currency)}",
+        "compilesTo": "an expression node, inside a formatter or condition"
+      },
+      {
+        "form": "Conditional class",
+        "example": "<p className={input.vip ? \"bg-amber-100\" : \"bg-white\"}>Hi</p>",
+        "compilesTo": "if on the attribute"
+      }
+    ],
+    "rejected": [
+      {
+        "form": "A call other than fmt.* and .map",
+        "example": "{input.name.toUpperCase()}",
+        "code": "dynamic-expression"
+      },
+      {
+        "form": "A statement in a body",
+        "example": "(input) => { const label = input.name; return <Email>{label}</Email>; }",
+        "code": "statement-in-body",
+        "scope": "body"
+      },
+      {
+        "form": "A hook",
+        "example": "{useState(0)}",
+        "code": "hook-call"
+      },
+      {
+        "form": "An event handler",
+        "example": "<a href=\"/x\" onClick={() => 1}>x</a>",
+        "code": "event-handler"
+      },
+      {
+        "form": "A class name built at run time",
+        "example": "<p className={`text-${input.name}`}>x</p>",
+        "code": "dynamic-class"
+      }
+    ]
+  },
+  "formatters": [
+    {
+      "name": "fmt.money",
+      "signature": "money(amount: number, currency: string, locale?: string): string"
+    },
+    {
+      "name": "fmt.number",
+      "signature": "number(value: number, options?: Intl.NumberFormatOptions, locale?: string): string"
+    },
+    {
+      "name": "fmt.date",
+      "signature": "date(iso: string, style?: DateStyle, locale?: string): string"
+    },
+    {
+      "name": "fmt.time",
+      "signature": "time(iso: string, style?: DateStyle, locale?: string): string"
+    },
+    {
+      "name": "fmt.plural",
+      "signature": "plural(count: number, forms: PluralForms, locale?: string): string"
+    },
+    {
+      "name": "fmt.list",
+      "signature": "list(values: readonly string[], locale?: string): string"
+    }
+  ],
+  "components": [
+    {
+      "name": "Email",
+      "import": "@samva/markup/email",
+      "props": [
+        {
+          "name": "className",
+          "type": "string",
+          "optional": true,
+          "description": "CSS classes applied to the primitive's content element."
+        },
+        {
+          "name": "lang",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "dir",
+          "type": "\"ltr\" | \"rtl\"",
+          "optional": true
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "optional": true,
+          "description": "Document title; several clients use it as the fallback preview line."
+        },
+        {
+          "name": "backgroundColor",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "style",
+          "type": "EmailStyle",
+          "optional": true,
+          "description": "Applied to the content cell, where Yahoo and AOL keep body styling."
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "Section",
+      "import": "@samva/markup/email",
+      "props": [
+        {
+          "name": "className",
+          "type": "string",
+          "optional": true,
+          "description": "CSS classes applied to the primitive's content element."
+        },
+        {
+          "name": "align",
+          "type": "\"left\" | \"center\" | \"right\"",
+          "optional": true
+        },
+        {
+          "name": "width",
+          "type": "number | string",
+          "optional": true
+        },
+        {
+          "name": "bgcolor",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "style",
+          "type": "EmailStyle",
+          "optional": true,
+          "description": "Applied to the content cell so padding survives Outlook and Klaviyo."
+        },
+        {
+          "name": "tableStyle",
+          "type": "EmailStyle",
+          "optional": true
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "Columns",
+      "import": "@samva/markup/email",
+      "props": [
+        {
+          "name": "className",
+          "type": "string",
+          "optional": true,
+          "description": "CSS classes applied to the primitive's content element."
+        },
+        {
+          "name": "align",
+          "type": "\"left\" | \"center\" | \"right\"",
+          "optional": true
+        },
+        {
+          "name": "width",
+          "type": "number | string",
+          "optional": true
+        },
+        {
+          "name": "style",
+          "type": "EmailStyle",
+          "optional": true
+        },
+        {
+          "name": "each",
+          "type": "readonly Item[]",
+          "optional": true,
+          "description": "Repeat the cells for each item: `children` is then a function from an item (and its index in the row) to a `Column`. Without `per` all items share one row."
+        },
+        {
+          "name": "per",
+          "type": "number",
+          "optional": true,
+          "description": "With `each`, the cells in a row; each chunk of items is its own `Columns` table."
+        },
+        {
+          "name": "children",
+          "type": "EmailChild | ((item: Item, index: number) => EmailChild)",
+          "optional": true,
+          "description": "`Column` elements, or with `each` a function that returns one."
+        }
+      ]
+    },
+    {
+      "name": "Column",
+      "import": "@samva/markup/email",
+      "props": [
+        {
+          "name": "className",
+          "type": "string",
+          "optional": true,
+          "description": "CSS classes applied to the primitive's content element."
+        },
+        {
+          "name": "align",
+          "type": "\"left\" | \"center\" | \"right\"",
+          "optional": true
+        },
+        {
+          "name": "valign",
+          "type": "\"top\" | \"middle\" | \"bottom\"",
+          "optional": true
+        },
+        {
+          "name": "width",
+          "type": "number | string",
+          "optional": true
+        },
+        {
+          "name": "style",
+          "type": "EmailStyle",
+          "optional": true
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "Button",
+      "import": "@samva/markup/email",
+      "props": [
+        {
+          "name": "className",
+          "type": "string",
+          "optional": true,
+          "description": "CSS classes applied to the primitive's content element."
+        },
+        {
+          "name": "href",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "width",
+          "type": "number",
+          "optional": true,
+          "description": "Pixel width of the box. Classic Outlook draws the VML shape at a fixed width, so without this it is estimated from the label and `paddingX`, and the anchor sizes to its label."
+        },
+        {
+          "name": "height",
+          "type": "number",
+          "optional": true,
+          "description": "Pixel height; classic Outlook's VML fallback needs it."
+        },
+        {
+          "name": "paddingX",
+          "type": "number",
+          "optional": true,
+          "description": "Horizontal padding on each side of the label when no `width` fixes the box."
+        },
+        {
+          "name": "backgroundColor",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "color",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "borderRadius",
+          "type": "number",
+          "optional": true
+        },
+        {
+          "name": "borderColor",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "borderWidth",
+          "type": "number",
+          "optional": true
+        },
+        {
+          "name": "fontSize",
+          "type": "number",
+          "optional": true
+        },
+        {
+          "name": "fontFamily",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "align",
+          "type": "\"left\" | \"center\" | \"right\"",
+          "optional": true
+        },
+        {
+          "name": "style",
+          "type": "EmailStyle",
+          "optional": true
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true,
+          "description": "The label. A string label is required for the classic Outlook fallback."
+        }
+      ]
+    },
+    {
+      "name": "Spacer",
+      "import": "@samva/markup/email",
+      "props": [
+        {
+          "name": "height",
+          "type": "number",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "name": "Divider",
+      "import": "@samva/markup/email",
+      "props": [
+        {
+          "name": "className",
+          "type": "string",
+          "optional": true,
+          "description": "CSS classes applied to the primitive's content element."
+        },
+        {
+          "name": "color",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "thickness",
+          "type": "number",
+          "optional": true
+        },
+        {
+          "name": "style",
+          "type": "EmailStyle",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "Image",
+      "import": "@samva/markup/email",
+      "props": [
+        {
+          "name": "className",
+          "type": "string",
+          "optional": true,
+          "description": "CSS classes applied to the primitive's content element."
+        },
+        {
+          "name": "src",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "alt",
+          "type": "string",
+          "optional": false,
+          "description": "Required. Use an empty string only for images that carry no meaning."
+        },
+        {
+          "name": "width",
+          "type": "number | string",
+          "optional": true
+        },
+        {
+          "name": "height",
+          "type": "number | string",
+          "optional": true
+        },
+        {
+          "name": "align",
+          "type": "\"left\" | \"center\" | \"right\"",
+          "optional": true
+        },
+        {
+          "name": "style",
+          "type": "EmailStyle",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "Link",
+      "import": "@samva/markup/email",
+      "props": [
+        {
+          "name": "className",
+          "type": "string",
+          "optional": true,
+          "description": "CSS classes applied to the primitive's content element."
+        },
+        {
+          "name": "href",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "rel",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "style",
+          "type": "EmailStyle",
+          "optional": true
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "BrandLogo",
+      "import": "samva:brand",
+      "props": [
+        {
+          "name": "width",
+          "type": "number",
+          "optional": true,
+          "description": "Rendered width in pixels; the height follows the image."
+        },
+        {
+          "name": "alt",
+          "type": "string",
+          "optional": true,
+          "description": "Defaults to the brand footer's company name."
+        },
+        {
+          "name": "align",
+          "type": "\"left\" | \"center\" | \"right\"",
+          "optional": true
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "BrandFooter",
+      "import": "samva:brand",
+      "props": [
+        {
+          "name": "unsubscribeLabel",
+          "type": "string",
+          "optional": true,
+          "description": "Text of the unsubscribe link."
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "optional": true
+        }
+      ]
+    }
+  ],
+  "channelComponents": [
+    {
+      "name": "Sms",
+      "import": "@samva/markup/sms",
+      "props": [
+        {
+          "name": "category",
+          "type": "SmsCategory",
+          "optional": true
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp",
+      "import": "@samva/markup/whatsapp",
+      "props": [
+        {
+          "name": "name",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "optional": false,
+          "description": "The Meta language code, for example `en_US`."
+        },
+        {
+          "name": "category",
+          "type": "WhatsAppCategory",
+          "optional": false
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp.Header",
+      "import": "@samva/markup/whatsapp",
+      "props": [
+        {
+          "name": "type",
+          "type": "WhatsAppHeaderType",
+          "optional": true,
+          "description": "`text` by default; for `image`, `video` and `document` the child is the media URL."
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp.Body",
+      "import": "@samva/markup/whatsapp",
+      "props": [
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp.Footer",
+      "import": "@samva/markup/whatsapp",
+      "props": [
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp.Buttons",
+      "import": "@samva/markup/whatsapp",
+      "props": [
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp.UrlButton",
+      "import": "@samva/markup/whatsapp",
+      "props": [
+        {
+          "name": "url",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true,
+          "description": "The button label."
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp.PhoneButton",
+      "import": "@samva/markup/whatsapp",
+      "props": [
+        {
+          "name": "phone",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true,
+          "description": "The button label."
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp.QuickReplyButton",
+      "import": "@samva/markup/whatsapp",
+      "props": [
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true,
+          "description": "The button label."
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp.CopyCodeButton",
+      "import": "@samva/markup/whatsapp",
+      "props": [
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true,
+          "description": "The code the button copies."
+        }
+      ]
+    }
+  ],
+  "elements": {
+    "html": {
+      "content": "flow",
+      "layout": "document",
+      "attributes": {
+        "xmlns": {
+          "type": "string"
+        },
+        "xmlns:o": {
+          "type": "string"
+        },
+        "xmlns:v": {
+          "type": "string"
+        },
+        "xmlns:w": {
+          "type": "string"
+        }
+      },
+      "childElements": ["head", "body"]
+    },
+    "head": {
+      "content": "flow",
+      "layout": "metadata",
+      "attributes": {},
+      "childElements": ["title", "meta", "style"]
+    },
+    "title": {
+      "content": "text",
+      "layout": "metadata",
+      "attributes": {}
+    },
+    "style": {
+      "content": "raw",
+      "layout": "metadata",
+      "attributes": {
+        "type": {
+          "type": "string"
+        }
+      }
+    },
+    "meta": {
+      "content": "void",
+      "layout": "metadata",
+      "attributes": {
+        "name": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "charset": {
+          "type": "string"
+        },
+        "http-equiv": {
+          "type": "string"
+        }
+      }
+    },
+    "body": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "bgcolor": {
+          "type": "string"
+        }
+      }
+    },
+    "div": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "section": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "article": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "header": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "footer": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "main": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "center": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {}
+    },
+    "p": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "blockquote": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "pre": {
+      "content": "flow",
+      "layout": "preformatted",
+      "attributes": {}
+    },
+    "h1": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "h2": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "h3": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "h4": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "h5": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "h6": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "span": {
+      "content": "flow",
+      "layout": "inline",
+      "attributes": {}
+    },
+    "strong": {
+      "content": "flow",
+      "layout": "inline",
+      "attributes": {}
+    },
+    "b": {
+      "content": "flow",
+      "layout": "inline",
+      "attributes": {}
+    },
+    "em": {
+      "content": "flow",
+      "layout": "inline",
+      "attributes": {}
+    },
+    "i": {
+      "content": "flow",
+      "layout": "inline",
+      "attributes": {}
+    },
+    "u": {
+      "content": "flow",
+      "layout": "inline",
+      "attributes": {}
+    },
+    "s": {
+      "content": "flow",
+      "layout": "inline",
+      "attributes": {}
+    },
+    "small": {
+      "content": "flow",
+      "layout": "inline",
+      "attributes": {}
+    },
+    "code": {
+      "content": "flow",
+      "layout": "inline",
+      "attributes": {}
+    },
+    "a": {
+      "content": "flow",
+      "layout": "link",
+      "attributes": {
+        "href": {
+          "type": "url",
+          "required": true
+        },
+        "target": {
+          "type": "string"
+        },
+        "rel": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "img": {
+      "content": "void",
+      "layout": "image",
+      "attributes": {
+        "src": {
+          "type": "url",
+          "required": true
+        },
+        "alt": {
+          "type": "string",
+          "required": true
+        },
+        "width": {
+          "type": "measure"
+        },
+        "height": {
+          "type": "measure"
+        },
+        "border": {
+          "type": "measure"
+        },
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "table": {
+      "content": "flow",
+      "layout": "table",
+      "attributes": {
+        "width": {
+          "type": "measure"
+        },
+        "height": {
+          "type": "measure"
+        },
+        "border": {
+          "type": "measure"
+        },
+        "cellpadding": {
+          "type": "measure"
+        },
+        "cellspacing": {
+          "type": "measure"
+        },
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        },
+        "bgcolor": {
+          "type": "string"
+        }
+      },
+      "childElements": ["caption", "colgroup", "thead", "tbody", "tfoot", "tr"]
+    },
+    "caption": {
+      "content": "flow",
+      "layout": "block",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    },
+    "colgroup": {
+      "content": "flow",
+      "layout": "table-section",
+      "attributes": {
+        "span": {
+          "type": "number"
+        },
+        "width": {
+          "type": "measure"
+        }
+      },
+      "childElements": ["col"]
+    },
+    "col": {
+      "content": "void",
+      "layout": "table-section",
+      "attributes": {
+        "span": {
+          "type": "number"
+        },
+        "width": {
+          "type": "measure"
+        }
+      }
+    },
+    "thead": {
+      "content": "flow",
+      "layout": "table-section",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        },
+        "valign": {
+          "type": "string",
+          "values": ["top", "middle", "bottom"]
+        },
+        "bgcolor": {
+          "type": "string"
+        }
+      },
+      "childElements": ["tr"]
+    },
+    "tbody": {
+      "content": "flow",
+      "layout": "table-section",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        },
+        "valign": {
+          "type": "string",
+          "values": ["top", "middle", "bottom"]
+        },
+        "bgcolor": {
+          "type": "string"
+        }
+      },
+      "childElements": ["tr"]
+    },
+    "tfoot": {
+      "content": "flow",
+      "layout": "table-section",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        },
+        "valign": {
+          "type": "string",
+          "values": ["top", "middle", "bottom"]
+        },
+        "bgcolor": {
+          "type": "string"
+        }
+      },
+      "childElements": ["tr"]
+    },
+    "tr": {
+      "content": "flow",
+      "layout": "row",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        },
+        "valign": {
+          "type": "string",
+          "values": ["top", "middle", "bottom"]
+        },
+        "bgcolor": {
+          "type": "string"
+        },
+        "height": {
+          "type": "measure"
+        }
+      },
+      "childElements": ["td", "th"]
+    },
+    "td": {
+      "content": "flow",
+      "layout": "cell",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        },
+        "valign": {
+          "type": "string",
+          "values": ["top", "middle", "bottom"]
+        },
+        "width": {
+          "type": "measure"
+        },
+        "height": {
+          "type": "measure"
+        },
+        "bgcolor": {
+          "type": "string"
+        },
+        "colspan": {
+          "type": "number"
+        },
+        "rowspan": {
+          "type": "number"
+        }
+      }
+    },
+    "th": {
+      "content": "flow",
+      "layout": "cell",
+      "attributes": {
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        },
+        "valign": {
+          "type": "string",
+          "values": ["top", "middle", "bottom"]
+        },
+        "width": {
+          "type": "measure"
+        },
+        "height": {
+          "type": "measure"
+        },
+        "bgcolor": {
+          "type": "string"
+        },
+        "colspan": {
+          "type": "number"
+        },
+        "rowspan": {
+          "type": "number"
+        }
+      }
+    },
+    "ul": {
+      "content": "flow",
+      "layout": "list",
+      "attributes": {},
+      "childElements": ["li"]
+    },
+    "ol": {
+      "content": "flow",
+      "layout": "list",
+      "attributes": {
+        "start": {
+          "type": "number"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "childElements": ["li"]
+    },
+    "li": {
+      "content": "flow",
+      "layout": "list-item",
+      "attributes": {}
+    },
+    "br": {
+      "content": "void",
+      "layout": "break",
+      "attributes": {}
+    },
+    "hr": {
+      "content": "void",
+      "layout": "rule",
+      "attributes": {
+        "width": {
+          "type": "measure"
+        },
+        "size": {
+          "type": "number"
+        },
+        "align": {
+          "type": "string",
+          "values": ["left", "center", "right"]
+        }
+      }
+    }
+  },
+  "globalAttributes": {
+    "id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "lang": {
+      "type": "string"
+    },
+    "dir": {
+      "type": "string",
+      "values": ["ltr", "rtl", "auto"]
+    },
+    "role": {
+      "type": "string"
+    }
+  },
+  "styles": {
+    "dialect": "Tailwind classes plus theme.css tokens. Classes must be literal.",
+    "themeLayers": [
+      "@import \"./starter.css\";",
+      "@import \"samva:brand\";",
+      "the project's own @theme"
+    ],
+    "fonts": "WOFF2 files in the project through @font-face; a stack must end in a generic family."
+  },
+  "channels": {
+    "sms": {
+      "categories": ["transactional", "promotional", "service_implicit"],
+      "attributes": ["category"]
+    },
+    "whatsapp": {
+      "categories": ["marketing", "utility", "authentication"],
+      "attributes": ["name", "language", "category"],
+      "headerTypes": ["text", "image", "video", "document"]
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "brand-import-conflict",
+      "summary": "The project imports two different brands.",
+      "fix": "Import one brand specifier everywhere."
+    },
+    {
+      "code": "brand-unavailable",
+      "summary": "The build has no brand to resolve a brand import.",
+      "fix": "Create or select the brand the import names."
+    },
+    {
+      "code": "button-dynamic-label",
+      "summary": "A Button label is read at render time, so classic Outlook cannot size it.",
+      "fix": "Give the button a width: <Button width={200}>."
+    },
+    {
+      "code": "button-outlook-fallback",
+      "summary": "Classic Outlook needs a height and a plain string label to draw the button.",
+      "fix": "Give <Button> a height and a string label."
+    },
+    {
+      "code": "caniemail/unknown-coverage",
+      "summary": "A feature has no client-support data.",
+      "fix": "Verify it in the target clients."
+    },
+    {
+      "code": "css-conditional-variable",
+      "summary": "A custom property is redefined inside a conditional at-rule.",
+      "fix": "Keep the override on a class rule."
+    },
+    {
+      "code": "css-import-unresolved",
+      "summary": "A stylesheet @import cannot be resolved.",
+      "fix": "Import the stylesheet from the template module, or use the theme.css layers."
+    },
+    {
+      "code": "css-parse-error",
+      "summary": "A stylesheet does not parse.",
+      "fix": "Fix the CSS at the reported location."
+    },
+    {
+      "code": "css-unsupported-at-rule",
+      "summary": "An at-rule is not applied to email output.",
+      "fix": "Remove it or move the declarations into a class rule."
+    },
+    {
+      "code": "dangerous-html",
+      "summary": "dangerouslySetInnerHTML; there is no raw-HTML escape hatch.",
+      "fix": "Write the markup as JSX."
+    },
+    {
+      "code": "duplicate-attribute",
+      "summary": "An attribute is written twice.",
+      "fix": "Keep one."
+    },
+    {
+      "code": "dynamic-class",
+      "summary": "A class name is built at run time, and Tailwind cannot see it.",
+      "fix": "Write classes literally, or choose between literal lists: input.vip ? \"bg-amber-100\" : \"bg-white\"."
+    },
+    {
+      "code": "dynamic-definition",
+      "summary": "A definition field is spread or computed instead of written out.",
+      "fix": "Write each field as name: value."
+    },
+    {
+      "code": "dynamic-expression",
+      "summary": "An expression outside the static profile: a call other than fmt.* and .map, a computed value, or a spread.",
+      "fix": "Compute the value where the message is sent and bind it from the payload."
+    },
+    {
+      "code": "dynamic-numeric-prop",
+      "summary": "A prop that sizes layout at compile time is not a number literal.",
+      "fix": "Write the number literally, for example height={44}."
+    },
+    {
+      "code": "email-font-fallback",
+      "summary": "A font stack names a project font without a generic fallback.",
+      "fix": "End the stack with sans-serif, serif or monospace."
+    },
+    {
+      "code": "email-font-family",
+      "summary": "@font-face declares no font-family.",
+      "fix": "Add font-family."
+    },
+    {
+      "code": "email-font-format",
+      "summary": "@font-face uses a format other than WOFF2.",
+      "fix": "Convert the file to .woff2."
+    },
+    {
+      "code": "email-font-missing",
+      "summary": "@font-face names a file the project does not hold.",
+      "fix": "Add the file; paths resolve from the stylesheet's directory."
+    },
+    {
+      "code": "email-font-src",
+      "summary": "@font-face declares no usable url() src.",
+      "fix": "Add a url() pointing at a .woff2 file."
+    },
+    {
+      "code": "event-handler",
+      "summary": "An event handler; email clients strip scripting.",
+      "fix": "Remove the handler; use a link for interaction."
+    },
+    {
+      "code": "fixture-invalid",
+      "summary": "A fixture does not match the schema.",
+      "fix": "Change the fixture, or the schema, so every fixture is a payload a send could carry."
+    },
+    {
+      "code": "fixtures-not-static",
+      "summary": "A fixture is computed instead of written as data.",
+      "fix": "Write each fixture as a literal object; an imported asset is allowed."
+    },
+    {
+      "code": "formatter-arguments",
+      "summary": "A formatter got the wrong number of arguments.",
+      "fix": "Match the formatter's signature in the contract."
+    },
+    {
+      "code": "hook-call",
+      "summary": "A hook was called; templates have no state, effects or context.",
+      "fix": "Read the input through the function's parameter and send anything else in the payload."
+    },
+    {
+      "code": "invalid-asset-base",
+      "summary": "The asset base is not an https URL or a path.",
+      "fix": "Use an https URL, an absolute path, or a relative path."
+    },
+    {
+      "code": "invalid-attribute",
+      "summary": "A channel component attribute has a value the channel does not accept.",
+      "fix": "Use one of the listed values.",
+      "channelOnly": true
+    },
+    {
+      "code": "invalid-attribute-value",
+      "summary": "An attribute value is not a string or number, or contains control characters.",
+      "fix": "Pass plain text."
+    },
+    {
+      "code": "invalid-binding-type",
+      "summary": "A binding has the wrong type for where it is used.",
+      "fix": "Bind a field of the type the position needs, or send it in that type."
+    },
+    {
+      "code": "invalid-button-number",
+      "summary": "A Button size prop is not a finite number.",
+      "fix": "Pass a finite number."
+    },
+    {
+      "code": "invalid-channel",
+      "summary": "A channel field is not shaped as the channel requires.",
+      "fix": "Write email: { subject, preheader?, body } with each a function of the input."
+    },
+    {
+      "code": "invalid-columns-each",
+      "summary": "<Columns each> is not a list from the input.",
+      "fix": "Write each={input.items} with a callback returning <Column>."
+    },
+    {
+      "code": "invalid-columns-per",
+      "summary": "<Columns per> is not a positive integer literal.",
+      "fix": "Write per={2}."
+    },
+    {
+      "code": "invalid-content",
+      "summary": "An element holds content its content model does not allow.",
+      "fix": "Move the child to a parent that accepts it."
+    },
+    {
+      "code": "invalid-fixture-name",
+      "summary": "A fixture key is not a single path segment.",
+      "fix": "Use letters, digits, '.', '_' and '-', starting with a letter or digit."
+    },
+    {
+      "code": "invalid-locale",
+      "summary": "The template's default locale is not a string literal.",
+      "fix": "Write locale: \"en-US\"."
+    },
+    {
+      "code": "invalid-preheader",
+      "summary": "The preheader is not a string.",
+      "fix": "Return a string."
+    },
+    {
+      "code": "invalid-schema",
+      "summary": "The schema uses JSON Schema keywords the compiler cannot validate against.",
+      "fix": "Use only the JSON Schema keywords the package README lists."
+    },
+    {
+      "code": "invalid-style",
+      "summary": "A style prop is not a static property object.",
+      "fix": "Write style={{ backgroundColor: \"#fff\" }} with literal values, or use classes."
+    },
+    {
+      "code": "invalid-style-value",
+      "summary": "A style value is not a string or number.",
+      "fix": "Pass a string or number."
+    },
+    {
+      "code": "invalid-subject",
+      "summary": "The subject is not one line of text.",
+      "fix": "Return a single-line string."
+    },
+    {
+      "code": "invalid-template-id",
+      "summary": "The template id is not a lowercase kebab-case string literal.",
+      "fix": "Write id: \"order-shipped\"."
+    },
+    {
+      "code": "invalid-text",
+      "summary": "The plain-text body is not a string.",
+      "fix": "Return a string."
+    },
+    {
+      "code": "legacy-definition",
+      "summary": "The entry default-exports something other than defineTemplate.",
+      "fix": "Import { defineTemplate } from \"@samva/markup\" and default-export defineTemplate({ ... }).",
+      "upgrade": "Read the entry and its imports without executing them. For a default-exported defineEmail definition, import defineTemplate from \"@samva/markup\" and replace the definition call.\n\nPreserve the entry path, template id, schema, named fixtures, content, design, bindings, conditions, project partials, assets, theme and brand imports. Replace render(input) returning { subject, preheader?, body } with email: { subject: (input) => ..., preheader: (input) => ..., body: (input) => ... }, retaining its parameter bindings and each returned expression; omit preheader when absent.\n\nInline module constants only when they are literal strings, numbers or booleans and their bindings are unambiguous; never substitute a fixture value for an input binding. Keep each channel function a single static-profile expression, and keep subject and preheader off <Email>.\n\nHelper calls, `Math.*`, general arithmetic, render statements, spreads, computed properties and runtime clock or seed have no direct conversion. Rewrite with static-profile bindings, conditions, .map, .filter, project partials or `fmt.*` where equivalent; arithmetic is allowed only in formatter arguments and conditions. Otherwise compute the value in the sender, declare a payload field in the schema and every fixture, and explain the required sender change. Never guess time, randomness or computed data.\n\nExplicit text has no email-channel field: plain text is derived from the body. If deriving it changes intended content, or another construct cannot be preserved, explain the tradeoff and ask rather than silently discard it. Do not drop fixtures, weaken validation or hide diagnostics.\n\nConvert every affected entry in the project at its existing path, including emails/ entries. Compile each entry, render every declared fixture and inspect the affected output. Resolve errors before requesting one saved version for the whole project, approved by the user; do not publish."
+    },
+    {
+      "code": "missing-attribute",
+      "summary": "An element is missing a required attribute.",
+      "fix": "Add the attribute, for example alt on img."
+    },
+    {
+      "code": "missing-body",
+      "summary": "The email channel has no body.",
+      "fix": "Add body: (input) => (<Email>...</Email>)."
+    },
+    {
+      "code": "missing-fixtures",
+      "summary": "The template declares no fixtures.",
+      "fix": "Add fixtures: { default: { ... } } with at least one valid payload."
+    },
+    {
+      "code": "missing-head",
+      "summary": "Styles that cannot be inlined need a <head> to live in.",
+      "fix": "Wrap the message in <Email>, or write those declarations inline."
+    },
+    {
+      "code": "missing-schema",
+      "summary": "The template declares no input schema.",
+      "fix": "Add schema: jsonSchema<Input>({ ... })."
+    },
+    {
+      "code": "missing-subject",
+      "summary": "The email channel has no subject.",
+      "fix": "Add subject: (input) => ...."
+    },
+    {
+      "code": "moved-import",
+      "summary": "The file imports an @samva/markup entry that moved.",
+      "fix": "Import email components from \"@samva/markup/email\".",
+      "upgrade": "Replace every import from \"@samva/markup/email/components\" with \"@samva/markup/email\" in every project file, templates and partials alike. The imported names are unchanged; change only the specifier.\n\nCompile each entry and render every declared fixture to confirm the output is unchanged. Resolve errors before requesting one saved version for the whole project, approved by the user; do not publish."
+    },
+    {
+      "code": "multiple-roots",
+      "summary": "The body renders nothing or more than one root.",
+      "fix": "Wrap the body in a single element such as <Email>."
+    },
+    {
+      "code": "nesting-limit",
+      "summary": "The template nests deeper than the compiler reads.",
+      "fix": "Flatten the structure."
+    },
+    {
+      "code": "no-channel",
+      "summary": "The template declares no channel body.",
+      "fix": "Add an email body."
+    },
+    {
+      "code": "no-template",
+      "summary": "The entry does not default-export a template.",
+      "fix": "Default-export defineTemplate({ ... }) imported from @samva/markup."
+    },
+    {
+      "code": "non-project-import",
+      "summary": "The file imports something other than @samva/markup or a project file.",
+      "fix": "Remove the import, or copy the code you need into a project file."
+    },
+    {
+      "code": "not-a-function",
+      "summary": "A channel field is not a function of the input.",
+      "fix": "Write (input) => ... in place or declare the function in the project."
+    },
+    {
+      "code": "preheader-without-shell",
+      "summary": "A preheader is set but the body has no <Email> shell to hold it.",
+      "fix": "Wrap the body in <Email>."
+    },
+    {
+      "code": "recursive-partial",
+      "summary": "A partial renders itself; partials are inlined at compile time.",
+      "fix": "Flatten the recursion, or repeat the structure with .map."
+    },
+    {
+      "code": "reserved-attribute",
+      "summary": "An attribute is written only by a brand component.",
+      "fix": "Render BrandFooter from the brand import instead of marking an element as the footer."
+    },
+    {
+      "code": "reserved-character",
+      "summary": "Text contains a private-use character the compiler reserves.",
+      "fix": "Remove the characters U+E000 to U+E003."
+    },
+    {
+      "code": "reserved-url",
+      "summary": "A URL is the unsubscribe placeholder only BrandFooter can write.",
+      "fix": "Render <BrandFooter /> instead."
+    },
+    {
+      "code": "schema-not-static",
+      "summary": "The schema cannot be read without running code.",
+      "fix": "Write the schema as a literal jsonSchema<Input>({ type: 'object', ... })."
+    },
+    {
+      "code": "sms-markup",
+      "summary": "An SMS body contains an element; SMS is plain text.",
+      "fix": "Write text and bindings, with a newline for a line break.",
+      "channelOnly": true
+    },
+    {
+      "code": "statement-in-body",
+      "summary": "A body contains a statement (const, if, a loop); a body is one expression.",
+      "fix": "Use cond && <X />, cond ? <A /> : <B /> and .map, or send the computed value in the payload."
+    },
+    {
+      "code": "syntax-error",
+      "summary": "A project file does not parse as TSX.",
+      "fix": "Fix the syntax at the reported location."
+    },
+    {
+      "code": "tailwind-dynamic-class",
+      "summary": "A class list is assembled at run time.",
+      "fix": "Write the classes literally."
+    },
+    {
+      "code": "too-many-class-variants",
+      "summary": "A class list chooses between more literal lists than the compiler resolves.",
+      "fix": "Split the choice into fewer conditions, or move part of it to a partial."
+    },
+    {
+      "code": "unguarded-optional",
+      "summary": "An optional field is read outside a guard, so a send without it would render a blank.",
+      "fix": "Guard it with {input.field && ...}, or make the field required."
+    },
+    {
+      "code": "unknown-attribute",
+      "summary": "A channel component attribute the component does not have.",
+      "fix": "Use one of the listed attributes.",
+      "channelOnly": true
+    },
+    {
+      "code": "unknown-component",
+      "summary": "A component the profile cannot read.",
+      "fix": "Import components from @samva/markup/email, the brand import, or the project."
+    },
+    {
+      "code": "unknown-field",
+      "summary": "A binding names a field the schema does not declare.",
+      "fix": "Add the field to the schema, or bind a field it declares (the message suggests the nearest)."
+    },
+    {
+      "code": "unknown-formatter",
+      "summary": "fmt.<name> is not a formatter.",
+      "fix": "Use fmt.money, number, date, time, plural or list."
+    },
+    {
+      "code": "unmatched-class",
+      "summary": "A class produced no styles.",
+      "fix": "Use a class the theme or Tailwind defines, or write the style inline."
+    },
+    {
+      "code": "unresolved-import",
+      "summary": "An import names no file in the project.",
+      "fix": "Check the path and the file extension."
+    },
+    {
+      "code": "unsafe-raw-text",
+      "summary": "Raw text content contains markup that could end its element.",
+      "fix": "Remove the offending sequence."
+    },
+    {
+      "code": "unsafe-style-value",
+      "summary": "A style value contains CSS that could break out of its declaration.",
+      "fix": "Remove the offending characters."
+    },
+    {
+      "code": "unsafe-url",
+      "summary": "A URL uses a scheme email cannot send safely.",
+      "fix": "Use an https URL, a mailto: or tel: link, or a bound URL."
+    },
+    {
+      "code": "unsupported-attribute",
+      "summary": "An attribute the element does not support.",
+      "fix": "Use a supported attribute, or data-* and aria-*."
+    },
+    {
+      "code": "unsupported-element",
+      "summary": "An element outside the supported email vocabulary.",
+      "fix": "Use an element from the contract's element table."
+    },
+    {
+      "code": "unsupported-pattern",
+      "summary": "A parameter pattern or default value the profile cannot bind.",
+      "fix": "Use plain names or destructuring without defaults; declare the field required or guard it."
+    },
+    {
+      "code": "unsupported-style-property",
+      "summary": "A style property name is not a CSS property.",
+      "fix": "Write camelCase (backgroundColor) or a custom property (--brand)."
+    },
+    {
+      "code": "void-element-children",
+      "summary": "A void element has children.",
+      "fix": "Remove the children."
+    },
+    {
+      "code": "whatsapp-body-required",
+      "summary": "A WhatsApp template has no body.",
+      "fix": "Add <WhatsApp.Body>...</WhatsApp.Body>.",
+      "channelOnly": true
+    },
+    {
+      "code": "whatsapp-button-limit",
+      "summary": "The conditions can produce more buttons of a kind than Meta allows.",
+      "fix": "Remove buttons, or split the template.",
+      "channelOnly": true
+    },
+    {
+      "code": "whatsapp-button-text",
+      "summary": "A WhatsApp button has no label or value between its tags.",
+      "fix": "Write the label or value as text between the tags.",
+      "channelOnly": true
+    },
+    {
+      "code": "whatsapp-conditional",
+      "summary": "A WhatsApp part branches or contains elements; Meta registers its text once.",
+      "fix": "Choose the wording in the payload, or write separate templates.",
+      "channelOnly": true
+    },
+    {
+      "code": "whatsapp-header-media",
+      "summary": "A WhatsApp media header is not exactly one URL.",
+      "fix": "Write the URL as the only child: a literal or one binding.",
+      "channelOnly": true
+    },
+    {
+      "code": "whatsapp-header-variables",
+      "summary": "A WhatsApp header text takes more than one variable.",
+      "fix": "Keep one binding in the header and move the rest to the body.",
+      "channelOnly": true
+    },
+    {
+      "code": "whatsapp-length",
+      "summary": "A WhatsApp part exceeds Meta's length limit.",
+      "fix": "Shorten the text.",
+      "channelOnly": true
+    },
+    {
+      "code": "whatsapp-structure",
+      "summary": "WhatsApp content sits outside Header, Body, Footer or Buttons.",
+      "fix": "Move it into <WhatsApp.Body>.",
+      "channelOnly": true
+    },
+    {
+      "code": "wrong-channel",
+      "summary": "A channel body does not return its own channel component.",
+      "fix": "Return one element imported from the channel package.",
+      "channelOnly": true
+    }
+  ],
+  "diagnosticFamilies": [
+    {
+      "prefix": "caniemail/",
+      "summary": "A CSS property, HTML element or attribute that a target email client ignores or partly supports (from the caniemail.com data), reported as caniemail/<feature>.",
+      "fix": "Use the alternative the message names, such as an email component instead of display: flex."
+    }
+  ],
+  "qualityBar": [
+    "Run the check until it reports no errors, then render every fixture.",
+    "Cover every branch with a fixture: default, missing optional fields, many items.",
+    "Look at the render at desktop and mobile widths before finishing.",
+    "Compute anything the profile cannot express where the message is sent and add it to the schema."
+  ]
+}

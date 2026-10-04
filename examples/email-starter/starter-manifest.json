@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "files": [
+    ".gitignore",
+    "README.md",
+    "bun.lock",
+    "index.html",
+    "package.json",
+    "starter.css",
+    "templates/welcome.tsx",
+    "tests/starter-manifest.test.js",
+    "theme.css",
+    "tsconfig.json",
+    "vite.config.ts"
+  ],
+  "sha256": "007eb992b0d5ab82c77051429a925784301663b689200a2d87a39eb7750f8cf2"
+}

@@ -1,0 +1,139 @@
+@import "tailwindcss";
+@import "../src/styles.css";
+
+/*
+ * Harness-only base theme. In production apps/web owns Tailwind + the base design
+ * tokens; the @samva/editor package ships only the editor-specific extras. Here we
+ * stand in a neutral dashboard theme so the shell renders fully in `bun run dev`.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Editor package `@source` rides in `../src/styles.css` (imported above). */
+@source "./**/*.{ts,tsx,html}";
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-border-subtle: var(--border-subtle);
+  --color-surface-inset: var(--surface-inset);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-placeholder: var(--placeholder);
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-error: var(--status-error);
+  --color-status-info: var(--status-info);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.705 0.015 286.067);
+  --border-subtle: oklch(0.94 0.002 286);
+  --surface-inset: oklch(0.975 0.001 286);
+  --surface-elevated: oklch(0.995 0 0);
+  --primary: oklch(0.21 0.006 285.885);
+  --primary-foreground: oklch(0.985 0 0);
+  --placeholder: oklch(0.65 0.012 285.9);
+  --status-success: oklch(0.65 0.22 155);
+  --status-warning: oklch(0.75 0.18 75);
+  --status-error: oklch(0.577 0.245 27.325);
+  --status-info: oklch(0.62 0.25 265);
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 2px 0 oklch(0 0 0 / 0.06), 0 1px 3px 0 oklch(0 0 0 / 0.05);
+  --shadow-md: 0 2px 4px -1px oklch(0 0 0 / 0.06), 0 6px 12px -2px oklch(0 0 0 / 0.08);
+  --shadow-lg: 0 4px 8px -2px oklch(0 0 0 / 0.06), 0 14px 28px -6px oklch(0 0 0 / 0.1);
+  --shadow-xl: 0 12px 24px -6px oklch(0 0 0 / 0.1), 0 32px 64px -12px oklch(0 0 0 / 0.16);
+  --shadow-floating: 0 10px 20px -6px oklch(0 0 0 / 0.08), 0 28px 56px -10px oklch(0 0 0 / 0.14);
+}
+
+.dark {
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.885);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.21 0.006 285.885);
+  --popover-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.75 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --accent-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.552 0.016 285.938);
+  --border-subtle: oklch(1 0 0 / 7%);
+  --surface-inset: oklch(0.16 0.004 286);
+  --surface-elevated: oklch(0.18 0.005 286);
+  --primary: oklch(0.92 0.004 286.32);
+  --primary-foreground: oklch(0.21 0.006 285.885);
+  --placeholder: oklch(0.68 0.012 285.9);
+  --status-success: oklch(0.7 0.22 155);
+  --status-warning: oklch(0.8 0.18 75);
+  --status-error: oklch(0.704 0.191 22.216);
+  --status-info: oklch(0.68 0.25 265);
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 2px 0 oklch(0 0 0 / 0.35), 0 1px 3px 0 oklch(0 0 0 / 0.3);
+  --shadow-md: 0 2px 4px -1px oklch(0 0 0 / 0.4), 0 6px 12px -2px oklch(0 0 0 / 0.45);
+  --shadow-lg: 0 4px 8px -2px oklch(0 0 0 / 0.45), 0 14px 28px -6px oklch(0 0 0 / 0.55);
+  --shadow-xl: 0 12px 24px -6px oklch(0 0 0 / 0.55), 0 32px 64px -12px oklch(0 0 0 / 0.7);
+  --shadow-floating: 0 10px 20px -6px oklch(0 0 0 / 0.5), 0 28px 56px -10px oklch(0 0 0 / 0.65);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  /*
+   * Match the real dashboard host body (16px), NOT the editor's own 13px base, so
+   * the harness reproduces production conditions: the editor must own its type base
+   * (.samva-editor-shell) rather than inherit it, and this keeps that class of bug
+   * from ever hiding behind a coincidentally-13px harness again.
+   */
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--foreground);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}

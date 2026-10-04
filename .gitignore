@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.turbo/
+.vite/
+*.tsbuildinfo
+*.tgz
+*.log
+.DS_Store
+
+# Playwright output, written inside each package.
+test-results/
+playwright-report/
+
+# Brand snapshots `samva brands pull` writes into a template project.
+.samva/
+
+.env*
+!.env.example

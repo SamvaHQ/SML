@@ -1,0 +1,132 @@
+{
+  "name": "@samva/markup",
+  "version": "0.11.1",
+  "description": "Type-safe authoring and compilation primitives for Samva templates",
+  "keywords": [
+    "email",
+    "jsx",
+    "samva",
+    "sml",
+    "sms",
+    "templates",
+    "tsx",
+    "whatsapp"
+  ],
+  "homepage": "https://samva.dev",
+  "bugs": {
+    "url": "https://github.com/SamvaHQ/SML/issues"
+  },
+  "license": "MIT",
+  "author": "Arya Labs, Inc.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SamvaHQ/SML.git",
+    "directory": "packages/markup"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "samva-brand.d.ts",
+    "generated",
+    "skills",
+    "package.json",
+    "README.md",
+    "CHANGELOG.md",
+    "AGENTS.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./email": {
+      "types": "./dist/email.d.ts",
+      "import": "./dist/email.js"
+    },
+    "./email/jsx-runtime": {
+      "types": "./dist/email/jsx-runtime.d.ts",
+      "import": "./dist/email/jsx-runtime.js"
+    },
+    "./email/jsx-dev-runtime": {
+      "types": "./dist/email/jsx-dev-runtime.d.ts",
+      "import": "./dist/email/jsx-dev-runtime.js"
+    },
+    "./fmt": {
+      "types": "./dist/fmt.d.ts",
+      "import": "./dist/fmt.js"
+    },
+    "./sms": {
+      "types": "./dist/sms.d.ts",
+      "import": "./dist/sms.js"
+    },
+    "./whatsapp": {
+      "types": "./dist/whatsapp.d.ts",
+      "import": "./dist/whatsapp.js"
+    },
+    "./input-schema": {
+      "types": "./dist/input-schema.d.ts",
+      "import": "./dist/input-schema.js"
+    },
+    "./compiler": {
+      "types": "./dist/compiler.d.ts",
+      "import": "./dist/compiler.js"
+    },
+    "./diagnostics": {
+      "types": "./dist/diagnostics.d.ts",
+      "import": "./dist/diagnostics.js"
+    },
+    "./render": {
+      "types": "./dist/render.d.ts",
+      "import": "./dist/render.js"
+    },
+    "./edit": {
+      "types": "./dist/edit.d.ts",
+      "import": "./dist/edit.js"
+    },
+    "./brand": {
+      "types": "./dist/brand.d.ts",
+      "import": "./dist/brand.js"
+    },
+    "./samva-brand": {
+      "types": "./samva-brand.d.ts"
+    },
+    "./contract.json": "./generated/contract.json",
+    "./reference.md": "./generated/reference.md",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepack": "bun run build",
+    "corpus:render": "bun run scripts/render-compatibility-corpus.ts",
+    "codegen:tailwind": "bun run scripts/codegen-tailwind.ts && oxfmt src/email/tailwind-stylesheets.gen.ts",
+    "codegen:contract": "bun run scripts/generate-contract.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tests/consumer/tsconfig.json"
+  },
+  "dependencies": {
+    "@babel/parser": "^8.0.4",
+    "@cfworker/json-schema": "4.1.1",
+    "@standard-schema/spec": "1.1.0",
+    "better-result": "3.0.1",
+    "caniemail": "2.0.2",
+    "css-tree": "3.2.1",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@css-inline/css-inline-wasm": "0.15.0",
+    "@effect/vitest": "4.0.0",
+    "@types/css-tree": "3.2.0",
+    "@types/node": "^26.6.2",
+    "effect": "4.0.0",
+    "tsdown": "^0.22.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3",
+    "zod": "4.6.5"
+  }
+}

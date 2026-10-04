@@ -1,0 +1,95 @@
+@import "tailwindcss";
+@import "@samva/editor/styles.css";
+
+/*
+ * The editor UI is a self-contained bundle. In the dashboard, apps/web owns
+ * Tailwind + the base design tokens; here the plugin ships them so the shell
+ * renders standalone inside a customer's dev server. Tokens mirror the dashboard's
+ * neutral theme. Tailwind runs at PACKAGE BUILD time; editor content `@source`
+ * rides in `@samva/editor/styles.css` (imported above) and bakes into dist/editor
+ * — the consumer never runs Tailwind.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@source "./**/*.{ts,tsx,html}";
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-surface-inset: var(--surface-inset);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-placeholder: var(--placeholder);
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-error: var(--status-error);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --border-subtle: oklch(0.94 0.002 286);
+  --surface-inset: oklch(0.975 0.001 286);
+  --surface-elevated: oklch(0.995 0 0);
+  --primary: oklch(0.21 0.006 285.885);
+  --primary-foreground: oklch(0.985 0 0);
+  --placeholder: oklch(0.65 0.012 285.9);
+  --status-success: oklch(0.65 0.22 155);
+  --status-warning: oklch(0.75 0.18 75);
+  --status-error: oklch(0.577 0.245 27.325);
+  --shadow-md: 0 2px 4px -1px oklch(0 0 0 / 0.06), 0 6px 12px -2px oklch(0 0 0 / 0.08);
+  --shadow-xl: 0 12px 24px -6px oklch(0 0 0 / 0.1), 0 32px 64px -12px oklch(0 0 0 / 0.16);
+}
+
+.dark {
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.75 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --border-subtle: oklch(1 0 0 / 7%);
+  --surface-inset: oklch(0.16 0.004 286);
+  --surface-elevated: oklch(0.18 0.005 286);
+  --primary: oklch(0.92 0.004 286.32);
+  --primary-foreground: oklch(0.21 0.006 285.885);
+  --placeholder: oklch(0.68 0.012 285.9);
+  --shadow-md: 0 2px 4px -1px oklch(0 0 0 / 0.4), 0 6px 12px -2px oklch(0 0 0 / 0.45);
+  --shadow-xl: 0 12px 24px -6px oklch(0 0 0 / 0.55), 0 32px 64px -12px oklch(0 0 0 / 0.7);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--foreground);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}

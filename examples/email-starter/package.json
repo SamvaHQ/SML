@@ -1,0 +1,20 @@
+{
+  "name": "samva-email-starter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "check": "bun run typecheck",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@samva/markup": "0.11.1"
+  },
+  "devDependencies": {
+    "@samva/vite": "0.11.1",
+    "@types/node": "26.4.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
+  }
+}

@@ -1,0 +1,284 @@
+/*
+ * @samva/editor chrome styles — imported by the host AFTER its own
+ * `@import "tailwindcss"` (the dashboard owns Tailwind + the base design tokens:
+ * --background, --foreground, --muted, --border, --primary, --surface-*,
+ * --placeholder, --status-*, --shadow-*). This file adds ONLY the editor-specific
+ * tokens the dashboard lacks plus the workspace chrome that the shell layout needs. The dev
+ * harness supplies the base tokens itself (dev/base-tokens.css); apps/web already
+ * has them.
+ *
+ * `@source` registers this package's code for content detection so hosts do not
+ * hand-write package-relative globs. Paths are relative to this file, which ships
+ * beside the TS/TSX in `src` and the built JS in `dist`.
+ */
+@source "./**/*.{js,ts,tsx}";
+
+@theme {
+  --color-accent-email: var(--accent-email);
+  --color-sel-soft: var(--sel-soft);
+  --color-sel-mid: var(--sel-mid);
+}
+
+:root {
+  --accent-email: oklch(0.62 0.21 255);
+  --sel-soft: oklch(0.62 0.21 255 / 0.08);
+  --sel-mid: oklch(0.62 0.21 255 / 0.35);
+  --editor-scrollbar-thumb: oklch(0.78 0.01 286);
+  --editor-scrollbar-thumb-hover: oklch(0.62 0.015 286);
+}
+
+.dark {
+  --sel-soft: oklch(0.62 0.21 255 / 0.16);
+  --editor-scrollbar-thumb: oklch(0.32 0.01 286);
+  --editor-scrollbar-thumb-hover: oklch(0.42 0.012 286);
+}
+
+/*
+ * The editor owns its 13px type base so the chrome renders at its designed scale
+ * regardless of the host body font-size (the dashboard body is 16px, which made the
+ * inheritance-dependent controls render oversized). This
+ * is applied to the editor's OWN containers only, never the host `dashSidebar` slot
+ * (which keeps the dashboard's sizing), plus every overlay/portal root that mounts
+ * outside the shell subtree (preview overlay, send sheet, statusbar checks popover).
+ */
+.samva-editor-shell {
+  --editor-bg: var(--background);
+  --editor-fg: var(--foreground);
+  --editor-surface: var(--card);
+  --editor-surface-elevated: var(--surface-elevated);
+  --editor-surface-inset: var(--surface-inset);
+  --editor-muted: var(--muted);
+  --editor-muted-fg: var(--muted-foreground);
+  --editor-placeholder: var(--placeholder);
+  --editor-border: var(--border);
+  --editor-border-subtle: var(--border-subtle);
+  --editor-hover: var(--muted);
+  --editor-active: var(--accent);
+  --editor-accent: var(--accent-email);
+  --editor-accent-fg: oklch(1 0 0);
+  --editor-selection-soft: var(--sel-soft);
+  --editor-selection-mid: var(--sel-mid);
+  --editor-focus-ring: var(--ring);
+  --editor-disabled-fg: var(--muted-foreground);
+  --editor-success: var(--status-success);
+  --editor-warning: var(--status-warning);
+  --editor-error: var(--status-error);
+  --editor-info: var(--status-info);
+  --editor-canvas-bg: var(--surface-inset);
+  --editor-canvas-grid: color-mix(in oklab, var(--border) 64%, transparent);
+  --editor-canvas-hover: var(--editor-selection-mid);
+  --editor-canvas-selected: var(--editor-accent);
+  --editor-canvas-selected-fg: var(--editor-accent-fg);
+  /* A compiler-generated wrapper is outlined in its own hue so it never reads as authored markup. */
+  --editor-canvas-generated: oklch(0.62 0.21 305);
+  --editor-canvas-document-bg: oklch(1 0 0);
+  --editor-backdrop: color-mix(in oklab, black 28%, transparent);
+  --editor-shadow-control: var(--shadow-xs);
+  --editor-shadow-overlay: var(--shadow-lg);
+  --editor-shadow-floating: var(--shadow-floating);
+  /*
+   * Control materials, read by the chrome's utilities. Raised is the primary action, a lit
+   * capsule that presses 1px down. Chip is a switcher's selected option, lifted off its trough.
+   * Pressed is a toggle holding its on state in a shallow recess. Well is a recessed text
+   * receptacle. A host restyles one by setting its variables on `.samva-editor-shell`; a value
+   * derived from another (the raised hover) follows the override on the same element.
+   */
+  --editor-raised-bg: var(--primary);
+  --editor-raised-bg-hover: color-mix(in oklab, var(--editor-raised-bg), white 8%);
+  --editor-raised-fg: var(--primary-foreground);
+  --editor-raised-shadow:
+    0 1px 2px 0 oklch(0 0 0 / 0.2),
+    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
+    inset 0 3px 5px 0 oklch(1 0 0 / 0.16), inset 0 0 0 1px oklch(1 0 0 / 0.12),
+    inset 0 -6px 10px 0 oklch(0 0 0 / 0.2);
+  --editor-raised-shadow-pressed:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
+    inset 0 2px 4px 0 oklch(0 0 0 / 0.35);
+  --editor-chip-bg: var(--background);
+  --editor-chip-fg: var(--foreground);
+  --editor-chip-border: var(--border);
+  --editor-chip-shadow: var(--shadow-md);
+  --editor-pressed-bg: color-mix(in oklab, var(--accent), black 3%);
+  --editor-pressed-shadow: inset 0 1px 3px 0 oklch(0 0 0 / 0.12);
+  --editor-well-bg: color-mix(in oklab, var(--surface-inset) 55%, transparent);
+  --editor-well-border: var(--input);
+  --editor-well-shadow: inset 0 1px 2px 0 oklch(0 0 0 / 0.05);
+  background-color: var(--editor-bg);
+  color: var(--editor-fg);
+  color-scheme: light;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.samva-editor-frame {
+  container-type: inline-size;
+  container-name: samva-editor;
+}
+
+/* In dark mode the raised fill is light, so its glow and shade swap ends. */
+.dark .samva-editor-shell {
+  --editor-raised-bg-hover: color-mix(in oklab, var(--editor-raised-bg), black 8%);
+  --editor-raised-shadow:
+    0 1px 2px 0 oklch(0 0 0 / 0.35), 0 0 0 1px oklch(0 0 0 / 0.4),
+    inset 0 3px 5px 0 oklch(0 0 0 / 0.1), inset 0 0 0 1px oklch(1 0 0 / 0.25),
+    inset 0 -6px 10px 0 oklch(1 0 0 / 0.22);
+  --editor-raised-shadow-pressed:
+    0 0 0 1px oklch(0 0 0 / 0.4), inset 0 2px 4px 0 oklch(0 0 0 / 0.25);
+  --editor-pressed-bg: color-mix(in oklab, var(--accent), white 12%);
+  --editor-pressed-shadow: inset 0 1px 3px 0 oklch(0 0 0 / 0.45);
+  --editor-well-bg: color-mix(in oklab, var(--input) 20%, transparent);
+  --editor-well-shadow: inset 0 1px 2px 0 oklch(0 0 0 / 0.35);
+  color-scheme: dark;
+}
+
+/*
+ * The server cannot know the editor container width, so its deterministic first
+ * frame uses the wide layout state. Keep that frame structurally usable until
+ * hydration measures the full frame: progressively remove rails at the same
+ * thresholds the client state applies. The selector is intentionally limited to
+ * the SSR-wide state; measured standard/compact/narrow layouts retain their
+ * interactive, store-controlled overlays.
+ */
+@container samva-editor (max-width: 1279px) {
+  .samva-editor-shell[data-layout="wide"] [data-editor-rail="right"],
+  .samva-editor-shell[data-layout="wide"] [data-editor-resize="right"] {
+    display: none;
+  }
+}
+
+@container samva-editor (max-width: 979px) {
+  .samva-editor-shell[data-layout="wide"] [data-editor-rail="left"],
+  .samva-editor-shell[data-layout="wide"] [data-editor-resize="left"] {
+    display: none;
+  }
+}
+
+.samva-inspector-content > div {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+  padding-inline: 12px;
+}
+
+.samva-inspector-content > div:last-child {
+  border-bottom: 0;
+}
+
+.samva-radius-slider {
+  height: 18px;
+  appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+.samva-radius-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.samva-radius-slider::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--foreground);
+  box-shadow: var(--editor-shadow-control);
+}
+
+.samva-radius-slider::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.samva-radius-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--foreground);
+  box-shadow: var(--editor-shadow-control);
+}
+
+.samva-radius-slider:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent-email) 55%, transparent);
+  outline-offset: 3px;
+}
+
+.samva-radius-slider-overridden::-webkit-slider-thumb {
+  background: var(--accent-email);
+}
+
+.samva-radius-slider-overridden::-moz-range-thumb {
+  background: var(--accent-email);
+}
+
+@container samva-editor (max-width: 719px) {
+  .samva-editor-workspace .samva-editor-scroll {
+    padding-inline: 16px;
+    padding-top: 16px;
+  }
+
+  .samva-editor-shell button {
+    touch-action: manipulation;
+  }
+}
+
+/* The recessed workspace behind the email artifact — a faint square grid. */
+.samva-editor-workspace {
+  background-color: var(--editor-canvas-bg);
+  background-image:
+    linear-gradient(to right, var(--editor-canvas-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--editor-canvas-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: center top;
+}
+
+.dark .samva-editor-workspace {
+  --editor-canvas-grid: color-mix(in oklab, var(--editor-border) 55%, transparent);
+}
+
+/* Thin, themed scrollbars on the rail + inspector scroll panels (scoped, not global). */
+.samva-editor-scroll {
+  color-scheme: inherit;
+  scrollbar-width: thin;
+  scrollbar-color: var(--editor-scrollbar-thumb) transparent;
+}
+
+.samva-editor-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.samva-editor-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.samva-editor-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--editor-scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.samva-editor-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--editor-scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .samva-editor-shell,
+  .samva-editor-shell *,
+  .samva-editor-shell *::before,
+  .samva-editor-shell *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

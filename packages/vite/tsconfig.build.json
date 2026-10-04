@@ -1,0 +1,11 @@
+{
+  // The declaration build sees only what the package publishes. The package
+  // tsconfig also covers `tests`, and a test that imports another package's
+  // fixture would otherwise pull that file into the emit and drop a stray
+  // `.d.ts` beside someone else's source.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false
+  },
+  "include": ["src"]
+}

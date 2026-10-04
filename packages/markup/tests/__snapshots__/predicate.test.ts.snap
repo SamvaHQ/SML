@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`predicate > reports spans and fix-its for the invalid corpus 1`] = `
+"empty: [predicate-empty] 0-0 empty predicate — write e.g. plan == 'pro'
+blank: [predicate-empty] 0-3 empty predicate — write e.g. plan == 'pro'
+single equals: [predicate-invalid-operator] 5-6 unexpected = — write == to compare
+lone bang: [predicate-invalid-operator] 5-6 unexpected ! — write != to compare
+double-quoted string: [predicate-unexpected-character] 8-9 unexpected character "\\"" in predicate
+unterminated string: [predicate-unterminated-string] 8-12 unterminated string — add a closing '
+string with double dash: [predicate-string-double-dash] 8-14 string literals cannot contain -- (predicates are embedded in HTML comment markers)
+path variable: [predicate-path-not-supported] 0-5 unexpected . after "user" — predicates use flat variable names, not paths
+lone dot: [predicate-path-not-supported] 0-1 unexpected . — predicates use flat variable names, not paths
+missing literal: [predicate-expected-literal] 7-7 expected a literal after > — write seats > 'value' or seats > 5
+literal first: [predicate-unexpected-token] 0-5 unexpected 'pro' — comparisons put the variable first: name == 'value'
+arithmetic: [predicate-unexpected-character] 6-7 unexpected character "+" in predicate
+keyword as name: [predicate-unexpected-token] 4-7 unexpected "and" — expected a variable name, comparison, or ( group )
+double not: [predicate-unexpected-token] 4-7 unexpected "not" — expected a variable name, comparison, or ( group )
+missing close paren: [predicate-missing-paren] 7-7 missing ) — close the group
+stray close paren: [predicate-trailing-input] 6-7 unexpected ")" after the predicate — join clauses with "and" or "or"
+trailing input: [predicate-trailing-input] 2-3 unexpected "b" after the predicate — join clauses with "and" or "or"
+dangling and: [predicate-unexpected-end] 5-5 unexpected end of predicate — expected a variable name, comparison, or ( group )
+comparison chain: [predicate-trailing-input] 9-11 unexpected "==" after the predicate — join clauses with "and" or "or""
+`;

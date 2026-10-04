@@ -1,0 +1,8 @@
+{
+  // The declaration build sees only what the package publishes, not its tests or dev app.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false
+  },
+  "include": ["src"]
+}

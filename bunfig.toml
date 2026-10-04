@@ -1,0 +1,3 @@
+[install]
+# TypeScript and Vite resolve package peers through this workspace's node_modules.
+globalStore = false

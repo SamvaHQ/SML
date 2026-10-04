@@ -1,0 +1,59 @@
+[
+  {
+    "approval": {
+      "state": "approved",
+      "approvedBy": "Samva fixture owner",
+      "approvedAt": "2026-08-10T00:00:00.000Z"
+    },
+    "provenance": {
+      "source": "sanitized-synthetic",
+      "referenceId": "synthetic-account-alert-v1",
+      "recordedAt": "2026-08-10T00:00:00.000Z"
+    },
+    "starter": {
+      "id": "synthetic-account-alert",
+      "channel": "email",
+      "category": "transactional",
+      "name": "Synthetic account alert",
+      "description": "A synthetic fixture used to exercise the destination import seam.",
+      "variables": ["accountUrl", "alertBody", "logoUrl"],
+      "source": "/** @jsxImportSource @samva/markup/email */\nimport { Button, Email, Image, Section } from \"@samva/markup/email\";\nimport { jsonSchema } from \"@samva/markup/input-schema\";\nimport { defineEmail } from \"@samva/markup/template\";\nexport default defineEmail({\n  id: \"synthetic-account-alert\",\n  schema: jsonSchema<{ accountUrl: string; alertBody: string; logoUrl: string }>({\"type\": \"object\", \"properties\": {\"accountUrl\": {\"type\": \"string\"}, \"alertBody\": {\"type\": \"string\"}, \"logoUrl\": {\"type\": \"string\"}}, \"required\": [\"accountUrl\", \"alertBody\", \"logoUrl\"], \"additionalProperties\": false}),\n  fixtures: { default: {\"accountUrl\": \"https://app.example.com/account\", \"alertBody\": \"A new recovery method was added to your account.\", \"logoUrl\": \"https://samva.dev/templates/assets/transparent-icon.png\"} },\n  render: (input) => ({\n    subject: \"Review your account\",\n    preheader: \"A synthetic account event needs attention.\",\n    body: <Email lang=\"en\" dir=\"ltr\"><Section>\n      <Image src={input.logoUrl} alt=\"Synthetic logo\" />\n      <p>{input.alertBody}</p>\n      <Button href={input.accountUrl} width={200} height={48}>Open account</Button>\n    </Section></Email>,\n  }),\n});\n"
+    },
+    "gallery": {
+      "slug": "synthetic-account-alert",
+      "useCase": "account-access",
+      "collections": ["category:transactional", "style:single-cta"],
+      "relatedTemplates": ["notification"]
+    },
+    "preview": {
+      "subject": "Review your account",
+      "preheader": "A synthetic account event needs attention.",
+      "quality": "ready",
+      "sampleData": {
+        "accountUrl": "https://app.example.com/account",
+        "alertBody": "A new recovery method was added to your account.",
+        "logoUrl": "https://samva.dev/templates/assets/transparent-icon.png"
+      },
+      "assets": [
+        {
+          "variable": "logoUrl",
+          "kind": "logo"
+        }
+      ]
+    },
+    "publicMetadata": {
+      "cardTitle": "Synthetic account alert",
+      "cardDescription": "Bring a customer back to an important account event.",
+      "guidance": ["Name the event and link to the exact account screen."],
+      "variableDescriptions": {
+        "accountUrl": "Link to the affected account.",
+        "alertBody": "Customer-readable explanation of the event.",
+        "logoUrl": "A neutral hosted image for the preview."
+      },
+      "seo": {
+        "title": "Synthetic Account Alert Email Template | Samva",
+        "description": "A sanitized synthetic fixture for the public template import seam."
+      }
+    }
+  }
+]

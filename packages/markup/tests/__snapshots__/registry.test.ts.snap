@@ -1,0 +1,32 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`utility registry > rejects forbidden utilities naming the client and the alternative 1`] = `
+"[forbidden-class] class "flex" — display:flex is unsupported in Outlook for Windows (Word engine) — use <Row>/<Column>
+[forbidden-class] class "grid" — display:grid is unsupported in Outlook for Windows and Gmail — use <Row>/<Column>
+[forbidden-class] class "gap-4" — gap requires flex/grid, unsupported in Outlook for Windows — use padding on <Column>
+[forbidden-class] class "items-center" — flexbox alignment is unsupported in Outlook for Windows — use <Row>/<Column>
+[forbidden-class] class "justify-between" — flexbox alignment is unsupported in Outlook for Windows — use <Row>/<Column> and text-center
+[forbidden-class] class "absolute" — CSS position is ignored by Gmail and Outlook — use nested <Section>s
+[forbidden-class] class "top-0" — position offsets are ignored by Gmail and Outlook — use padding
+[forbidden-class] class "z-10" — z-index is ignored by Gmail and Outlook — remove it
+[forbidden-class] class "float-left" — float is unreliable across email clients — use <Row>/<Column>
+[forbidden-class] class "shadow" — box-shadow is unsupported in Outlook for Windows and Gmail — use a border instead
+[forbidden-class] class "shadow-lg" — box-shadow is unsupported in Outlook for Windows and Gmail — use a border instead
+[forbidden-class] class "opacity-50" — opacity is unsupported in Outlook for Windows — bake the tint into the color
+[forbidden-class] class "rotate-45" — CSS transforms are unsupported in email clients — remove them
+[forbidden-class] class "animate-pulse" — animations don't run in email — remove them
+[forbidden-class] class "blur-sm" — CSS filters are unsupported in most email clients — remove them
+[forbidden-class] class "grayscale" — CSS filters are unsupported in most email clients — remove them
+[forbidden-class] class "grayscale-0" — CSS filters are unsupported in most email clients — remove them
+[forbidden-class] class "truncate" — text truncation is unsupported in Outlook for Windows — shorten the copy
+[forbidden-class] class "aspect-video" — aspect-ratio is unsupported in Outlook and Gmail — set width/height on <Image>
+[forbidden-class] class "overflow-hidden" — overflow is unreliable across email clients — restructure the layout
+[unsupported-variant] hover: on "hover:bg-red-500" — email clients don't apply hover: styles — remove the variant
+[unsupported-variant] md: on "md:text-lg" — only the sm: breakpoint is supported (progressive enhancement) — use sm:
+[unsupported-modifier] the /50 modifier on "bg-black/50" compiles to alpha colors, which render solid black in Outlook for Windows (Word engine) — use a solid color token
+[unsupported-important] remove the trailing ! from "text-lg!" — the compiler manages !important for sm:/dark: rules
+[unsupported-arbitrary-value] class "bg-[var(--brand)]" — CSS variables don't exist in compiled email — use a theme token or a literal value
+[unsupported-arbitrary-value] class "w-[calc(100%-20px)]" — calc() is unsupported in Outlook for Windows — use a literal px value
+[unsupported-arbitrary-value] class "bg-[oklch(0.5_0.2_20)]" — oklch() is unsupported in email clients — use a literal hex color
+[unsupported-variant] at most one variant per class — split "sm:dark:bg-white" into separate sm:/dark: classes"
+`;

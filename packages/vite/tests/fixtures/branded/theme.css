@@ -1,0 +1,6 @@
+/* The organization brand first, then the project's own tokens. */
+@import "samva:brand";
+
+@theme {
+  --radius-card: 12px;
+}

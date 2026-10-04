@@ -1,0 +1,91 @@
+{
+  "name": "@samva/vite",
+  "version": "0.11.1",
+  "description": "Local editor, dev server and build for Samva email, SMS and WhatsApp templates",
+  "keywords": [
+    "email",
+    "samva",
+    "sml",
+    "sms",
+    "tsx",
+    "vite",
+    "vite-plugin",
+    "whatsapp"
+  ],
+  "homepage": "https://samva.dev",
+  "bugs": {
+    "url": "https://github.com/SamvaHQ/SML/issues"
+  },
+  "license": "MIT",
+  "author": "Arya Labs, Inc.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SamvaHQ/SML.git",
+    "directory": "packages/vite"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "package.json",
+    "README.md",
+    "CHANGELOG.md",
+    "AGENTS.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./build": {
+      "types": "./dist/build.d.ts",
+      "import": "./dist/build.js"
+    },
+    "./project": {
+      "types": "./dist/project.d.ts",
+      "import": "./dist/project.js"
+    },
+    "./dev": {
+      "types": "./dist/dev.d.ts",
+      "import": "./dist/dev.js"
+    },
+    "./render": {
+      "types": "./dist/render.d.ts",
+      "import": "./dist/render.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "NODE_ENV=production tsdown && bun run build:editor",
+    "build:dependencies": "bun run --filter @samva/markup build && bun run --filter @samva/editor build",
+    "build:editor": "bun run --filter @samva/vite-editor-app build",
+    "dev:editor": "bun run --filter @samva/vite-editor-app dev",
+    "prepack": "bun run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:browser": "bun run build:dependencies && bun run build && playwright test --config playwright.config.ts --project chromium",
+    "test:browser:cross": "bun run build:dependencies && bun run build && playwright test --config playwright.config.ts"
+  },
+  "dependencies": {
+    "@samva/markup": "workspace:^0.11.0"
+  },
+  "devDependencies": {
+    "@effect/vitest": "4.0.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "^26.6.2",
+    "tsdown": "^0.22.13",
+    "typescript": "^7.0.2",
+    "vite": "~8.3.0",
+    "vitest": "^5.0.3"
+  },
+  "peerDependencies": {
+    "vite": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

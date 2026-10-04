@@ -1,0 +1,41 @@
+{
+  "name": "sml",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Samva template toolchain: markup, editor and Vite plugin",
+  "license": "MIT",
+  "author": "Arya Labs, Inc.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SamvaHQ/SML.git"
+  },
+  "workspaces": [
+    "packages/*",
+    "packages/vite/editor"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "bun run --filter @samva/markup build && bun run --filter @samva/editor build && bun run --filter @samva/vite build",
+    "check:packages": "bun scripts/check-packages.ts",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint --deny-warnings",
+    "starter:check": "cd examples/email-starter && bun install --frozen-lockfile && bun test ./tests/starter-manifest.test.js",
+    "tegami": "bun scripts/tegami.mts",
+    "test": "bun run --filter @samva/markup --filter @samva/editor --filter @samva/vite test",
+    "test:browser": "bun run --filter @samva/editor test:browser && bun run --filter @samva/vite test:browser",
+    "typecheck": "bun run --filter @samva/markup --filter @samva/editor --filter @samva/vite --filter @samva/vite-editor-app typecheck && tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "oxfmt": "^0.68.0",
+    "oxlint": "^1.83.0",
+    "tegami": "^1.4.0",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "bun": ">=1.4.0",
+    "node": ">=24.10.0"
+  },
+  "packageManager": "bun@1.4.2"
+}

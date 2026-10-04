@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Self-contained, so the package type-checks from its own directory. The flags match
+  // tsconfig.base.json at the repository root; keep them in step.
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "types": ["node", "react", "react-dom"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    // The package's own entries resolve to source, so its build, tests and dev app never read
+    // its `dist`.
+    "paths": {
+      "@samva/editor/host": ["./src/host/types.ts"],
+      "@samva/editor/host/effect": ["./src/host/effect.ts"],
+      "@samva/editor/shell": ["./src/shell.ts"],
+      "@samva/editor/channels": ["./src/channels.ts"],
+      "@samva/editor/mock": ["./src/mock.ts"]
+    }
+  },
+  "include": [
+    "src",
+    "tests",
+    "browser-tests",
+    "dev",
+    "playwright.config.ts",
+    "tsdown.config.ts",
+    "vitest.config.ts"
+  ]
+}
