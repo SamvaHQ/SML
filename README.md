@@ -54,6 +54,10 @@ publishes to npm from GitHub Actions with provenance, after `scripts/check-packa
 audits every tarball. A publish that includes `@samva/markup` or `@samva/vite` then opens a pull
 request that pins the starter to the new versions.
 
+Both workflows push and open pull requests as the release GitHub App (repository variable
+`RELEASE_APP_CLIENT_ID`, secret `RELEASE_APP_PRIVATE_KEY`), so the required check runs on those
+pull requests; pushes made with the workflow token start no runs.
+
 ## License
 
 [MIT](LICENSE)

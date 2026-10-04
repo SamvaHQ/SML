@@ -4,9 +4,6 @@ on:
   pull_request:
   push:
     branches: [main]
-  # Release automation dispatches the check on the branches it pushes with the workflow token,
-  # whose pushes start no runs of their own.
-  workflow_dispatch:
 
 permissions:
   contents: read

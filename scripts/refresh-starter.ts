@@ -156,9 +156,6 @@ const openPullRequest = async (markup: string, vite: string): Promise<void> => {
     "Pins the starter to the packages this release published and resolves its standalone lock and tree manifest against them.",
   );
   await run(repositoryRoot, "git", "push", "--force-with-lease", "origin", branch);
-  // A push made with the workflow token starts no workflow runs, so the pull request would never
-  // get the required `check` status; a dispatch is the one trigger that token may start.
-  await run(repositoryRoot, "gh", "workflow", "run", "check.yml", "--ref", branch);
   // A publish retry reaches here with the pull request already open from the
   // first attempt; the pushed branch updates it, so only a missing one is created.
   const existing = await run(
