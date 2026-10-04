@@ -75,6 +75,7 @@
   "devDependencies": {
     "@effect/vitest": "4.0.0",
     "@playwright/test": "1.63.0",
+    "@samva/editor": "workspace:^",
     "@types/node": "^26.6.2",
     "tsdown": "^0.22.13",
     "typescript": "^7.0.2",

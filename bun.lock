@@ -19,7 +19,7 @@
         "@babel/parser": "^8.0.4",
         "@hugeicons/core-free-icons": "^4.3.5",
         "@hugeicons/react": "^1.1.10",
-        "@samva/markup": "workspace:*",
+        "@samva/markup": "workspace:^",
         "clsx": "^2.1.1",
         "zustand": "^5.0.14",
       },
@@ -78,11 +78,12 @@
       "name": "@samva/vite",
       "version": "0.11.3",
       "dependencies": {
-        "@samva/markup": "workspace:^0.11.0",
+        "@samva/markup": "workspace:^",
       },
       "devDependencies": {
         "@effect/vitest": "4.0.0",
         "@playwright/test": "1.63.0",
+        "@samva/editor": "workspace:^",
         "@types/node": "^26.6.2",
         "tsdown": "^0.22.13",
         "typescript": "^7.0.2",
