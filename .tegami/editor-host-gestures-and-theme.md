@@ -1,7 +1,7 @@
 ---
 packages:
   npm:@samva/editor:
-    type: minor
+    type: patch
 ---
 
 ## Hosts can follow element selection gestures
