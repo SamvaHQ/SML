@@ -2,9 +2,9 @@
 @import "@samva/editor/styles.css";
 
 /*
- * The editor UI is a self-contained bundle. In the dashboard, apps/web owns
- * Tailwind + the base design tokens; here the plugin ships them so the shell
- * renders standalone inside a customer's dev server. Tokens mirror the dashboard's
+ * The editor UI is a self-contained bundle. A host app normally owns Tailwind +
+ * the base design tokens; here the plugin ships them so the shell renders
+ * standalone inside a customer's dev server. Tokens mirror Samva's dashboard
  * neutral theme. Tailwind runs at PACKAGE BUILD time; editor content `@source`
  * rides in `@samva/editor/styles.css` (imported above) and bakes into dist/editor
  * — the consumer never runs Tailwind.

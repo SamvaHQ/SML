@@ -22,7 +22,7 @@ export default defineConfig({
   format: ["esm"],
   outDir: "dist",
   dts: true,
-  sourcemap: true,
+  sourcemap: false,
   clean: true,
   // Pure-TS compiler with no node builtins — runs identically in Worker/browser/CLI.
   // Neutral keeps the output browser-safe; the dashboard editor bundles these entries

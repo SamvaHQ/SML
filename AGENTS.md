@@ -34,3 +34,9 @@ Read this file, then the package's own `AGENTS.md`.
 - Code and docs describe what the packages are now; history lives in Git.
 - Template authors install `@samva/markup` and `@samva/vite`, so neither may depend on Effect.
   `@samva/editor` takes Effect, React and Base UI as peers.
+- `packages/markup/tests/email-parity.test.ts` pins the compiler's published output to golden
+  digests that Samva's hosted runtime also asserts. Change them only for an intended output change,
+  and say so in the changeset.
+- `throw`, `try`/`catch`, built-in `Error` construction and hand-rolled object guards are lint
+  errors outside tests and tooling (`scripts/oxlint-plugin-samva.js`). A real boundary takes an
+  inline `oxlint-disable` naming the rule and the reason.

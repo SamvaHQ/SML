@@ -25,7 +25,6 @@
   },
   "files": [
     "dist",
-    "!dist/**/*.map",
     "package.json",
     "README.md",
     "CHANGELOG.md",
@@ -71,7 +70,7 @@
     "test:browser:cross": "bun run build:dependencies && bun run build && playwright test --config playwright.config.ts"
   },
   "dependencies": {
-    "@samva/markup": "workspace:^0.11.0"
+    "@samva/markup": "workspace:^"
   },
   "devDependencies": {
     "@effect/vitest": "4.0.0",

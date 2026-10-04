@@ -284,9 +284,24 @@ export const samvaEditor = (options: SamvaEditorPluginOptions = {}): Plugin => {
 
     config(user) {
       // A host the project chose is its own decision; the default binds to loopback only.
-      return user.server?.host === undefined
-        ? { server: { host: "127.0.0.1", allowedHosts: ["localhost", ".localhost"] } }
-        : {};
+      return {
+        server: {
+          ...(user.server?.host === undefined
+            ? { host: "127.0.0.1", allowedHosts: ["localhost", ".localhost"] }
+            : {}),
+          watch:
+            user.server?.watch === null
+              ? null
+              : {
+                  // Chokidar otherwise drops a second Linux change within 50ms. Its pending-write
+                  // tracking coalesces writes and delivers the final contents instead.
+                  awaitWriteFinish: user.server?.watch?.awaitWriteFinish ?? {
+                    stabilityThreshold: 50,
+                    pollInterval: 10,
+                  },
+                },
+        },
+      };
     },
 
     configResolved(resolved: ResolvedConfig) {
@@ -318,7 +333,7 @@ export const samvaEditor = (options: SamvaEditorPluginOptions = {}): Plugin => {
         onProject: (project) => reportBrand(project.brand),
       });
 
-      server.watcher.add(root);
+      if (root !== server.config.root) server.watcher.add(root);
 
       // Watcher events arrive in bursts: an editor save writes through a temporary file, a
       // formatter rewrites a folder, and macOS replays a directory copy the instant the watcher
@@ -519,6 +534,9 @@ export const samvaEditor = (options: SamvaEditorPluginOptions = {}): Plugin => {
           if (pathname === `${apiPrefix}/events`) {
             const id = query.get("id");
             if (!id) return sendJson(res, 400, { error: "missing id" });
+            // A subscription needs a baseline before the first edit, including when no document
+            // or catalog request preceded it. Otherwise the edit becomes the initial load.
+            await store.catalog();
             res.statusCode = 200;
             res.setHeader("content-type", "text/event-stream");
             res.setHeader("cache-control", "no-cache");
@@ -531,6 +549,7 @@ export const samvaEditor = (options: SamvaEditorPluginOptions = {}): Plugin => {
           }
 
           if (pathname === `${apiPrefix}/catalog-events`) {
+            await store.catalog();
             res.statusCode = 200;
             res.setHeader("content-type", "text/event-stream");
             res.setHeader("cache-control", "no-cache");

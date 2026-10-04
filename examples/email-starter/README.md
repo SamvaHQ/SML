@@ -1,17 +1,17 @@
 # Samva email starter
 
 One ordinary TSX email project. Clone or copy this directory, install its locked dependencies, and
-author the `WelcomeEmail` entry in `templates/welcome.tsx`.
+author the `welcome` template in `templates/welcome.tsx`.
 
 The starter intentionally contains one email entry and no source metadata or sidecar. The
 compiler reads the TSX and never runs it; Git owns this TSX project as the source tree.
 
-The checked-in `starter-manifest.json` records the canonical file list and digest used by project
-creation tracers to prove that every new project starts from this exact tree.
+The checked-in `starter-manifest.json` records the canonical file list and digest, so a project
+created from this starter can prove it starts from this exact tree.
 
 ## Start
 
-This directory is a standalone project, inside the Samva repository or copied out of it. It pins
+This directory is a standalone project, inside the SML repository or copied out of it. It pins
 the published `@samva/markup` and `@samva/vite` releases, never the repository's workspace
 packages, so its `bun.lock` is the same lock a customer installs from. Install that pinned
 toolchain from it:
@@ -112,8 +112,7 @@ preview URLs are not suitable for delivered email.
 ## Release verification
 
 `bun run starter:check` from the repository root installs this directory from its committed lock
-and runs its tests; `bun run release:check` includes it. Before publishing an authoring release, the
-repository also verifies the starter with both exact packed packages:
+and runs its tests. Before publishing a release, the repository also verifies the starter with both exact packed packages:
 
 ```bash
 SAMVA_STARTER_MARKUP_TARBALL=/absolute/path/samva-markup.tgz \

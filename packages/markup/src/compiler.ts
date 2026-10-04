@@ -3,13 +3,12 @@
 // Everything a host needs to turn an authored TSX project into email output
 // lives behind this module as plain functions with explicit inputs and outputs.
 // It imports no Vite, no esbuild and no Node builtins, so the same functions run
-// in a Vite plugin, in an esbuild plugin over @cloudflare/worker-bundler, and
-// inside the isolated render worker.
+// in a Vite plugin, in an esbuild plugin, and inside an isolated render worker.
 //
-// `@samva/vite` and `apps/agents/src/editor` are adapters over this surface:
-// they own module resolution, watching and transport, never compilation
-// semantics. A host that reaches past this module for a transform is a host
-// whose output can drift from the other one.
+// `@samva/vite` and Samva's hosted editor are adapters over this surface: they
+// own module resolution, watching and transport, never compilation semantics. A
+// host that reaches past this module for a transform is a host whose output can
+// drift from the others.
 
 export {
   checkEmailCompatibility,

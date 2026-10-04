@@ -24,7 +24,6 @@
   },
   "files": [
     "dist",
-    "!dist/**/*.map",
     "package.json",
     "README.md",
     "CHANGELOG.md",
@@ -74,7 +73,7 @@
     "@babel/parser": "^8.0.4",
     "@hugeicons/core-free-icons": "^4.3.5",
     "@hugeicons/react": "^1.1.10",
-    "@samva/markup": "workspace:*",
+    "@samva/markup": "workspace:^",
     "clsx": "^2.1.1",
     "zustand": "^5.0.14"
   },

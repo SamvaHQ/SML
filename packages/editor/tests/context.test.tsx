@@ -45,7 +45,7 @@ function DocumentProbe() {
       </button>
       <button
         type="button"
-        onClick={() => saveMetadata({ fromDefault: { email: "new@nimbus.coffee" } })}
+        onClick={() => saveMetadata({ fromDefault: { email: "new@nimbus.example" } })}
         data-testid="probe.save-meta"
       >
         save-meta
@@ -252,12 +252,12 @@ describe("metadata save failure", () => {
         <DocumentProbe />
       </EditorProvider>,
     );
-    await waitFor(() => expect(view.getByTestId("from").textContent).toBe("hello@nimbus.coffee"));
+    await waitFor(() => expect(view.getByTestId("from").textContent).toBe("hello@nimbus.example"));
 
     fireEvent.click(view.getByTestId("probe.save-meta"));
 
     await waitFor(() => expect(view.getByTestId("error").textContent).toContain("sender defaults"));
-    expect(view.getByTestId("from").textContent).toBe("hello@nimbus.coffee");
+    expect(view.getByTestId("from").textContent).toBe("hello@nimbus.example");
   });
 });
 

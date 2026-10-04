@@ -103,14 +103,15 @@ template versions.
 
 ## Styling & tokens
 
-The shell is authored in Tailwind v4 against the **dashboard's** design token names
+The shell is authored in Tailwind v4 against a set of base design token names
 (`--color-background`, `--color-muted`, `--color-border`, `--color-primary`,
 `--color-surface-*`, `--color-placeholder`, `--color-status-*`, `--shadow-*`). The
-host (apps/web) already owns `@import "tailwindcss"` and defines those base tokens,
-so the package deliberately does **not** ship them — importing the package must
-never fight the host theme.
+host owns `@import "tailwindcss"` and defines those base tokens, so the package
+deliberately does **not** ship them — importing the package must never fight the
+host theme. `@samva/vite`'s embedded editor (`packages/vite/editor/src/styles.css`)
+is a complete example of a host theme.
 
-`@samva/editor/styles.css` ships only what the dashboard lacks:
+`@samva/editor/styles.css` ships only the editor's own additions:
 
 - the **editor-specific tokens** — `--accent-email` and the selection tints
   (`--sel-soft`, `--sel-mid`) — registered in `@theme` and defined for light +
@@ -142,7 +143,7 @@ it into its Tailwind **root** CSS, not import it from a component:
 One import covers both concerns. The `@import` (resolved through the package exports, after
 `@import "tailwindcss"`) registers the `@theme` block **and** the package-owned `@source`
 glob so chrome utilities (`bg-accent-email`, `sel-*`, `chip-*`, `samva-editor-*`) generate —
-hosts do not hand-write monorepo-relative content paths.
+hosts do not hand-write content paths into `node_modules`.
 
 Failure mode: importing `@samva/editor/styles.css` from a React component makes Vite
 process it standalone, so its `@theme` never compiles into the host's Tailwind and

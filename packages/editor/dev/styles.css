@@ -2,9 +2,9 @@
 @import "../src/styles.css";
 
 /*
- * Harness-only base theme. In production apps/web owns Tailwind + the base design
+ * Harness-only base theme. In production the host owns Tailwind + the base design
  * tokens; the @samva/editor package ships only the editor-specific extras. Here we
- * stand in a neutral dashboard theme so the shell renders fully in `bun run dev`.
+ * stand in a neutral theme so the shell renders fully in `bun run dev`.
  */
 @custom-variant dark (&:where(.dark, .dark *));
 

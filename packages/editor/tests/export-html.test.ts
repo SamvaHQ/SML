@@ -11,7 +11,7 @@ afterEach(() => vi.restoreAllMocks());
 const RENDERED =
   '<!doctype html><html><head><meta charset="utf-8"></head>' +
   `<body ${INSTANCE_PATH_ATTRIBUTE}="0" class="bg-white">` +
-  `<a ${INSTANCE_PATH_ATTRIBUTE}="0.0" href="https://nimbus.coffee/claim" data-track="cta">Claim</a>` +
+  `<a ${INSTANCE_PATH_ATTRIBUTE}="0.0" href="https://nimbus.example/claim" data-track="cta">Claim</a>` +
   `<img ${INSTANCE_PATH_ATTRIBUTE}="0.1" src="https://cdn.example.com/logo.png" alt="Nimbus">` +
   "</body></html>";
 
@@ -21,7 +21,7 @@ describe("emailHtmlForExport", () => {
 
     expect(exported).not.toContain(INSTANCE_PATH_ATTRIBUTE);
     expect(exported).toContain('<body class="bg-white">');
-    expect(exported).toContain('href="https://nimbus.coffee/claim"');
+    expect(exported).toContain('href="https://nimbus.example/claim"');
     expect(exported).toContain('data-track="cta"');
     expect(exported).toContain('alt="Nimbus"');
     expect(exported).toContain("<!doctype html>");
