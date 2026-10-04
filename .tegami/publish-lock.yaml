@@ -1,21 +1,17 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/markup:\n    type: patch\n  npm:@samva/vite:\n    type: patch\n  npm:@samva/editor:\n    type: patch\n---\n\n## Published files no longer point at missing source maps\n\nThe packages no longer build source maps, so no published JavaScript or declaration file ends in a\n`sourceMappingURL` comment for a `.map` file the package does not ship. Devtools and bundlers stop\nrequesting maps that 404.\n\n## `@samva/editor` accepts any compatible `@samva/markup`\n\n`@samva/editor` and `@samva/vite` both depend on `@samva/markup` with a caret range, so a project\nthat installs both resolves one copy of the compiler.\n\n## The editor's mock project uses a reserved domain\n\n`@samva/editor/mock` addresses its sample brand at `nimbus.example` instead of a registered domain.\nThe mock's logo URL no longer resolves, so the demo shows its alt text.\n\n## The editor keeps up with rapid saves on Linux\n\n`samvaEditor()` turns on the watcher's pending-write tracking unless the project configures its\nown, so a save that lands within 50 ms of the previous one still reaches the editor on Linux. Event\nstreams load the template catalog before they connect, so the first edit after opening the editor\nis reported as a change.\n"
-    filename: published-files-hygiene.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## Hosts can follow element selection gestures\n\n`EditorProvider` accepts `onSelectElement`, which reports the selected instance path, render\nrevision and fixture only when the user selects an element. Automatic selection rebinding after a\ndocument change does not call it. `UserSelection` is exported from `@samva/editor/shell`.\n\n## Hosts can import a neutral editor theme\n\n`@samva/editor/base.css` supplies light and dark design tokens for hosts without their own\ntheme. Import it after Tailwind and before `@samva/editor/styles.css`.\n"
+    filename: editor-host-gestures-and-theme.md
     v: 0.0.0
 core:packages:
+  - id: npm:@samva/vite
+    updated: true
   - changelogIds:
-      - published-files-hygiene.md
+      - editor-host-gestures-and-theme.md
     id: npm:@samva/editor
     updated: true
-  - changelogIds:
-      - published-files-hygiene.md
-    id: npm:@samva/markup
-    updated: true
-  - changelogIds:
-      - published-files-hygiene.md
-    id: npm:@samva/vite
+  - id: npm:@samva/markup
     updated: true
 npm:packages:
+  - id: npm:@samva/vite
   - id: npm:@samva/editor
   - id: npm:@samva/markup
-  - id: npm:@samva/vite
