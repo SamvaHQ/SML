@@ -55,7 +55,7 @@
       "import": "./dist/mock.js"
     },
     "./styles.css": "./dist/styles.css",
-    "./base-theme.css": "./dist/base-theme.css"
+    "./base.css": "./dist/base.css"
   },
   "publishConfig": {
     "access": "public"

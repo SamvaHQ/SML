@@ -7,15 +7,15 @@ recipient receives.
 
 ## Entry points
 
-| Subpath                        | What it is                                                                                |
-| ------------------------------ | ----------------------------------------------------------------------------------------- |
-| `@samva/editor/host`           | The host an embedder implements (`AsyncEditorHost`), with the contract's types and errors |
-| `@samva/editor/host/effect`    | The host for an Effect codebase (`EditorHost`), and `toAsyncHost`, which adapts it        |
-| `@samva/editor/shell`          | `EditorProvider`, `EditorShell`, contributions, icons (`EditorGlyph`), and `LockedAction` |
-| `@samva/editor/channels`       | SMS/WhatsApp form reads and exact source edits over the authored TSX                      |
-| `@samva/editor/mock`           | An in-memory host + sample document for the harness and tests                             |
-| `@samva/editor/styles.css`     | The chrome's editor-specific tokens + component CSS (see below)                           |
-| `@samva/editor/base-theme.css` | Optional neutral light/dark base tokens for hosts without their own theme                 |
+| Subpath                     | What it is                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| `@samva/editor/host`        | The host an embedder implements (`AsyncEditorHost`), with the contract's types and errors |
+| `@samva/editor/host/effect` | The host for an Effect codebase (`EditorHost`), and `toAsyncHost`, which adapts it        |
+| `@samva/editor/shell`       | `EditorProvider`, `EditorShell`, contributions, icons (`EditorGlyph`), and `LockedAction` |
+| `@samva/editor/channels`    | SMS/WhatsApp form reads and exact source edits over the authored TSX                      |
+| `@samva/editor/mock`        | An in-memory host + sample document for the harness and tests                             |
+| `@samva/editor/styles.css`  | The chrome's editor-specific tokens + component CSS (see below)                           |
+| `@samva/editor/base.css`    | Optional neutral light/dark base tokens for hosts without their own theme                 |
 
 ## Writing a host
 
@@ -125,7 +125,7 @@ The shell is authored in Tailwind v4 against a set of base design token names
 (`--color-background`, `--color-muted`, `--color-border`, `--color-primary`,
 `--color-surface-*`, `--color-placeholder`, `--color-status-*`, `--shadow-*`). The
 host owns `@import "tailwindcss"` and either defines those base tokens or imports the optional
-`@samva/editor/base-theme.css` neutral light/dark theme. Hosts with their own tokens omit that
+`@samva/editor/base.css` neutral light/dark theme. Hosts with their own tokens omit that
 stylesheet. `@samva/vite`'s embedded editor (`packages/vite/editor/src/styles.css`) is a complete
 example of a host theme.
 
@@ -152,7 +152,7 @@ them into the Tailwind **root** CSS, not a React component. A host using the neu
 
 ```css
 @import "tailwindcss";
-@import "@samva/editor/base-theme.css";
+@import "@samva/editor/base.css";
 @import "@samva/editor/styles.css";
 ```
 

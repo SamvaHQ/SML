@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "../src/base-theme.css";
+@import "../src/base.css";
 @import "../src/styles.css";
 
 /* apps/web owns the dashboard tokens; the harness stands in the editor's neutral base theme. */

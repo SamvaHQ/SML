@@ -12,5 +12,5 @@ document change does not call it. `UserSelection` is exported from `@samva/edito
 
 ## Hosts can import a neutral editor theme
 
-`@samva/editor/base-theme.css` supplies light and dark design tokens for hosts without their own
+`@samva/editor/base.css` supplies light and dark design tokens for hosts without their own
 theme. Import it after Tailwind and before `@samva/editor/styles.css`.

@@ -22,7 +22,7 @@ export default defineConfig({
   // scans the built JavaScript in `dist` as it scans the TypeScript in `src`.
   copy: [
     { from: "src/styles.css", to: "dist" },
-    { from: "src/base-theme.css", to: "dist" },
+    { from: "src/base.css", to: "dist" },
   ],
   // Emit `.js` (not `.mjs`) so the package's `exports` map to plain `.js`; the package is
   // `type: module`, so `.js` is ESM.
