@@ -1,17 +1,17 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## Hosts can follow element selection gestures\n\n`EditorProvider` accepts `onSelectElement`, which reports the selected instance path, render\nrevision and fixture only when the user selects an element. Automatic selection rebinding after a\ndocument change does not call it. `UserSelection` is exported from `@samva/editor/shell`.\n\n## Hosts can import a neutral editor theme\n\n`@samva/editor/base.css` supplies light and dark design tokens for hosts without their own\ntheme. Import it after Tailwind and before `@samva/editor/styles.css`.\n"
-    filename: editor-host-gestures-and-theme.md
+  - content: "---\npackages:\n  npm:@samva/markup:\n    type: patch\n---\n\n## Diagnostics carry their upgrade recipe\n\nA template diagnostic whose code marks an incompatible template format now includes `upgrade`, the\nagent instructions for migrating the template, in structured results and after `Fix:` in formatted\noutput.\n"
+    filename: diagnostic-upgrade-recipes.md
     v: 0.0.0
 core:packages:
+  - changelogIds:
+      - diagnostic-upgrade-recipes.md
+    id: npm:@samva/markup
+    updated: true
   - id: npm:@samva/vite
     updated: true
-  - changelogIds:
-      - editor-host-gestures-and-theme.md
-    id: npm:@samva/editor
-    updated: true
-  - id: npm:@samva/markup
+  - id: npm:@samva/editor
     updated: true
 npm:packages:
+  - id: npm:@samva/markup
   - id: npm:@samva/vite
   - id: npm:@samva/editor
-  - id: npm:@samva/markup
