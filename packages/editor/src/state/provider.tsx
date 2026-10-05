@@ -1,6 +1,7 @@
 import type { AsyncEditorHost } from "@samva/editor/host";
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 
+import { PreviewDocumentContext, type PreparedPreviewDocument } from "../canvas/preview-document";
 import { EditorIconsProvider } from "../chrome/icon-context";
 import { DEFAULT_EDITOR_ICONS, type EditorIcons } from "../chrome/icon-set";
 import { EditorBundleContext } from "./context";
@@ -21,6 +22,12 @@ export interface EditorProviderProps {
    * selection was made in. A selection the editor rebinds to a newer render is not reported again.
    */
   readonly onSelectElement?: ((selection: UserSelection) => void) | undefined;
+  /**
+   * Pure, synchronous preparation of the original host HTML before any attached parser sees it.
+   * Applies to canvas and Preview; keep identity stable to retain mounted frames.
+   * Changing identity replaces frames without resetting the editor session.
+   */
+  readonly preparePreviewDocument?: ((html: string) => PreparedPreviewDocument) | undefined;
   readonly children: ReactNode;
 }
 
@@ -36,6 +43,7 @@ export function EditorProvider({
   checks = NO_CHECKS,
   icons,
   onSelectElement,
+  preparePreviewDocument,
   children,
 }: EditorProviderProps) {
   const [bundle, setBundle] = useState(() => createEditorBundle(host, { hostChecks: checks }));
@@ -68,7 +76,9 @@ export function EditorProvider({
 
   return (
     <EditorBundleContext.Provider value={bundle}>
-      <EditorIconsProvider value={iconSet}>{children}</EditorIconsProvider>
+      <PreviewDocumentContext.Provider value={preparePreviewDocument}>
+        <EditorIconsProvider value={iconSet}>{children}</EditorIconsProvider>
+      </PreviewDocumentContext.Provider>
     </EditorBundleContext.Provider>
   );
 }
