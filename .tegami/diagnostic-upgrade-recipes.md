@@ -4,4 +4,8 @@ packages:
     type: patch
 ---
 
-Template diagnostics carry upgrade recipes in structured results and formatted output so agents can migrate incompatible templates.
+## Diagnostics carry their upgrade recipe
+
+A template diagnostic whose code marks an incompatible template format now includes `upgrade`, the
+agent instructions for migrating the template, in structured results and after `Fix:` in formatted
+output.
