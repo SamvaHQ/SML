@@ -1,5 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 
+import { DIAGNOSTIC_CODES } from "../src/diagnostic-codes";
+import { formatEmailDiagnostic } from "../src/email/diagnostics";
 import { compileTemplate } from "../src/sml/compile";
 import { checkStaticProfile, introducedProfileErrors } from "../src/sml/profile";
 
@@ -93,11 +95,27 @@ describe("checkStaticProfile", () => {
   });
 
   it("reports a defineEmail entry as outside the profile", () => {
-    expect(
-      codes(
-        'import { defineEmail } from "@samva/markup/template";\nexport default defineEmail({});',
-      ),
-    ).toContain("legacy-definition");
+    const diagnostics = checkStaticProfile(
+      'import { defineEmail } from "@samva/markup/template";\nexport default defineEmail({});',
+    );
+    const diagnostic = diagnostics.find((item) => item.code === "legacy-definition")!;
+    expect(diagnostic).toBeDefined();
+    expect(diagnostic.upgrade).toBe(DIAGNOSTIC_CODES["legacy-definition"].upgrade);
+    expect(formatEmailDiagnostic(diagnostic)).toBe(
+      `template.tsx:2:16 legacy-definition: ${diagnostic.message}\n  Fix: ${diagnostic.fix}\n  Upgrade: ${diagnostic.upgrade}`,
+    );
+  });
+
+  it("omits upgrade recipes and preserves formatting for ordinary findings", () => {
+    const diagnostic = checkStaticProfile("export default 42;", "entry.tsx")[0]!;
+    expect(diagnostic.code).toBe("no-template");
+    expect(diagnostic).not.toHaveProperty("upgrade");
+    expect(formatEmailDiagnostic(diagnostic)).toBe(
+      `entry.tsx:1:16 no-template: ${diagnostic.message}\n  Fix: ${diagnostic.fix}`,
+    );
+    expect(formatEmailDiagnostic({ ...diagnostic, fix: undefined })).toBe(
+      `entry.tsx:1:16 no-template: ${diagnostic.message}`,
+    );
   });
 
   it("returns a syntax error rather than throwing", () => {

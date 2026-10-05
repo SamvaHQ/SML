@@ -1,4 +1,8 @@
-import type { DiagnosticCode } from "../diagnostic-codes";
+import {
+  DIAGNOSTIC_CODES,
+  type DiagnosticCode,
+  type DiagnosticCodeSpec,
+} from "../diagnostic-codes";
 import type { TemplateDiagnostic } from "../email/diagnostics";
 import type { JsxSourceLocation } from "../source-locations";
 import type { ParsedSource } from "./ast";
@@ -21,12 +25,21 @@ export class Findings {
     fix?: string,
     severity: TemplateDiagnostic["severity"] = "error",
   ): void {
-    this.items.push({
+    this.report({
       code,
       severity,
       message,
       ...(fix === undefined ? {} : { fix }),
       origins: [this.locate(source, node)],
+    });
+  }
+
+  /** Attach the registry recipe wherever a known template finding enters the collection. */
+  report(diagnostic: TemplateDiagnostic & { readonly code: DiagnosticCode }): void {
+    const spec: DiagnosticCodeSpec = DIAGNOSTIC_CODES[diagnostic.code];
+    this.items.push({
+      ...diagnostic,
+      ...(spec.upgrade === undefined ? {} : { upgrade: spec.upgrade }),
     });
   }
 
