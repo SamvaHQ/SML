@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 
 /**
- * Build the public packages once, pack them into `dist/local`, and print the `catalog` and
- * `overrides` entries a consuming project pastes into its root `package.json` to install these
- * tarballs instead of the npm releases. The overrides matter: `@samva/vite` depends on
+ * Build the public packages once, pack them into `dist/local`, and print each package's `file:`
+ * specifier as JSON (`{ "tarballs": { name: specifier } }`). A consuming project uses each
+ * specifier wherever its root `package.json` declares that package (a dependency or a catalog
+ * entry) and again under `overrides`. The overrides matter: `@samva/vite` depends on
  * `@samva/markup` by range, so without them the consumer resolves that copy from npm.
  *
  * The tarballs carry the version in each `package.json`, so the consumer's lockfile records the
@@ -54,5 +55,7 @@ const dirty = run(["git", "status", "--porcelain"]).trim() !== "";
 console.error(
   `Packed ${Object.keys(tarballs).length} tarballs from ${head}${dirty ? " (dirty)" : ""}.`,
 );
-console.error("Merge into the consumer's root package.json, then run its install:");
-console.log(JSON.stringify({ catalog: tarballs, overrides: tarballs }, null, 2));
+console.error(
+  "In the consumer's root package.json, use each specifier where the package is declared and under overrides, then install:",
+);
+console.log(JSON.stringify({ tarballs }, null, 2));
