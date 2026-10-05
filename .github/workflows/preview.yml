@@ -1,0 +1,45 @@
+name: preview
+
+# Publishes each commit's packages to pkg.pr.new so another project can install them by URL
+# before a release. Requires the pkg.pr.new GitHub App on this repository.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: publish preview packages
+    # Fork pull requests would publish unreviewed code under these package names.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: setup node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: install dependencies
+        run: bun install --frozen-lockfile
+
+      # Packs in argument order, running each prepack build; vite last because it embeds the editor.
+      - name: publish
+        run: bun x pkg-pr-new@0.0.88 publish --bun --comment=update --packageManager=bun ./packages/markup ./packages/editor ./packages/vite
