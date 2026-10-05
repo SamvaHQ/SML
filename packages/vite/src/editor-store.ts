@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { open, readFile, realpath, rename, rm, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
-import type { EmailDiagnostic } from "@samva/markup/diagnostics";
+import type { EmailDiagnostic, TemplateDiagnostic } from "@samva/markup/diagnostics";
 import type { RenderedIrWhatsApp } from "@samva/markup/render";
 import { renderIrPreview, type EmailElementSelection } from "@samva/markup/render";
 
@@ -51,6 +51,8 @@ export interface EditorCatalogDiagnostic {
   readonly severity: EmailDiagnostic["severity"];
   readonly code: string;
   readonly message: string;
+  /** The registry's agent instructions when the code marks an incompatible template format. */
+  readonly upgrade?: string | undefined;
 }
 
 export interface EditorCatalog {
@@ -180,11 +182,12 @@ export const parseDocumentId = (
     : { file: id, channel: "email" };
 };
 
-const catalogFinding = (file: string, item: EmailDiagnostic): EditorCatalogDiagnostic => ({
+const catalogFinding = (file: string, item: TemplateDiagnostic): EditorCatalogDiagnostic => ({
   file,
   severity: item.severity,
   code: item.code,
   message: item.message,
+  ...(item.upgrade === undefined ? {} : { upgrade: item.upgrade }),
 });
 
 /** A template's input contract is a JSON Schema, so its variables are that schema's top-level properties. */

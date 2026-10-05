@@ -1,4 +1,5 @@
 // oxlint-disable samva/no-hand-rolled-object-guard -- IR nodes and Babel nodes are this package's own typed data, discriminated structurally; nothing here validates external input.
+import type { DiagnosticCode } from "../diagnostic-codes";
 import { emailElement } from "../email/elements";
 import type { IrElement, IrNode, IrPredicate, IrSource, IrStyle, IrValue } from "../ir";
 import { isValueNode } from "./bindings";
@@ -11,7 +12,7 @@ import { didYouMean } from "./suggest";
 type Schema = Readonly<Record<string, unknown>>;
 
 export interface CheckFinding {
-  readonly code: string;
+  readonly code: DiagnosticCode;
   readonly message: string;
   readonly fix?: string;
   readonly src: IrSource | undefined;

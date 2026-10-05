@@ -554,7 +554,7 @@ export const lowerProject = (
           }),
         );
         if (!edited.done)
-          findings.items.push({
+          findings.report({
             code: "missing-head",
             severity: "error",
             message:
@@ -609,7 +609,7 @@ export const lowerProject = (
   for (const finding of checks) {
     const source = finding.src;
     const file = sources[source?.[2] ?? 0] ?? options.entry;
-    findings.items.push({
+    findings.report({
       code: finding.code,
       severity: "error",
       message: finding.message,

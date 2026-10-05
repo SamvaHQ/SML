@@ -41,6 +41,8 @@ export interface EmailDiagnostic {
 /** A finding of the static compiler: an `EmailDiagnostic` plus the change that resolves it. */
 export interface TemplateDiagnostic extends EmailDiagnostic {
   readonly fix?: string | undefined;
+  /** Agent instructions for migrating a template made incompatible by a compiler change. */
+  readonly upgrade?: string | undefined;
 }
 
 export class EmailCompileError extends TaggedError("EmailCompileError")<{
@@ -63,7 +65,8 @@ export const formatEmailDiagnostic = (diagnostic: TemplateDiagnostic): string =>
       ? "<unknown source>"
       : `${origin.fileName}:${origin.lineNumber}:${origin.columnNumber}`;
   const head = `${at} ${diagnostic.code}: ${diagnostic.message}`;
-  return diagnostic.fix === undefined ? head : `${head}\n  Fix: ${diagnostic.fix}`;
+  const fixed = diagnostic.fix === undefined ? head : `${head}\n  Fix: ${diagnostic.fix}`;
+  return diagnostic.upgrade === undefined ? fixed : `${fixed}\n  Upgrade: ${diagnostic.upgrade}`;
 };
 
 /** True when a set of findings must stop the compile or refuse a publication. */

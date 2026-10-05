@@ -12,9 +12,11 @@ import {
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
+import { DIAGNOSTIC_CODES } from "@samva/markup/diagnostics";
 // oxlint-disable-next-line eslint/no-restricted-imports -- inject a disk-sync failure or concurrent writer while retaining real filesystem I/O.
 import { vi } from "vitest";
 
+import { buildTemplates } from "../src/build";
 import {
   documentId,
   EDITOR_MAX_SOURCE_BYTES,
@@ -339,6 +341,30 @@ describe("EditorFileStore", () => {
       ok: false,
       kind: "missing",
       error: "template not found",
+    });
+  });
+
+  it("carries upgrade recipes through build JSON, editor documents and catalog JSON", async () => {
+    await store.open("templates/welcome.tsx");
+    await writeFile(
+      welcomePath,
+      'import { defineEmail } from "@samva/markup/template";\nexport default defineEmail({});',
+      "utf8",
+    );
+    const expected = {
+      code: "legacy-definition",
+      upgrade: DIAGNOSTIC_CODES["legacy-definition"].upgrade,
+    };
+    const built = await buildTemplates({ root });
+    expect(JSON.parse(JSON.stringify(built)).files).toContainEqual(
+      expect.objectContaining({ diagnostics: [expect.objectContaining(expected)] }),
+    );
+    const catalog = await store.refreshAll();
+    expect(JSON.parse(JSON.stringify(catalog)).diagnostics).toContainEqual(
+      expect.objectContaining({ file: "templates/welcome.tsx", ...expected }),
+    );
+    expect(await store.open("templates/welcome.tsx")).toMatchObject({
+      diagnostics: [expect.objectContaining(expected)],
     });
   });
 
