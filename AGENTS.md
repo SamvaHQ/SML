@@ -31,6 +31,8 @@ Read this file, then the package's own `AGENTS.md`.
   `bun run --filter @samva/markup codegen:contract`, and
   `packages/markup/src/email/tailwind-stylesheets.gen.ts` through `codegen:tailwind`.
 - A change customers notice gets a Tegami changeset under `.tegami/`.
+- A change that makes previously valid templates fail adds an `upgrade` recipe to the diagnostic
+  code it reports, so hosted and local agents can migrate projects.
 - Code and docs describe what the packages are now; history lives in Git.
 - Template authors install `@samva/markup` and `@samva/vite`, so neither may depend on Effect.
   `@samva/editor` takes Effect, React and Base UI as peers.

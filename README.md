@@ -49,7 +49,8 @@ not bare `bun test`, which starts Bun's own runner instead of Vitest.
 ## Releases
 
 The three packages release together as the `authoring` group with Tegami. Add a changeset under `.tegami/` with a change that
-customers will notice. A scheduled workflow opens the Version Packages pull request; merging it
+customers will notice. A change that makes previously valid templates fail adds an `upgrade` recipe
+to the diagnostic code it reports, so hosted and local agents can migrate projects. A scheduled workflow opens the Version Packages pull request; merging it
 publishes to npm from GitHub Actions with provenance, after `scripts/check-packages.ts` builds and
 audits every tarball. A publish that includes `@samva/markup` or `@samva/vite` then opens a pull
 request that pins the starter to the new versions.
