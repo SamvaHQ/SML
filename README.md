@@ -2,7 +2,8 @@
 
 SML is the toolkit for Samva templates. A template is one TSX file; the compiler reads it without
 running it, checks it against a static profile, and compiles it to SML IR, which the renderer
-turns into the message for each fixture.
+turns into the message for each fixture. Ask questions about the code on
+[DeepWiki](https://deepwiki.com/SamvaHQ/SML).
 
 ## Packages
 
