@@ -1,17 +1,17 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/markup:\n    type: patch\n---\n\n## Diagnostics carry their upgrade recipe\n\nA template diagnostic whose code marks an incompatible template format now includes `upgrade`, the\nagent instructions for migrating the template, in structured results and after `Fix:` in formatted\noutput.\n"
-    filename: diagnostic-upgrade-recipes.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## Hosts can prepare preview documents before parsing\n\n`EditorProvider` accepts `preparePreviewDocument`, and `@samva/editor/shell` exports\n`PreparedPreviewDocument`. Canvas and Preview write the prepared HTML, then mount host resources\nbefore measurement and paint. Resources are cleaned up for their exact document on replacement,\nunmount, and StrictMode replay. Replacing the preparation callback replaces the preview frames.\n"
+    filename: editor-preview-document-preparation.md
     v: 0.0.0
 core:packages:
   - changelogIds:
-      - diagnostic-upgrade-recipes.md
-    id: npm:@samva/markup
+      - editor-preview-document-preparation.md
+    id: npm:@samva/editor
     updated: true
   - id: npm:@samva/vite
     updated: true
-  - id: npm:@samva/editor
+  - id: npm:@samva/markup
     updated: true
 npm:packages:
-  - id: npm:@samva/markup
-  - id: npm:@samva/vite
   - id: npm:@samva/editor
+  - id: npm:@samva/vite
+  - id: npm:@samva/markup

@@ -1,6 +1,6 @@
 {
   "name": "@samva/markup",
-  "version": "0.11.4",
+  "version": "0.12.0",
   "description": "Type-safe authoring and compilation primitives for Samva templates",
   "keywords": [
     "email",

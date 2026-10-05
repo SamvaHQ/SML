@@ -1,3 +1,12 @@
+## @samva/editor@0.12.0
+
+### Hosts can prepare preview documents before parsing
+
+`EditorProvider` accepts `preparePreviewDocument`, and `@samva/editor/shell` exports
+`PreparedPreviewDocument`. Canvas and Preview write the prepared HTML, then mount host resources
+before measurement and paint. Resources are cleaned up for their exact document on replacement,
+unmount, and StrictMode replay. Replacing the preparation callback replaces the preview frames.
+
 ## @samva/editor@0.11.3
 
 ### Hosts can follow element selection gestures
