@@ -46,6 +46,17 @@ bun run lint
 Run one package's scripts with `bun run --filter @samva/<package> <script>`. Use `bun run test`,
 not bare `bun test`, which starts Bun's own runner instead of Vitest.
 
+### Try a change in another project
+
+Install the packages the way a release would publish them, not through a workspace link, so a
+missing export or a build-order slip shows up before release:
+
+- `bun run pack:local` builds and packs the three packages into `dist/local` and prints the
+  `catalog` and `overrides` entries that point a consuming project at them. The overrides matter:
+  `@samva/vite` depends on `@samva/markup` by range.
+- Every pull request and `main` commit publishes preview packages to
+  [pkg.pr.new](https://pkg.pr.new); the pull request comment lists their install URLs.
+
 ## Releases
 
 The three packages release together as the `authoring` group with Tegami. Add a changeset under `.tegami/` with a change that
