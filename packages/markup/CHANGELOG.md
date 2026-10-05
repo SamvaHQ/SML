@@ -1,3 +1,11 @@
+## @samva/markup@0.11.4
+
+### Diagnostics carry their upgrade recipe
+
+A template diagnostic whose code marks an incompatible template format now includes `upgrade`, the
+agent instructions for migrating the template, in structured results and after `Fix:` in formatted
+output.
+
 ## @samva/markup@0.11.2
 
 ### Published files no longer point at missing source maps
