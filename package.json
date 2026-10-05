@@ -20,6 +20,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint --deny-warnings",
+    "pack:local": "bun scripts/pack-local.ts",
     "starter:check": "cd examples/email-starter && bun install --frozen-lockfile && bun test ./tests/starter-manifest.test.js",
     "tegami": "bun scripts/tegami.mts",
     "test": "bun run --filter @samva/markup --filter @samva/editor --filter @samva/vite test",
