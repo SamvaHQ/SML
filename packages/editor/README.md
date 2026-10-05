@@ -73,6 +73,43 @@ exact source replacement saved like any other edit. Expressions, conditionals an
 inside a body are locked segments, so a form edit cannot rewrite them, and an edit that would
 leave the static profile is refused with its reason.
 
+## Preparing preview documents
+
+`EditorProvider` accepts `preparePreviewDocument?: (html: string) => PreparedPreviewDocument`.
+Both the editing canvas and Preview call it before writing to the attached iframe. Only the
+returned `html` reaches that parser. Canvas passes the original host HTML; Preview applies its
+forced light/dark scheme before calling preparation.
+
+```tsx
+import { EditorProvider, EditorShell, type PreparedPreviewDocument } from "@samva/editor/shell";
+
+const preparePreviewDocument = (html: string): PreparedPreviewDocument => ({
+  html,
+  mount(document) {
+    const style = document.createElement("style");
+    style.textContent = "body { min-height: 200px; }";
+    document.head.appendChild(style);
+    return () => style.remove();
+  },
+});
+
+<EditorProvider host={host} preparePreviewDocument={preparePreviewDocument}>
+  <EditorShell />
+</EditorProvider>;
+```
+
+Preparation must be pure and synchronous: React can repeat or discard it during render.
+Install document resources in `mount`, which runs synchronously after `document.close()` and
+before measurement, canvas overlays, or paint. Its returned cleanup belongs to that exact
+document and runs on replacement, unmount, and StrictMode effect replay. Mount and cleanup must
+support that replay. Asynchronous resource work remains the host's responsibility; the editor
+does not wait for it before measuring or painting.
+
+Keep the preparation callback stable while its policy stays the same. Changing its identity
+replaces the frames and their resources without resetting the editor session. Without the prop,
+the editor writes the host HTML as supplied (with Preview's existing scheme simulation).
+Preparation affects iframe previews only; exported HTML and the HTML view retain host output.
+
 ## Host contract
 
 Every host provides a scoped `DocumentReader`. Editable hosts additionally

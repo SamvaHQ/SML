@@ -1,14 +1,15 @@
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { isCanvasActivationTarget, resolveInstancePath } from "./instance-dom";
+import { PreviewDocumentContext, type PreparedPreviewDocument } from "./preview-document";
 
 /**
- * The rendered email, mounted as-is in a same-origin iframe.
+ * The rendered email, mounted in a same-origin iframe.
  *
  * The host renders the template and hands back one HTML document; nothing here
- * compiles or rewrites it. The frame owns three things the document itself does
- * not: it sizes to the content, it resolves a click to the `data-samva-instance`
+ * compiles it. Optional host preparation runs before parsing. The frame sizes
+ * to content, resolves a click to the `data-samva-instance`
  * the renderer stamped on every element, and it hosts chrome (selection outline,
  * label chip) as a React portal above the document.
  */
@@ -117,6 +118,7 @@ export interface EmailFrameProps {
  */
 const FrameDocument = ({
   document_,
+  mount,
   width,
   dark,
   overlay,
@@ -125,6 +127,7 @@ const FrameDocument = ({
   onContextMenu,
 }: {
   readonly document_: string;
+  readonly mount: PreparedPreviewDocument["mount"] | undefined;
   readonly width: number;
   readonly dark: boolean;
   readonly overlay?: ReactNode | undefined;
@@ -146,6 +149,9 @@ const FrameDocument = ({
   useLayoutEffect(() => {
     const iframe = ref.current;
     if (iframe === null) return;
+    const idoc = iframe.contentDocument;
+    if (idoc === null) return;
+    let cleanupDocument: (() => void) | undefined;
 
     let fitFrame: number | null = null;
     const scheduleFit = () => {
@@ -163,8 +169,6 @@ const FrameDocument = ({
     const mutations = new MutationObserver(scheduleFit);
 
     const updateChrome = () => {
-      const idoc = iframe.contentDocument;
-      if (idoc === null) return;
       let chrome = idoc.head.querySelector<HTMLStyleElement>("style[data-samva-editor-chrome]");
       if (chrome === null) {
         chrome = idoc.createElement("style");
@@ -175,14 +179,13 @@ const FrameDocument = ({
     };
 
     const wire = () => {
-      const idoc = iframe.contentDocument;
-      if (idoc === null) return;
       // A src-less same-origin iframe exposes its document synchronously, so the
       // rendered email is installed by writing it rather than through `srcdoc`,
       // whose load is asynchronous and would leave one empty frame on screen.
       idoc.open();
       idoc.write(document_);
       idoc.close();
+      cleanupDocument = mount?.(idoc);
       updateChrome();
       setBody(idoc.body);
       observer.disconnect();
@@ -219,16 +222,12 @@ const FrameDocument = ({
     };
 
     const attach = () => {
-      const idoc = iframe.contentDocument;
-      if (idoc === null) return;
       idoc.addEventListener("click", onClick);
       idoc.addEventListener("mousemove", onMove);
       idoc.addEventListener("mouseleave", onLeave);
       idoc.addEventListener("contextmenu", onContext);
     };
     const detach = () => {
-      const idoc = iframe.contentDocument;
-      if (idoc === null) return;
       idoc.removeEventListener("click", onClick);
       idoc.removeEventListener("mousemove", onMove);
       idoc.removeEventListener("mouseleave", onLeave);
@@ -254,10 +253,11 @@ const FrameDocument = ({
       mutations.disconnect();
       themeObserver.disconnect();
       if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+      cleanupDocument?.();
     };
-    // `document_` is this frame's React key, so it is fixed for the frame's whole
-    // life: the effect installs the document once and never rewrites it.
-  }, [document_]);
+    // The frame key includes source, scheme, and preparation identity so a live
+    // portal never survives replacement of its document.
+  }, [document_, mount]);
 
   return (
     <iframe
@@ -283,11 +283,20 @@ const FrameDocument = ({
 };
 
 export const EmailFrame = ({ html, forceColorScheme, ...rest }: EmailFrameProps): ReactNode => {
-  const document_ = forceColorScheme === undefined ? html : forceScheme(html, forceColorScheme);
+  const prepare = useContext(PreviewDocumentContext);
+  const schemeHtml = forceColorScheme === undefined ? html : forceScheme(html, forceColorScheme);
+  const prepared = useMemo(() => prepare?.(schemeHtml), [schemeHtml, prepare]);
+  const [preparation, setPreparation] = useState({ prepare, generation: 0 });
+  if (preparation.prepare !== prepare) {
+    setPreparation({ prepare, generation: preparation.generation + 1 });
+  }
+  const document_ = prepared?.html ?? schemeHtml;
   return (
     <FrameDocument
-      key={document_}
+      // Original HTML remains part of identity even when preparation strips the changed content.
+      key={`${preparation.generation}:${forceColorScheme ?? ""}:${html}`}
       document_={document_}
+      mount={prepared?.mount}
       dark={forceColorScheme === "dark"}
       {...rest}
     />
