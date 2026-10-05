@@ -50,8 +50,6 @@ entry?)` is the synchronous structural check: it runs the compiler's lowering wi
 - `@samva/markup/diagnostics` — source spans and line maps, the `DIAGNOSTIC_CODES` registry with
   each code's fix and upgrade recipe, and `EmailDiagnostic`/`EmailCompileError`. It does not load
   the compiler, so a host that only reports imports it.
-  A change that makes previously valid templates fail adds an `upgrade` recipe to the code it
-  reports, so hosted and local agents can migrate projects.
 - `@samva/markup/render` — `renderIr(ir, input, { locale, timeZone })`, `renderIrSms` and
   `renderIrWhatsApp`; the IR types and `SML_IR_VERSION`; `renderIrPreview(ir, input)`, the render an
   editor shows, with an instance path (`INSTANCE_PATH_ATTRIBUTE`) on every element and the

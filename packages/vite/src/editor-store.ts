@@ -47,11 +47,12 @@ export interface EditorTemplate {
 }
 
 export interface EditorCatalogDiagnostic {
-  readonly upgrade?: string | undefined;
   readonly file: string;
   readonly severity: EmailDiagnostic["severity"];
   readonly code: string;
   readonly message: string;
+  /** The registry's agent instructions when the code marks an incompatible template format. */
+  readonly upgrade?: string | undefined;
 }
 
 export interface EditorCatalog {
