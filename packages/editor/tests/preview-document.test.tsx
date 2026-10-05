@@ -112,7 +112,7 @@ describe("preview document preparation", () => {
     expect(live.size).toBe(0);
   });
 
-  it("prepares original HTML before forced schemes and cleans each scheme document", async () => {
+  it("prepares each forced scheme before parsing and cleans each scheme document", async () => {
     const { host } = await mockEditor();
     const cleaned: Document[] = [];
     const prepare = vi.fn((html: string): PreparedPreviewDocument => ({
@@ -132,8 +132,9 @@ describe("preview document preparation", () => {
     view.rerender(tree("dark"));
     const dark = view.container.querySelector("iframe")!.contentDocument!;
     expect(dark.head.textContent).toContain("@media all");
-    expect(prepare).toHaveBeenCalledTimes(1);
-    expect(prepare).toHaveBeenCalledWith(HTML);
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(prepare.mock.calls[0]?.[0]).toContain("@media not all");
+    expect(prepare.mock.calls[1]?.[0]).toContain("@media all");
     expect(cleaned).toEqual([light]);
     view.unmount();
     expect(cleaned).toEqual([light, dark]);

@@ -284,14 +284,13 @@ const FrameDocument = ({
 
 export const EmailFrame = ({ html, forceColorScheme, ...rest }: EmailFrameProps): ReactNode => {
   const prepare = useContext(PreviewDocumentContext);
-  const prepared = useMemo(() => prepare?.(html), [html, prepare]);
+  const schemeHtml = forceColorScheme === undefined ? html : forceScheme(html, forceColorScheme);
+  const prepared = useMemo(() => prepare?.(schemeHtml), [schemeHtml, prepare]);
   const [preparation, setPreparation] = useState({ prepare, generation: 0 });
   if (preparation.prepare !== prepare) {
     setPreparation({ prepare, generation: preparation.generation + 1 });
   }
-  const preparedHtml = prepared?.html ?? html;
-  const document_ =
-    forceColorScheme === undefined ? preparedHtml : forceScheme(preparedHtml, forceColorScheme);
+  const document_ = prepared?.html ?? schemeHtml;
   return (
     <FrameDocument
       // Original HTML remains part of identity even when preparation strips the changed content.

@@ -76,9 +76,9 @@ leave the static profile is refused with its reason.
 ## Preparing preview documents
 
 `EditorProvider` accepts `preparePreviewDocument?: (html: string) => PreparedPreviewDocument`.
-Both the editing canvas and Preview call it with the original host HTML before writing to the
-attached iframe. Only the returned `html` reaches that parser. Preview applies its forced
-light/dark scheme to the prepared HTML.
+Both the editing canvas and Preview call it before writing to the attached iframe. Only the
+returned `html` reaches that parser. Canvas passes the original host HTML; Preview applies its
+forced light/dark scheme before calling preparation.
 
 ```tsx
 import { EditorProvider, EditorShell, type PreparedPreviewDocument } from "@samva/editor/shell";
