@@ -71,7 +71,7 @@ what pins the compiler version your previews, checks, and builds use.
 
 - **Template entries are `.tsx`.** Discovery ignores every other extension, hidden folders and
   `node_modules`.
-- **Template ids and fixture keys match `TEMPLATE_NAME_PATTERN`** from `@samva/markup/template`,
+- **Template ids and fixture keys match `TEMPLATE_NAME_PATTERN`** from `@samva/markup/compiler`,
   because both are written into export paths. Code that builds a path from them imports that
   pattern instead of restating it.
 - **Fixtures are validated against the template's own schema before they render.** A bad fixture is
