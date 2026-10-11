@@ -40,7 +40,11 @@
     {
       "id": "sml-no-effect-dependency",
       "rule": "Template authors install @samva/markup and @samva/vite, so neither may list Effect in dependencies or peerDependencies. @samva/editor takes Effect, React, and Base UI as peers.",
-      "scope": ["packages/markup/package.json", "packages/vite/package.json", "packages/editor/package.json"],
+      "scope": [
+        "packages/markup/package.json",
+        "packages/vite/package.json",
+        "packages/editor/package.json"
+      ],
       "severity": "high"
     },
     {
