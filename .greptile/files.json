@@ -1,0 +1,44 @@
+{
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "description": "Root guide: build order, package boundaries, generated files, Tegami, and lint bans.",
+      "scope": ["**/*"]
+    },
+    {
+      "path": "README.md",
+      "description": "Workspace map: markup, editor, vite, and the standalone email starter.",
+      "scope": ["**/*"]
+    },
+    {
+      "path": "packages/markup/AGENTS.md",
+      "description": "Markup compiler, static profile, IR, and published entry points.",
+      "scope": ["packages/markup/**"]
+    },
+    {
+      "path": "packages/markup/README.md",
+      "description": "Authoring API: defineTemplate, email primitives, and the static profile.",
+      "scope": ["packages/markup/**"]
+    },
+    {
+      "path": "packages/editor/AGENTS.md",
+      "description": "Embeddable editor: host-owned renders, zustand sessions, and static-profile edits.",
+      "scope": ["packages/editor/**"]
+    },
+    {
+      "path": "packages/editor/README.md",
+      "description": "Editor host contract and published subpaths.",
+      "scope": ["packages/editor/**"]
+    },
+    {
+      "path": "packages/vite/AGENTS.md",
+      "description": "Local toolchain: compile then render, no template execution, no .samva edits.",
+      "scope": ["packages/vite/**"]
+    },
+    {
+      "path": "packages/vite/README.md",
+      "description": "Vite plugin, dev server, build, render, and export entry points.",
+      "scope": ["packages/vite/**"]
+    }
+  ]
+}

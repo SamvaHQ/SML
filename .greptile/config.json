@@ -1,0 +1,82 @@
+{
+  "strictness": 2,
+  "commentTypes": ["logic", "syntax"],
+  "triggerOnUpdates": true,
+  "statusCheck": true,
+  "disabledLabels": ["no-greptile"],
+  "ignorePatterns": "**/node_modules/**\n**/.turbo/**\n**/dist/**\n**/build/**\n**/coverage/**\n**/.scratchpad/**\n**/*.tsbuildinfo\n**/*.gen.ts\n**/bun.lock\n**/.vite/**\n**/*.tgz\n**/*.log\n**/.DS_Store\n**/test-results/**\n**/playwright-report/**\n**/.samva/**\n**/__snapshots__\npackages/markup/src/json-schema/**\npackages/markup/tests/output/**",
+  "instructions": "SML is the Samva template toolchain: @samva/markup, @samva/editor, and @samva/vite, plus examples/email-starter. Follow root AGENTS.md, then the package AGENTS.md for the tree you are in. Build order is markup, then editor, then vite. Prefer logic findings over style.",
+  "rules": [
+    {
+      "id": "sml-build-order",
+      "rule": "Build @samva/markup first, then @samva/editor, then @samva/vite. The root build script runs them in that order because the editor imports markup's published entries and the Vite plugin build bundles packages/vite/editor, which imports the editor. Do not reorder that script or make one package compile against another's source.",
+      "scope": ["package.json", "packages/markup/**", "packages/editor/**", "packages/vite/**"],
+      "severity": "high"
+    },
+    {
+      "id": "sml-no-relative-package-imports",
+      "rule": "Packages import each other only through declared dependencies and published exports, never through relative paths or another package's src. packages/markup/tests/authoring-boundary.test.ts enforces this.",
+      "scope": ["packages/**"],
+      "severity": "high"
+    },
+    {
+      "id": "sml-email-starter-pins",
+      "rule": "examples/email-starter is not a workspace member. It pins the published @samva/markup and @samva/vite releases and installs from its own bun.lock. Do not add it to the root workspaces array or point it at workspace packages. scripts/refresh-starter.ts moves its pins after a release.",
+      "scope": ["package.json", "examples/email-starter/**", "scripts/refresh-starter.ts"],
+      "severity": "high"
+    },
+    {
+      "id": "sml-generated-not-edited",
+      "rule": "Generated files are regenerated, not edited. packages/markup/generated/* comes from bun run --filter @samva/markup codegen:contract, and packages/markup/src/email/tailwind-stylesheets.gen.ts comes from codegen:tailwind. Do not hand-edit the vendored JSON Schema dialect in packages/markup/src/json-schema.",
+      "scope": ["packages/markup/**"],
+      "severity": "high"
+    },
+    {
+      "id": "sml-tegami-changeset",
+      "rule": "A change customers notice gets a Tegami changeset under .tegami/. A change that makes previously valid templates fail adds an upgrade recipe to the diagnostic code it reports, so hosted and local agents can migrate projects.",
+      "scope": ["packages/**", ".tegami/**"],
+      "severity": "high"
+    },
+    {
+      "id": "sml-no-effect-dependency",
+      "rule": "Template authors install @samva/markup and @samva/vite, so neither may list Effect in dependencies or peerDependencies. @samva/editor takes Effect, React, and Base UI as peers.",
+      "scope": ["packages/markup/package.json", "packages/vite/package.json", "packages/editor/package.json"],
+      "severity": "high"
+    },
+    {
+      "id": "sml-no-throw-outside-tests",
+      "rule": "throw, try/catch, built-in Error construction, and hand-rolled object guards are lint errors outside tests and tooling (samva/no-try-catch-or-throw, samva/no-error-constructor, and samva/no-hand-rolled-object-guard in scripts/oxlint-plugin-samva.js). A real boundary takes an inline oxlint-disable naming the rule and the reason.",
+      "scope": [
+        "packages/markup/src/**",
+        "packages/editor/src/**",
+        "packages/vite/src/**",
+        "packages/vite/editor/src/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "sml-email-parity-digests",
+      "rule": "packages/markup/tests/email-parity.test.ts pins the compiler's published output to golden digests that Samva's hosted runtime also asserts. Change those digests only for an intended output change, and say so in the Tegami changeset.",
+      "scope": ["packages/markup/**"],
+      "severity": "high"
+    },
+    {
+      "id": "sml-static-profile",
+      "rule": "A template body is read, not run. The compiler produces versioned JSON IR, and rendering is a pure function of that IR and the input. Do not add an execution path, a raw-HTML escape hatch, or a body that computes over its input. New findings go in DIAGNOSTIC_CODES with a fix.",
+      "scope": ["packages/markup/**"],
+      "severity": "high"
+    },
+    {
+      "id": "sml-editor-session",
+      "rule": "The editor never compiles. The host owns render truth and the editor mounts the render produced from the template IR. Each EditorProvider owns one vanilla zustand store; do not add a module-level store or zustand middleware. Effect Atom owns host application and server state; zustand owns editor-internal state. A visual edit stays inside the static profile: applySourceReplacements runs with a ProfileGuard, and a conditional className is refused rather than overwritten.",
+      "scope": ["packages/editor/**"],
+      "severity": "high"
+    },
+    {
+      "id": "sml-vite-compile-then-render",
+      "rule": "Every check, render, and preview is compileTemplate from @samva/markup/compiler followed by renderIr. Do not execute a template module. buildTemplates, renderTemplate, and renderChannel return discriminated results with an ok field and do not throw for a finding about source. Do not commit or hand-edit .samva/; it is generated and gitignored.",
+      "scope": ["packages/vite/**"],
+      "severity": "high"
+    }
+  ]
+}
