@@ -51,6 +51,7 @@ jobs:
         run: bun run test
 
       - name: install Chromium
+        working-directory: packages/editor
         run: bun x playwright install --with-deps chromium
 
       - name: browser tests
