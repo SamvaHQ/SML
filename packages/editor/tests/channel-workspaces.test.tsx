@@ -166,9 +166,9 @@ describe("WhatsApp workspace", () => {
       </EditorProvider>,
     );
 
-    const name = await waitFor(() => view.getByTestId("whatsapp-workspace.name"));
-    expect(value(name)).toBe("order_update");
-    expect(value(view.getByTestId("whatsapp-workspace.body.1"))).toBe("Hi ");
+    const body = await waitFor(() => view.getByTestId("whatsapp-workspace.body.1"));
+    expect(value(body)).toBe("Hi ");
+    expect(view.queryByLabelText("Template name")).toBeNull();
     expect(value(view.getByLabelText("Button 1 label"))).toBe("Track order");
     expect(value(view.getByLabelText("Button 1 URL"))).toBe("https://example.com/track");
     expect(value(view.getByLabelText("Button 2 label"))).toBe("Stop");

@@ -4,7 +4,6 @@ import { Fragment, jsx, type EmailChild, type EmailNode } from "./email/jsx-runt
 export type { WhatsAppCategory, WhatsAppHeaderType } from "./channel-specs";
 
 export interface WhatsAppProps {
-  readonly name?: string | undefined;
   /** The Meta language code, for example `en_US`. */
   readonly language: string;
   readonly category: WhatsAppCategory;

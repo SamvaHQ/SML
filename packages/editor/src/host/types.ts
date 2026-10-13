@@ -151,7 +151,6 @@ export type WhatsAppRenderedButton =
  */
 export interface WhatsAppRender {
   readonly revision: RevisionToken;
-  readonly name?: string;
   readonly language: string;
   readonly category: string;
   readonly header?: {

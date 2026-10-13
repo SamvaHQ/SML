@@ -1251,7 +1251,6 @@ export const renderIrWhatsApp = (
   resolveButtons(ctx, whatsapp.buttons ?? [], buttons, 0);
   settle(ctx);
   return {
-    ...(whatsapp.name === undefined ? {} : { name: whatsapp.name }),
     language: whatsapp.language,
     category: whatsapp.category,
     ...(header === undefined ? {} : { header }),

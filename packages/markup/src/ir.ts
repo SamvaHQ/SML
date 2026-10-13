@@ -161,7 +161,6 @@ export type IrWhatsAppButtonNode =
     };
 
 export interface IrWhatsApp {
-  readonly name?: string;
   readonly category: string;
   readonly language: string;
   /** For a media header, `content` is the media URL. */
@@ -228,7 +227,6 @@ export type RenderedWhatsAppButton =
 
 /** A WhatsApp message with every text rendered and every conditional button resolved. */
 export interface RenderedIrWhatsApp {
-  readonly name?: string;
   readonly language: string;
   readonly category: string;
   /** For a media header, `text` is the media URL. */

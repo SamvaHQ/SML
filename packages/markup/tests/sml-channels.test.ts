@@ -113,7 +113,7 @@ const SMS = `sms: (input) => (
   ),`;
 
 const WHATSAPP = `whatsapp: (input) => (
-    <WhatsApp name="order_shipped" language="en_US" category="utility">
+    <WhatsApp language="en_US" category="utility">
       <WhatsApp.Header>Order {input.order.id}</WhatsApp.Header>
       <WhatsApp.Body>Hi {input.name}, your order {input.order.id} has shipped.</WhatsApp.Body>
       <WhatsApp.Footer>Thanks for shopping</WhatsApp.Footer>
@@ -177,10 +177,8 @@ describe("the whatsapp channel", () => {
   it("lowers header, body, footer and buttons, with the url button conditional", async () => {
     const compiled = await ok(WHATSAPP);
     const ir = compiled.ir!.whatsapp!;
-    expect(ir.name).toBe("order_shipped");
     expect(ir.buttons?.[0]).toHaveProperty("if");
     expect(renderIrWhatsApp(compiled.ir!, compiled.fixtures.default)).toEqual({
-      name: "order_shipped",
       language: "en_US",
       category: "utility",
       header: { type: "text", text: "Order A-1" },
@@ -317,6 +315,14 @@ describe("the whatsapp channel", () => {
         `whatsapp: (input) => (<WhatsApp language="en" category="promo"><WhatsApp.Body>x</WhatsApp.Body></WhatsApp>),`,
       ),
     ).toContain("invalid-attribute");
+  });
+
+  it("refuses an authored Meta template name", async () => {
+    expect(
+      await errorCodes(
+        `whatsapp: (input) => (<WhatsApp name="order_shipped" language="en" category="utility"><WhatsApp.Body>x</WhatsApp.Body></WhatsApp>),`,
+      ),
+    ).toEqual(["whatsapp-template-name"]);
   });
 });
 
