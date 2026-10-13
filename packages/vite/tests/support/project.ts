@@ -56,7 +56,7 @@ export default defineTemplate({
   },
   sms: (input) => <Sms category="transactional">Hi {input.name}, your order shipped.</Sms>,
   whatsapp: (input) => (
-    <WhatsApp name="order_shipped" language="en_US" category="utility">
+    <WhatsApp language="en_US" category="utility">
       <WhatsApp.Body>Hi {input.name}, your order shipped.</WhatsApp.Body>
       <WhatsApp.Buttons>
         <WhatsApp.QuickReplyButton>Thanks</WhatsApp.QuickReplyButton>

@@ -53,7 +53,7 @@ export default defineTemplate({
   }),
   fixtures: { default: { name: "Ada", orderId: "NW-1" } },
   whatsapp: (input) => (
-    <WhatsApp name="order_update" language="en_US" category="utility">
+    <WhatsApp language="en_US" category="utility">
       <WhatsApp.Header>Order {input.orderId}</WhatsApp.Header>
       <WhatsApp.Body>Hi {input.name}, your order shipped.</WhatsApp.Body>
       <WhatsApp.Buttons>

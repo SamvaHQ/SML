@@ -9,7 +9,7 @@ export const WHATSAPP_HEADER_TYPES = ["text", "image", "video", "document"] as c
 /** The attributes `<Sms>` accepts. */
 export const SMS_ATTRIBUTES = ["category"] as const;
 /** The attributes `<WhatsApp>` accepts. */
-export const WHATSAPP_ATTRIBUTES = ["name", "language", "category"] as const;
+export const WHATSAPP_ATTRIBUTES = ["language", "category"] as const;
 
 /** The SMS categories `<Sms category>` accepts. */
 export type SmsCategory = (typeof SMS_CATEGORIES)[number];

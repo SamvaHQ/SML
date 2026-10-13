@@ -389,6 +389,16 @@ export const DIAGNOSTIC_CODES = codes({
     fix: "Write text and bindings, with a newline for a line break.",
     channelOnly: true,
   },
+  "whatsapp-template-name": {
+    summary: "A <WhatsApp> names its Meta template; the name comes from the template's handle.",
+    fix: "Remove `name` from <WhatsApp>.",
+    upgrade: [
+      "Remove the `name` attribute from every <WhatsApp> element in the project, templates and partials alike. Samva registers each WhatsApp template with Meta under its handle, with hyphens as underscores, so the attribute has no replacement. Change nothing else.",
+      "If an authored name differs from the name the handle produces and the template is already registered with Meta under it, tell the user: keeping that Meta name means renaming the template's handle, which you do not do yourself.",
+      "Compile each entry and render every declared fixture to confirm the WhatsApp output is otherwise unchanged. Resolve errors before requesting one saved version for the whole project, approved by the user; do not publish.",
+    ].join("\n\n"),
+    channelOnly: true,
+  },
   "whatsapp-structure": {
     summary: "WhatsApp content sits outside Header, Body, Footer or Buttons.",
     fix: "Move it into <WhatsApp.Body>.",

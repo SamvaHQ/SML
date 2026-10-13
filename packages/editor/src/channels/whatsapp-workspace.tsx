@@ -273,15 +273,6 @@ function WhatsAppForm({
   const headerType = form.headerType.kind === "literal" ? form.headerType.value : "text";
   return (
     <div className="grid gap-4">
-      <Field label="Template name">
-        <AttributeInput
-          ariaLabel="Template name"
-          testId="whatsapp-workspace.name"
-          state={form.name}
-          editable={editable}
-          onChange={(value) => onEdit({ kind: "attribute", name: "name", value }, "whatsapp-name")}
-        />
-      </Field>
       <Field label="Language">
         <AttributeInput
           ariaLabel="Language"

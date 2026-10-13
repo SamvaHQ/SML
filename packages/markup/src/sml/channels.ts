@@ -5,6 +5,7 @@ import {
   WHATSAPP_CATEGORIES,
   WHATSAPP_HEADER_TYPES,
 } from "../channel-specs";
+import type { DiagnosticCode } from "../diagnostic-codes";
 // oxlint-disable samva/no-hand-rolled-object-guard -- IR nodes and Babel nodes are this package's own typed data, discriminated structurally; nothing here validates external input.
 import type {
   IrNode,
@@ -107,10 +108,28 @@ const readRoot = (
 };
 
 /** The string-literal attributes of a channel root; anything else is reported. */
+/** An attribute a component refuses with its own diagnostic rather than as an unknown one. */
+interface RefusedAttribute {
+  readonly code: DiagnosticCode;
+  readonly message: string;
+  readonly fix: string;
+}
+
+/** Meta's template name is not authored: Samva registers the template under its handle. */
+const WHATSAPP_REFUSED: Readonly<Record<string, RefusedAttribute>> = {
+  name: {
+    code: "whatsapp-template-name",
+    message:
+      "Meta's name for a WhatsApp template comes from the template's handle, not from <WhatsApp>.",
+    fix: "Remove `name`; rename the template's handle to change its Meta name.",
+  },
+};
+
 const readAttributes = (
   input: ChannelInput,
   root: Root,
   allowed: readonly string[],
+  refused: Readonly<Record<string, RefusedAttribute>> = {},
 ): Map<string, string> => {
   const values = new Map<string, string>();
   for (const attribute of attributesOf(root.node)) {
@@ -127,6 +146,11 @@ const readAttributes = (
     const nameNode = child(attribute, "name");
     const name = nameNode === undefined ? "" : jsxName(nameNode);
     if (name === "key") continue;
+    const refusal = Object.hasOwn(refused, name) ? refused[name] : undefined;
+    if (refusal !== undefined) {
+      input.lowerer.error(root.ctx, attribute, refusal.code, refusal.message, refusal.fix);
+      continue;
+    }
     if (!allowed.includes(name)) {
       input.lowerer.error(
         root.ctx,
@@ -292,7 +316,7 @@ const whatsappChannel = (input: ChannelInput, field: Node): IrWhatsApp | undefin
   if (root === undefined) return undefined;
   const { lowerer } = input;
   const { ctx } = root;
-  const attributes = readAttributes(input, root, WHATSAPP_ATTRIBUTES);
+  const attributes = readAttributes(input, root, WHATSAPP_ATTRIBUTES, WHATSAPP_REFUSED);
   for (const required of ["category", "language"])
     if (!attributes.has(required))
       lowerer.error(
@@ -496,9 +520,7 @@ const whatsappChannel = (input: ChannelInput, field: Node): IrWhatsApp | undefin
 
   if (input.schema !== undefined) input.checks.push(...checkBindings(input.schema, roots, []));
   if (category === undefined || !attributes.has("language")) return undefined;
-  const name = attributes.get("name");
   return {
-    ...(name === undefined ? {} : { name }),
     category,
     language: attributes.get("language")!,
     ...(header === undefined ? {} : { header }),

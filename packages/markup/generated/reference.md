@@ -352,6 +352,14 @@ Replace every import from "@samva/markup/email/components" with "@samva/markup/e
 
 Compile each entry and render every declared fixture to confirm the output is unchanged. Resolve errors before requesting one saved version for the whole project, approved by the user; do not publish.
 
+### `whatsapp-template-name`
+
+Remove the `name` attribute from every <WhatsApp> element in the project, templates and partials alike. Samva registers each WhatsApp template with Meta under its handle, with hyphens as underscores, so the attribute has no replacement. Change nothing else.
+
+If an authored name differs from the name the handle produces and the template is already registered with Meta under it, tell the user: keeping that Meta name means renaming the template's handle, which you do not do yourself.
+
+Compile each entry and render every declared fixture to confirm the WhatsApp output is otherwise unchanged. Resolve errors before requesting one saved version for the whole project, approved by the user; do not publish.
+
 ## Quality bar
 
 - Run the check until it reports no errors, then render every fixture.

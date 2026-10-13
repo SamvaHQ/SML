@@ -68,7 +68,6 @@ export type WhatsAppButtonRow =
     };
 
 export interface WhatsAppChannelForm {
-  readonly name: AttributeState;
   readonly language: AttributeState;
   readonly category: AttributeState;
   /** Null when the template has no header. */
@@ -94,8 +93,8 @@ export type WhatsAppPart = "header" | "body" | "footer";
 export type WhatsAppEdit =
   | {
       readonly kind: "attribute";
-      readonly name: "name" | "language" | "category";
-      readonly value: string | undefined;
+      readonly name: "language" | "category";
+      readonly value: string;
     }
   | { readonly kind: "headerType"; readonly value: WhatsAppHeaderType }
   | {
@@ -696,7 +695,6 @@ export const readWhatsAppChannel = (source: string): WhatsAppChannelForm | null 
   if (channel === null || channel.body === null) return null;
   const { root } = channel;
   return {
-    name: attributeState(source, root, "name"),
     language: attributeState(source, root, "language"),
     category: attributeState(source, root, "category"),
     header: channel.header === null ? null : segmentsOf(source, channel.header),
@@ -768,12 +766,11 @@ export const editWhatsAppChannel = (source: string, edit: WhatsAppEdit): Channel
     case "attribute": {
       if (
         edit.name === "category" &&
-        !(WHATSAPP_CATEGORIES as readonly string[]).includes(edit.value ?? "")
+        !(WHATSAPP_CATEGORIES as readonly string[]).includes(edit.value)
       )
         return { ok: false, reason: "Choose a WhatsApp category." };
       // `language` and `category` are required, so an emptied one stays as an empty string.
-      const value = edit.name === "name" && edit.value === "" ? undefined : (edit.value ?? "");
-      return setAttribute(source, root, edit.name, value);
+      return setAttribute(source, root, edit.name, edit.value);
     }
     case "headerType": {
       if (channel.header === null)

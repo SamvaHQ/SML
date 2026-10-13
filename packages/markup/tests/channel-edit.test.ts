@@ -41,8 +41,7 @@ ${body}
 });
 `;
 
-const WHATSAPP =
-  wrapWhatsApp(`    <WhatsApp name="order_update" language="en_US" category="utility">
+const WHATSAPP = wrapWhatsApp(`    <WhatsApp language="en_US" category="utility">
       <WhatsApp.Header>Order {input.order.id}</WhatsApp.Header>
       <WhatsApp.Body>
         Hi {input.name}, your order shipped.
@@ -159,7 +158,6 @@ describe("SMS channel form", () => {
 describe("WhatsApp channel form", () => {
   it("reads attributes, parts and buttons", () => {
     const form = readWhatsAppChannel(WHATSAPP)!;
-    expect(form.name).toEqual({ kind: "literal", value: "order_update" });
     expect(form.language).toEqual({ kind: "literal", value: "en_US" });
     expect(form.category).toEqual({ kind: "literal", value: "utility" });
     expect(form.headerType).toEqual({ kind: "absent" });
@@ -180,9 +178,6 @@ describe("WhatsApp channel form", () => {
     ).toContain('category="marketing"');
     expect(whatsapp(WHATSAPP, { kind: "attribute", name: "language", value: "de" })).toContain(
       'language="de"',
-    );
-    expect(whatsapp(WHATSAPP, { kind: "attribute", name: "name", value: "" })).not.toContain(
-      "order_update",
     );
     expect(
       editWhatsAppChannel(WHATSAPP, { kind: "attribute", name: "category", value: "spam" }).ok,
