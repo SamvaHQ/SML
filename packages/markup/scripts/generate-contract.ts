@@ -298,6 +298,7 @@ ${table(
 ## Upgrades
 
 ${diagnostics
+  .filter((entry) => !("channelOnly" in entry))
   .flatMap((entry) => ("upgrade" in entry ? [`### ${code(entry.code)}\n\n${entry.upgrade}`] : []))
   .join("\n\n")}
 
