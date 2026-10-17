@@ -157,10 +157,19 @@ const pixels = (value: string): number | undefined => {
   return match === null ? undefined : Number(match[1]);
 };
 
+/**
+ * The border all four sides draw, as far as the declarations say. A border is drawn only with a
+ * visible style and a width above zero; `border` resets every part to its initial value (medium,
+ * none, currentColor) before applying what it names.
+ */
 interface Border {
   width: number | undefined;
+  /** `true` when every side has a style other than none or hidden; `undefined` when unset (none). */
+  visible: boolean | undefined;
   color: Declared;
 }
+
+const BORDER_STYLES = /^(?:solid|dashed|dotted|double|groove|ridge|inset|outset|none|hidden)$/i;
 
 interface Resolved {
   /** The element's own background color; `image` marks a url or gradient. */
@@ -182,7 +191,7 @@ const resolve = (declarations: readonly Declaration[]): Resolved => {
   let display: string | undefined;
   let fontSize: number | undefined;
   let bold: boolean | undefined;
-  const border: Border = { width: undefined, color: undefined };
+  const border: Border = { width: undefined, visible: undefined, color: undefined };
   for (const { property, value } of declarations) {
     const lower = value.toLowerCase();
     switch (property) {
@@ -222,27 +231,29 @@ const resolve = (declarations: readonly Declaration[]): Resolved => {
       case "border-color":
       case "border-style": {
         const parts = tokens(value);
-        if (property === "border" || property === "border-style") {
-          if (parts.some((part) => /^(?:none|hidden)$/i.test(part))) border.width = 0;
-          else if (property === "border" && border.width === undefined) border.width = 3;
+        if (property === "border") {
+          border.width = WIDTH_KEYWORDS.medium;
+          border.visible = false;
+          // currentColor: the checker does not resolve it, so the border cannot clear a finding.
+          border.color = "unknown";
         }
-        if (property === "border" || property === "border-width") {
-          const size = parts
-            .map((part) => pixels(part) ?? WIDTH_KEYWORDS[part.toLowerCase()])
-            .find((entry) => entry !== undefined);
-          if (size !== undefined) border.width = size;
-          else if (property === "border-width") border.width = undefined;
-        }
-        if (property === "border" || property === "border-color") {
-          const named = parts.filter(
-            (part) =>
-              pixels(part) === undefined &&
-              !/^(?:solid|dashed|dotted|double|groove|ridge|inset|outset|none|hidden|thin|medium|thick)$/i.test(
-                part,
-              ),
-          );
-          const parsed = named.map(parseColor).find((entry) => entry !== undefined);
-          border.color = parsed ?? (named.length > 0 ? "unknown" : border.color);
+        const styles = parts.filter((part) => BORDER_STYLES.test(part));
+        if (styles.length > 0)
+          border.visible = styles.every((part) => !/^(?:none|hidden)$/i.test(part));
+        const sizes = parts
+          .map((part) => pixels(part) ?? WIDTH_KEYWORDS[part.toLowerCase()])
+          .filter((entry): entry is number => entry !== undefined);
+        if (sizes.length > 0) border.width = Math.min(...sizes);
+        else if (property === "border-width") border.width = undefined;
+        const named = parts.filter(
+          (part) =>
+            pixels(part) === undefined &&
+            WIDTH_KEYWORDS[part.toLowerCase()] === undefined &&
+            !BORDER_STYLES.test(part),
+        );
+        if (property !== "border-width" && property !== "border-style" && named.length > 0) {
+          const colors = named.map(parseColor);
+          border.color = colors.every((entry) => entry !== undefined) ? colors[0]! : "unknown";
         }
         break;
       }
@@ -448,8 +459,9 @@ export const checkEmailContrast = (input: CompatibilityInput): readonly EmailDia
       ) {
         const ratio = ratioOf(ownBackground, parent.background);
         if (ratio < SHAPE_WARNING) {
-          const { width, color } = style.border;
-          const bordered = width !== undefined && width > 0 && color !== undefined;
+          const { width, visible, color } = style.border;
+          const bordered =
+            visible === true && width !== undefined && width > 0 && color !== undefined;
           const keeps =
             bordered &&
             color !== "unknown" &&

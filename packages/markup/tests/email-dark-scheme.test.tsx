@@ -126,4 +126,15 @@ describe("dark classes", () => {
     );
     expect(applied.headCss).toContain(".wide{background-color:#222222!important}");
   });
+
+  it("restates only declarations a changed color can override", () => {
+    const applied = styled(
+      `${THEME}.box{border-color:var(--color-primary);border-radius:8px;border-top-color:var(--color-primary)}`,
+      <div className="box">hi</div>,
+    );
+    const rule = applied.darkRules.get(darkClass(applied.html)) ?? "";
+    expect(rule).toContain("border-color:#eeeeee!important");
+    expect(rule).toContain("border-top-color:#eeeeee!important");
+    expect(rule).not.toContain("border-radius");
+  });
 });

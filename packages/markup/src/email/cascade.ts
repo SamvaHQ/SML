@@ -177,8 +177,24 @@ const darkClassName = (body: string): string => {
   return `${DARK_CLASS_PREFIX}${hash.toString(36)}`;
 };
 
-/** The shorthand a property belongs to: `background-color` and `background` are both `background`. */
-const propertyFamily = (property: string): string => property.split("-")[0]!;
+/**
+ * Whether `shorthand` sets `longhand`: `background` sets `background-color`, `border` and
+ * `border-color` set `border-top-color`, `font` sets `line-height`. `border-radius` belongs to no
+ * border shorthand but its own.
+ */
+const sets = (shorthand: string, longhand: string): boolean => {
+  if (shorthand === "font" && longhand === "line-height") return true;
+  if (!longhand.startsWith("border-")) return longhand.startsWith(`${shorthand}-`);
+  if (/radius|collapse|spacing/.test(longhand) !== /radius/.test(shorthand)) return false;
+  const part = /^border-(width|style|color)$/.exec(shorthand)?.[1];
+  if (part !== undefined)
+    return new RegExp(`^border-(?:top|right|bottom|left)-${part}$`).test(longhand);
+  return longhand.startsWith(`${shorthand}-`);
+};
+
+/** Whether two declarations can override one another: the same property, or a shorthand and one it sets. */
+const overlaps = (left: string, right: string): boolean =>
+  left === right || sets(left, right) || sets(right, left);
 
 /** Add a class to an element's props, whichever of `class` and `className` it uses. */
 const withClass = (
@@ -419,22 +435,26 @@ export const applyStylesheet = (
         : element.props;
     // Dark mode: every inlined declaration that reads a color the dark-mode block redefines, at
     // its dark value, and a themed `bgcolor` as the background it paints.
-    // A changed shorthand is restated with every winning declaration of its family, in cascade
-    // order, so a longhand that wins over it (an inline `background-color` after a class's
-    // `background`) still wins in dark mode.
+    // A changed declaration is restated with every winning declaration that can override it or
+    // that it can override, in cascade order, so a longhand that wins over a shorthand (an inline
+    // `background-color` after a class's `background`) still wins in dark mode, and nothing it
+    // cannot touch (a `border-radius` beside a `border-color`) is pinned with `!important`.
     const dark: [string, string][] = [];
     if (hasDarkTheme) {
-      const changed = new Set<string>();
+      const changed: string[] = [];
       for (const [property, entry] of winners) {
         if (property.startsWith("--") || !entry.value.includes("var(")) continue;
         if (finalizeValue(entry.value, darkScope) !== finalizeValue(entry.value, variables))
-          changed.add(propertyFamily(property));
+          changed.push(property);
       }
-      if (changed.size > 0)
+      if (changed.length > 0)
         for (const [property, entry] of [...winners].sort(([, left], [, right]) =>
           compareRank(left.key, right.key),
         ))
-          if (!property.startsWith("--") && changed.has(propertyFamily(property)))
+          if (
+            !property.startsWith("--") &&
+            changed.some((candidate) => overlaps(candidate, property))
+          )
             dark.push([property, finalizeValue(entry.value, darkScope)]);
       if (
         typeof bgcolor === "string" &&

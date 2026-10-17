@@ -157,4 +157,17 @@ describe("email contrast", () => {
     expect(findings.map((finding) => finding.severity)).toEqual(["error", "error"]);
     expect(findings.every((finding) => finding.message.includes("button"))).toBe(true);
   });
+
+  it("counts a border only when it is drawn", () => {
+    const button = (border: string) =>
+      page(
+        "",
+        `<div style="background-color:#ffffff"><a href="https://example.com" style="background-color:#fefefe;color:#000000;${border}">Go</a></div>`,
+      );
+    // No style means border-style: none, so neither border is drawn.
+    expect(codes(button("border-width:2px;border-color:#000000"))).toHaveLength(2);
+    expect(codes(button("border:2px #000000"))).toHaveLength(2);
+    expect(codes(button("border:2px solid #000000;border-style:none"))).toHaveLength(2);
+    expect(codes(button("border:2px solid #000000"))).toEqual([]);
+  });
 });
