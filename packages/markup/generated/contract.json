@@ -277,7 +277,7 @@
           "name": "gap",
           "type": "number",
           "optional": true,
-          "description": "Pixels between the cells of a row. A stacked row puts the same space between the stacked cells instead, so a gap needs no padding on the cells that would misalign them when stacked."
+          "description": "Pixels between the cells of a row. A stacked row puts the same space between the stacked cells instead, so a gap needs no padding on the cells that would misalign them when stacked. The cells must be written out and always render."
         },
         {
           "name": "children",
@@ -1614,8 +1614,8 @@
     },
     {
       "code": "invalid-columns-gap",
-      "summary": "<Columns gap> is set on a Columns that repeats its cells with each.",
-      "fix": "Write the Column children out, or pad each repeated cell."
+      "summary": "<Columns gap> is set on a Columns whose cells are repeated with each or rendered conditionally.",
+      "fix": "Write each Column out unconditionally, or pad the cells instead of using gap."
     },
     {
       "code": "invalid-columns-per",

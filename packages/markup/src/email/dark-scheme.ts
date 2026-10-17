@@ -17,3 +17,7 @@ export const isDarkSchemeCondition = (conditions: readonly string[]): boolean =>
   conditions.length === 1 &&
   /^@media\s/i.test(conditions[0]!) &&
   isDarkSchemeQuery(conditions[0]!.replace(/^@media\s+/i, ""));
+
+/** Whether any enclosing condition is the dark-mode query, as in a size query nested inside it. */
+export const withinDarkScheme = (conditions: readonly string[]): boolean =>
+  conditions.some((condition) => isDarkSchemeCondition([condition]));

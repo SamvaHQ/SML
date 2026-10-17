@@ -1,5 +1,5 @@
 import type { CssRule } from "./css";
-import { isDarkSchemeCondition } from "./dark-scheme";
+import { withinDarkScheme } from "./dark-scheme";
 
 // The half of the CSS pipeline that runs at render time. Parsing needs css-tree
 // and happens once, at build time; matching and value resolution run per render
@@ -216,7 +216,7 @@ export const renderHeadCss = (
   }
   for (const { conditions, rules: bucket } of grouped.values()) {
     // A rule inside the dark-mode query reads every theme color at its dark value.
-    const scope = isDarkSchemeCondition(conditions) ? darkScope : variables;
+    const scope = withinDarkScheme(conditions) ? darkScope : variables;
     const body = bucket
       .map((rule) => {
         const declarations = rule.declarations

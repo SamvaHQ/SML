@@ -312,6 +312,20 @@ export const runBuiltinComponent = (call: ComponentCall): IrNode[] => {
     kids = [chunked.cells];
     wrap = chunked.wrap;
   } else kids = lowerer.jsxChildren(childCtx, node);
+  if (
+    exported === "Columns" &&
+    declared.has("gap") &&
+    kids.some((kid) => !isValueNode(kid) && !("el" in kid))
+  ) {
+    lowerer.error(
+      ctx,
+      node,
+      "invalid-columns-gap",
+      "<Columns gap> spaces Column children that always render; a conditional or repeated Column would leave a stray gap.",
+      'Pad the cells instead (className="pr-6"), or write each Column unconditionally.',
+    );
+    return [];
+  }
   const tokens = new Tokens();
   const props: Record<string, unknown> = {};
   for (const [name, bound] of bindings) props[name] = bindingToProp(call, tokens, name, bound);

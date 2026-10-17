@@ -187,6 +187,13 @@ describe("primitive defaults", () => {
     expect(failures.map((item) => item.code)).toEqual(["invalid-columns-stack"]);
   });
 
+  it("refuses a gap whose cells can be hidden", async () => {
+    const { failures } = await build(
+      `(input) => <Email><Columns gap={24}><Column>a</Column>{input.vip && <Column>b</Column>}</Columns></Email>`,
+    );
+    expect(failures.map((item) => item.code)).toEqual(["invalid-columns-gap"]);
+  });
+
   it("styles a Button, Divider and Link from the theme", async () => {
     const { failures, render } = await build(
       `(input) => <Email><Button href="https://example.com" height={44}>Go</Button><Divider /><p><Link href="https://example.com">More</Link></p></Email>`,

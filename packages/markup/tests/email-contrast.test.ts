@@ -128,4 +128,33 @@ describe("email contrast", () => {
     expect(found).toHaveLength(1);
     expect(found[0]?.severity).toBe("error");
   });
+
+  it("judges a transparent link as text, not as a button", () => {
+    const html = page(
+      "",
+      `<div style="background-color:#ffffff"><a href="https://example.com" style="background:transparent;color:#000000">Read more</a></div>`,
+    );
+    expect(codes(html)).toEqual([]);
+  });
+
+  it("blends inherited translucent text with the background it sits on", () => {
+    const html = page(
+      "",
+      `<div style="background-color:#ffffff;color:rgba(0,0,0,0.5)"><p style="background-color:#000000">Hidden text</p></div>`,
+    );
+    const [finding] = codes(html);
+    expect(finding?.severity).toBe("error");
+    expect(finding?.message).toContain("text #000000 on #000000");
+  });
+
+  it("does not let a zero-width border keep a button visible", () => {
+    const html = page(
+      "",
+      `<div style="background-color:#ffffff"><a href="https://example.com" style="background-color:#fefefe;color:#000000;border:0 solid #000000">Go</a></div>`,
+    );
+    // The page paints the same colors in both modes, so each mode reports the button.
+    const findings = codes(html);
+    expect(findings.map((finding) => finding.severity)).toEqual(["error", "error"]);
+    expect(findings.every((finding) => finding.message.includes("button"))).toBe(true);
+  });
 });

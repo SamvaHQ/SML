@@ -107,4 +107,23 @@ describe("dark classes", () => {
     );
     expect(renderDarkRules(new Map())).toBe("");
   });
+
+  it("keeps an explicit longhand ahead of a themed shorthand it overrides", () => {
+    const applied = styled(
+      `${THEME}.card{background:var(--color-card)}`,
+      <div className="card" style={{ backgroundColor: "#ff0000" }}>
+        hi
+      </div>,
+    );
+    const rule = applied.darkRules.get(darkClass(applied.html)) ?? "";
+    expect(rule).toBe("background:#222222!important;background-color:#ff0000!important");
+  });
+
+  it("resolves a dark rule nested in another query at dark values", () => {
+    const applied = styled(
+      `${THEME}@media (prefers-color-scheme:dark){@media (min-width:640px){.wide{background-color:var(--color-card)}}}`,
+      <div className="wide">hi</div>,
+    );
+    expect(applied.headCss).toContain(".wide{background-color:#222222!important}");
+  });
 });

@@ -151,7 +151,9 @@ const declaredColor = (value: string): Declared => {
 };
 
 const pixels = (value: string): number | undefined => {
-  const match = /^(\d+(?:\.\d+)?|\.\d+)px$/i.exec(value.trim());
+  const trimmed = value.trim();
+  if (/^[+-]?0+(?:\.0+)?$/.test(trimmed)) return 0;
+  const match = /^(\d+(?:\.\d+)?|\.\d+)px$/i.exec(trimmed);
   return match === null ? undefined : Number(match[1]);
 };
 
@@ -271,7 +273,8 @@ const advance = (
   let background: Paint = parent.background;
   let ownBackground: Color | undefined;
   if (style.image || style.background === "unknown") background = "unknown";
-  else if (style.background !== undefined) {
+  // A fully transparent background paints nothing; the parent's shows through.
+  else if (style.background !== undefined && style.background.a > 0) {
     if (style.background.a >= 1) background = style.background;
     else if (parent.background !== "unknown")
       background = over(style.background, parent.background);
@@ -281,14 +284,10 @@ const advance = (
   // Anchors take the client's link color unless they declare one, so the
   // parent's text color says nothing about them.
   let color: Paint | undefined = tag === "a" ? undefined : parent.color;
+  // A translucent color keeps its alpha as it inherits; it blends with whatever background the
+  // text it colors sits on, which a descendant may change.
   if (style.color === "unknown") color = "unknown";
-  else if (style.color !== undefined)
-    color =
-      style.color.a >= 1
-        ? style.color
-        : background === "unknown"
-          ? "unknown"
-          : over(style.color, background);
+  else if (style.color !== undefined) color = style.color;
   return {
     ownBackground,
     state: {
@@ -474,7 +473,8 @@ export const checkEmailContrast = (input: CompatibilityInput): readonly EmailDia
         state.color !== "unknown" &&
         state.background !== "unknown"
       ) {
-        const ratio = ratioOf(state.color, state.background);
+        const ink = over(state.color, state.background);
+        const ratio = ratioOf(ink, state.background);
         const large =
           state.fontSize !== undefined &&
           (state.fontSize >= LARGE_PX || (state.bold && state.fontSize >= LARGE_BOLD_PX));
@@ -483,7 +483,7 @@ export const checkEmailContrast = (input: CompatibilityInput): readonly EmailDia
           report(
             mode,
             "text",
-            state.color,
+            ink,
             state.background,
             ratio,
             required,

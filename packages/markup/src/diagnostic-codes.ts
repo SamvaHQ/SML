@@ -227,8 +227,9 @@ export const DIAGNOSTIC_CODES = codes({
     fix: "Write per={2}.",
   },
   "invalid-columns-gap": {
-    summary: "<Columns gap> is set on a Columns that repeats its cells with each.",
-    fix: "Write the Column children out, or pad each repeated cell.",
+    summary:
+      "<Columns gap> is set on a Columns whose cells are repeated with each or rendered conditionally.",
+    fix: "Write each Column out unconditionally, or pad the cells instead of using gap.",
   },
   "invalid-columns-stack": {
     summary: "<Columns stack> is not a true or false literal.",

@@ -251,6 +251,7 @@ export interface ColumnsProps<Item = never> {
   /**
    * Pixels between the cells of a row. A stacked row puts the same space between the stacked
    * cells instead, so a gap needs no padding on the cells that would misalign them when stacked.
+   * The cells must be written out and always render.
    */
   readonly gap?: number | undefined;
   /** `Column` elements, or with `each` a function that returns one. */

@@ -177,6 +177,9 @@ const darkClassName = (body: string): string => {
   return `${DARK_CLASS_PREFIX}${hash.toString(36)}`;
 };
 
+/** The shorthand a property belongs to: `background-color` and `background` are both `background`. */
+const propertyFamily = (property: string): string => property.split("-")[0]!;
+
 /** Add a class to an element's props, whichever of `class` and `className` it uses. */
 const withClass = (
   props: Readonly<Record<string, unknown>>,
@@ -416,13 +419,23 @@ export const applyStylesheet = (
         : element.props;
     // Dark mode: every inlined declaration that reads a color the dark-mode block redefines, at
     // its dark value, and a themed `bgcolor` as the background it paints.
+    // A changed shorthand is restated with every winning declaration of its family, in cascade
+    // order, so a longhand that wins over it (an inline `background-color` after a class's
+    // `background`) still wins in dark mode.
     const dark: [string, string][] = [];
     if (hasDarkTheme) {
+      const changed = new Set<string>();
       for (const [property, entry] of winners) {
         if (property.startsWith("--") || !entry.value.includes("var(")) continue;
-        const value = finalizeValue(entry.value, darkScope);
-        if (value !== finalizeValue(entry.value, variables)) dark.push([property, value]);
+        if (finalizeValue(entry.value, darkScope) !== finalizeValue(entry.value, variables))
+          changed.add(propertyFamily(property));
       }
+      if (changed.size > 0)
+        for (const [property, entry] of [...winners].sort(([, left], [, right]) =>
+          compareRank(left.key, right.key),
+        ))
+          if (!property.startsWith("--") && changed.has(propertyFamily(property)))
+            dark.push([property, finalizeValue(entry.value, darkScope)]);
       if (
         typeof bgcolor === "string" &&
         bgcolor.includes("var(") &&
