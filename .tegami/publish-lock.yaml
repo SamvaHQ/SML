@@ -1,19 +1,17 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/markup:\n    type: minor\n  npm:@samva/editor:\n    type: minor\n---\n\n## Meta's WhatsApp template name comes from the template's handle\n\n`<WhatsApp>` no longer takes `name`. Samva registers each WhatsApp template with Meta under its\nhandle, so an authored name could only disagree with it. A template that still sets `name` fails\nwith `whatsapp-template-name`, which carries an upgrade recipe: remove the attribute.\n\n`WhatsAppProps`, `IrWhatsApp`, `RenderedIrWhatsApp`, `WhatsAppChannelForm` and the editor host's\n`WhatsAppRender` drop `name`. A `WhatsAppEdit` attribute edit names only `language` or `category`,\nwith a string value. The WhatsApp workspace no longer shows a Template name field.\n"
-    filename: whatsapp-name-from-handle.md
+  - content: "---\npackages:\n  npm:@samva/markup:\n    type: patch\n---\n\n#### The authoring reference omits channel-only upgrade recipes\n\n`generated/reference.md` lists upgrade recipes only for diagnostics that apply to every template,\nmatching its diagnostics table and `contract.json`. The `whatsapp-template-name` recipe stays in the\ndiagnostic codes, where an agent migrating a WhatsApp template reads it.\n"
+    filename: reference-channel-upgrades.md
     v: 0.0.0
 core:packages:
   - id: npm:@samva/vite
     updated: true
   - changelogIds:
-      - whatsapp-name-from-handle.md
-    id: npm:@samva/editor
-    updated: true
-  - changelogIds:
-      - whatsapp-name-from-handle.md
+      - reference-channel-upgrades.md
     id: npm:@samva/markup
+    updated: true
+  - id: npm:@samva/editor
     updated: true
 npm:packages:
   - id: npm:@samva/vite
-  - id: npm:@samva/editor
   - id: npm:@samva/markup
+  - id: npm:@samva/editor
