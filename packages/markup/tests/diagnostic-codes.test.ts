@@ -73,7 +73,7 @@ describe("generated contract", () => {
   const contract = JSON.parse(
     readFileSync(join(import.meta.dirname, "..", "generated", "contract.json"), "utf8"),
   ) as {
-    diagnostics: { code: string; upgrade?: string }[];
+    diagnostics: { code: string; upgrade?: string; channelOnly?: true }[];
     profile: { forms: unknown[]; rejected: unknown[] };
     formatters: { name: string }[];
     irVersion: number;
@@ -95,6 +95,10 @@ describe("generated contract", () => {
     expect(reference).toContain("## Upgrades");
     for (const diagnostic of contract.diagnostics) {
       if (diagnostic.upgrade === undefined) continue;
+      if (diagnostic.channelOnly === true) {
+        expect(reference).not.toContain(`### \`${diagnostic.code}\``);
+        continue;
+      }
       expect(reference).toContain(`### \`${diagnostic.code}\``);
       expect(reference.replace(/\s+/g, " ")).toContain(diagnostic.upgrade.replace(/\s+/g, " "));
     }
