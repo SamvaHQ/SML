@@ -148,4 +148,28 @@ describe("dark classes", () => {
     const rule = applied.darkRules.get(darkClass(applied.html)) ?? "";
     expect(rule).toBe("border-color:#eeeeee!important;border-top:2px solid #ff0000!important");
   });
+
+  it("keeps the declarations that override a restated shorthand", () => {
+    const applied = styled(
+      `${THEME}.box{border-color:var(--color-primary);border-top:2px solid #ff0000}`,
+      <div className="box" style={{ borderWidth: "8px" }}>
+        hi
+      </div>,
+    );
+    const rule = applied.darkRules.get(darkClass(applied.html)) ?? "";
+    expect(rule).toBe(
+      "border-color:#eeeeee!important;border-top:2px solid #ff0000!important;border-width:8px!important",
+    );
+  });
+
+  it("keeps a border image a themed border would reset", () => {
+    const applied = styled(
+      `${THEME}.box{border:1px solid var(--color-primary)}`,
+      <div className="box" style={{ borderImage: "linear-gradient(red, blue) 1" }}>
+        hi
+      </div>,
+    );
+    const rule = applied.darkRules.get(darkClass(applied.html)) ?? "";
+    expect(rule).toContain("border:1px solid #eeeeee!important;border-image:");
+  });
 });

@@ -180,15 +180,23 @@ const darkClassName = (body: string): string => {
 const SIDES = ["top", "right", "bottom", "left"] as const;
 const BORDER_PARTS = ["width", "style", "color"] as const;
 const CORNERS = ["top-left", "top-right", "bottom-right", "bottom-left"] as const;
+const BORDER_IMAGE = ["source", "slice", "width", "outset", "repeat"].map(
+  (part) => `border-image-${part}`,
+);
 
 /**
- * The per-side longhands a border property writes: `border` writes all twelve,
- * `border-top` the top three, `border-color` the four colors, `border-radius` the four corners.
+ * The longhands a border property writes: `border` writes the twelve per-side longhands and
+ * resets the border image, `border-top` the top three, `border-color` the four colors,
+ * `border-radius` the four corners.
  * `undefined` for a property outside the border box.
  */
 const borderLonghands = (property: string): readonly string[] | undefined => {
   if (property === "border")
-    return SIDES.flatMap((side) => BORDER_PARTS.map((part) => `border-${side}-${part}`));
+    return [
+      ...SIDES.flatMap((side) => BORDER_PARTS.map((part) => `border-${side}-${part}`)),
+      ...BORDER_IMAGE,
+    ];
+  if (property === "border-image") return BORDER_IMAGE;
   if (property === "border-radius") return CORNERS.map((corner) => `border-${corner}-radius`);
   const side = /^border-(top|right|bottom|left)$/.exec(property)?.[1];
   if (side !== undefined) return BORDER_PARTS.map((part) => `border-${side}-${part}`);
@@ -468,15 +476,25 @@ export const applyStylesheet = (
         if (finalizeValue(entry.value, darkScope) !== finalizeValue(entry.value, variables))
           changed.push(property);
       }
-      if (changed.length > 0)
-        for (const [property, entry] of [...winners].sort(([, left], [, right]) =>
-          compareRank(left.key, right.key),
-        ))
+      // Restating a declaration with `!important` lets it beat everything it overlaps, so each
+      // restated declaration brings in the winners it overlaps, until none is added.
+      const restated = new Set(changed);
+      for (let grew = changed.length > 0; grew;) {
+        grew = false;
+        for (const property of winners.keys())
           if (
             !property.startsWith("--") &&
-            changed.some((candidate) => overlaps(candidate, property))
-          )
-            dark.push([property, finalizeValue(entry.value, darkScope)]);
+            !restated.has(property) &&
+            [...restated].some((candidate) => overlaps(candidate, property))
+          ) {
+            restated.add(property);
+            grew = true;
+          }
+      }
+      for (const [property, entry] of [...winners].sort(([, left], [, right]) =>
+        compareRank(left.key, right.key),
+      ))
+        if (restated.has(property)) dark.push([property, finalizeValue(entry.value, darkScope)]);
       if (
         typeof bgcolor === "string" &&
         bgcolor.includes("var(") &&
