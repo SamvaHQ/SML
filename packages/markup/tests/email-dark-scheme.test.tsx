@@ -137,4 +137,15 @@ describe("dark classes", () => {
     expect(rule).toContain("border-top-color:#eeeeee!important");
     expect(rule).not.toContain("border-radius");
   });
+
+  it("restates a border shorthand that shares a side with a themed border color", () => {
+    const applied = styled(
+      `${THEME}.box{border-color:var(--color-primary)}`,
+      <div className="box" style={{ borderTop: "2px solid #ff0000" }}>
+        hi
+      </div>,
+    );
+    const rule = applied.darkRules.get(darkClass(applied.html)) ?? "";
+    expect(rule).toBe("border-color:#eeeeee!important;border-top:2px solid #ff0000!important");
+  });
 });

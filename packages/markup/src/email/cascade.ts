@@ -177,24 +177,45 @@ const darkClassName = (body: string): string => {
   return `${DARK_CLASS_PREFIX}${hash.toString(36)}`;
 };
 
+const SIDES = ["top", "right", "bottom", "left"] as const;
+const BORDER_PARTS = ["width", "style", "color"] as const;
+const CORNERS = ["top-left", "top-right", "bottom-right", "bottom-left"] as const;
+
 /**
- * Whether `shorthand` sets `longhand`: `background` sets `background-color`, `border` and
- * `border-color` set `border-top-color`, `font` sets `line-height`. `border-radius` belongs to no
- * border shorthand but its own.
+ * The per-side longhands a border property writes: `border` writes all twelve,
+ * `border-top` the top three, `border-color` the four colors, `border-radius` the four corners.
+ * `undefined` for a property outside the border box.
  */
-const sets = (shorthand: string, longhand: string): boolean => {
-  if (shorthand === "font" && longhand === "line-height") return true;
-  if (!longhand.startsWith("border-")) return longhand.startsWith(`${shorthand}-`);
-  if (/radius|collapse|spacing/.test(longhand) !== /radius/.test(shorthand)) return false;
-  const part = /^border-(width|style|color)$/.exec(shorthand)?.[1];
-  if (part !== undefined)
-    return new RegExp(`^border-(?:top|right|bottom|left)-${part}$`).test(longhand);
-  return longhand.startsWith(`${shorthand}-`);
+const borderLonghands = (property: string): readonly string[] | undefined => {
+  if (property === "border")
+    return SIDES.flatMap((side) => BORDER_PARTS.map((part) => `border-${side}-${part}`));
+  if (property === "border-radius") return CORNERS.map((corner) => `border-${corner}-radius`);
+  const side = /^border-(top|right|bottom|left)$/.exec(property)?.[1];
+  if (side !== undefined) return BORDER_PARTS.map((part) => `border-${side}-${part}`);
+  const part = /^border-(width|style|color)$/.exec(property)?.[1];
+  if (part !== undefined) return SIDES.map((each) => `border-${each}-${part}`);
+  return property.startsWith("border-") ? [property] : undefined;
 };
 
-/** Whether two declarations can override one another: the same property, or a shorthand and one it sets. */
-const overlaps = (left: string, right: string): boolean =>
-  left === right || sets(left, right) || sets(right, left);
+/**
+ * Whether two declarations can override one another because they write a property in common:
+ * `background` and `background-color`, `border-color` and `border-top`, `font` and `line-height`.
+ * `border-radius` shares nothing with `border-color`.
+ */
+const overlaps = (left: string, right: string): boolean => {
+  if (left === right) return true;
+  const leftBorder = borderLonghands(left);
+  const rightBorder = borderLonghands(right);
+  if (leftBorder !== undefined || rightBorder !== undefined)
+    return (
+      leftBorder !== undefined &&
+      rightBorder !== undefined &&
+      leftBorder.some((longhand) => rightBorder.includes(longhand))
+    );
+  const sets = (shorthand: string, longhand: string) =>
+    longhand.startsWith(`${shorthand}-`) || (shorthand === "font" && longhand === "line-height");
+  return sets(left, right) || sets(right, left);
+};
 
 /** Add a class to an element's props, whichever of `class` and `className` it uses. */
 const withClass = (
