@@ -1,6 +1,7 @@
 import { generate, ident, parse, walk, type CssNode } from "css-tree";
 
 import { downlevelColors } from "./css-color";
+import { isDarkSchemeCondition } from "./dark-scheme";
 import type { EmailDiagnostic } from "./diagnostics";
 import { compileFontFace, type FontFaceRule, type FontFileResolver } from "./fonts";
 import type { AttributeTest, Combinator, CompiledSelector, Compound } from "./selectors";
@@ -47,6 +48,11 @@ export interface Stylesheet {
   readonly fontFaces: readonly FontFaceRule[];
   /** Unconditional custom properties, for resolving `var()` before inlining. */
   readonly variables: Readonly<Record<string, string>>;
+  /**
+   * The custom properties the dark-mode query redefines (a theme's dark-mode
+   * block). A declaration that reads one switches in dark mode.
+   */
+  readonly darkVariables: Readonly<Record<string, string>>;
   readonly diagnostics: readonly EmailDiagnostic[];
 }
 
@@ -214,6 +220,7 @@ export const parseStylesheet = (
   const headAtRules: string[] = [];
   const fontFaces: FontFaceRule[] = [];
   const variables: Record<string, string> = {};
+  const darkVariables: Record<string, string> = {};
   const conditionalVariables = new Set<string>();
   const diagnostics: EmailDiagnostic[] = [];
   const layers = new Map<string, number>();
@@ -258,6 +265,7 @@ export const parseStylesheet = (
       headAtRules: [],
       fontFaces: [],
       variables: {},
+      darkVariables: {},
       diagnostics: [
         {
           code: "css-parse-error",
@@ -300,6 +308,8 @@ export const parseStylesheet = (
       for (const declaration of declarations) {
         if (!declaration.property.startsWith("--")) continue;
         if (context.conditions.length === 0) variables[declaration.property] = declaration.value;
+        else if (isDarkSchemeCondition(context.conditions))
+          darkVariables[declaration.property] = declaration.value;
         else conditionalVariables.add(declaration.property);
       }
     }
@@ -361,10 +371,19 @@ export const parseStylesheet = (
       return;
     }
     if (name === "theme" || name === "scope") {
-      // `@theme` is Tailwind's custom-property block; it behaves as `:root`.
+      // `@theme` is Tailwind's custom-property block; it behaves as `:root`, and inside the
+      // dark-mode query it is a theme's dark-mode block.
+      const into =
+        context.conditions.length === 0
+          ? variables
+          : isDarkSchemeCondition(context.conditions)
+            ? darkVariables
+            : undefined;
       for (const declaration of declarationsOf(node.block))
-        if (declaration.property.startsWith("--"))
-          variables[declaration.property] = declaration.value;
+        if (declaration.property.startsWith("--")) {
+          if (into === undefined) conditionalVariables.add(declaration.property);
+          else into[declaration.property] = declaration.value;
+        }
       for (const child of node.block?.children ?? [])
         if (child.type !== "Declaration") visitNode(child, context);
       return;
@@ -426,5 +445,5 @@ export const parseStylesheet = (
         origins: [],
       });
 
-  return { rules, headAtRules, fontFaces, variables, diagnostics };
+  return { rules, headAtRules, fontFaces, variables, darkVariables, diagnostics };
 };

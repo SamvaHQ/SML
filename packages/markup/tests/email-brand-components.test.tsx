@@ -120,8 +120,8 @@ describe("samva:brand in TSX", () => {
       { assetBase: "https://assets.samva.test/b", brand: BRAND },
     );
     const tailwind = JSON.stringify(compiled.tailwindSheet ?? "");
-    for (const name of ["text-gray-500", "underline"]) expect(tailwind).toContain(name);
-    expect(BRAND_COMPONENT_CLASSES).toContain("text-gray-500");
+    for (const name of ["text-muted-foreground", "underline"]) expect(tailwind).toContain(name);
+    expect(BRAND_COMPONENT_CLASSES).toContain("text-muted-foreground");
   });
 
   it("refuses a brand import the build has no brand for, where it is written", async () => {
@@ -145,7 +145,7 @@ describe("the send path's view of a footer", () => {
     expect(withLink.html).toContain("Acme Inc.");
     // Styled by the compiled utilities, inline.
     expect(withLink.html).toMatch(
-      /<td[^>]*class="text-xs text-gray-500 text-center"[^>]*style="[^"]*font-size:/,
+      /<td[^>]*class="text-xs text-muted-foreground text-center[^"]*"[^>]*style="[^"]*font-size:/,
     );
     expect(renderedFooterMarkers(withLink.html)).toEqual({ footer: true, unsubscribeLink: true });
     expect(withLink.text).toContain(`Unsubscribe (${UNSUBSCRIBE_URL_PLACEHOLDER})`);
@@ -161,7 +161,7 @@ describe("the send path's view of a footer", () => {
 
   it("lets a brand's theme restyle the footer's own utilities", async () => {
     const themed = await renderBrandFooter(
-      { ...BRAND, css: "@theme {\n  --color-gray-500: #123456;\n}" },
+      { ...BRAND, css: "@theme {\n  --color-muted-foreground: #123456;\n}" },
       { unsubscribe: true },
     );
     expect(themed.html).toContain("color:#123456");

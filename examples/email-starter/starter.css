@@ -1,24 +1,40 @@
-/* This starter's look. Every color and font in templates/ reads these theme variables; a brand imported after
- * this file in theme.css replaces the ones it sets, and theme.css's own @theme overrides both. */
+/* This starter's look, in the theme vocabulary every block in templates/blocks reads. A brand
+ * imported after this file in theme.css replaces the tokens it sets, and theme.css's own @theme
+ * overrides both. The dark-mode block sets the same tokens for clients in dark mode. */
 @theme {
-  --color-brand: #4f46e5;
-  --color-brand-dark: #a5b4fc;
-  --color-brand-foreground: #ffffff;
-  --color-brand-foreground-dark: #0b0d10;
-  --color-accent: #4f46e5;
-  --color-accent-dark: #a5b4fc;
-  --color-background: #f3f4f6;
-  --color-background-dark: #111827;
-  --color-surface: #ffffff;
-  --color-surface-dark: #1f2937;
-  --color-foreground: #111827;
-  --color-foreground-dark: #ffffff;
-  --color-muted: #374151;
-  --color-muted-dark: #e5e7eb;
-  --color-border: #e5e7eb;
-  --color-border-dark: #374151;
-  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-heading: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --radius-button: 6px;
-  --radius-card: 12px;
+  --color-background: #e8edef;
+  --color-foreground: #14232a;
+  --color-card: #ffffff;
+  --color-card-foreground: #14232a;
+  --color-primary: #0d5a61;
+  --color-primary-foreground: #f1faf9;
+  --color-secondary: #eef3f4;
+  --color-secondary-foreground: #14232a;
+  --color-muted: #eef3f4;
+  --color-muted-foreground: #52646b;
+  --color-accent: #e0efec;
+  --color-accent-foreground: #0b4743;
+  --color-border: #d3dde0;
+  --radius: 6px;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-heading: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-background: #0b1215;
+    --color-foreground: #e3ebed;
+    --color-card: #131c20;
+    --color-card-foreground: #e3ebed;
+    --color-primary: #7fd1c5;
+    --color-primary-foreground: #052421;
+    --color-secondary: #1a252a;
+    --color-secondary-foreground: #e3ebed;
+    --color-muted: #1a252a;
+    --color-muted-foreground: #93a4aa;
+    --color-accent: #11302d;
+    --color-accent-foreground: #b4e5dd;
+    --color-border: #25343a;
+  }
 }

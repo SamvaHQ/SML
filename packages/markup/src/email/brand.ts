@@ -50,8 +50,9 @@ export interface EmailBrand {
 // compiler writes a generated module that binds these to the brand the build
 // resolved, so both render the snapshot a publication records. Their classes
 // are compiled for every project that imports them and name only Tailwind's
-// own scale, so a theme that defines nothing still renders them without an
-// unmatched-class finding; the footer inherits the body's font.
+// own scale and the theme vocabulary, which every project's theme defines, so
+// they render without an unmatched-class finding; the footer inherits the
+// body's font.
 
 /** Every class the brand components use, compiled for any project that imports them. */
 export const BRAND_COMPONENT_CLASSES = [
@@ -59,7 +60,7 @@ export const BRAND_COMPONENT_CLASSES = [
   "hidden",
   "dark:block!",
   "text-xs",
-  "text-gray-500",
+  "text-muted-foreground",
   "text-center",
   "font-semibold",
   "underline",
@@ -158,7 +159,7 @@ export const brandComponents = (
             ...(index === 0 ? [] : [" · "]),
             jsx("a", {
               href: link.url,
-              className: "text-gray-500 underline",
+              className: "text-muted-foreground underline",
               children: link.label,
             }),
           ]),
@@ -182,7 +183,7 @@ export const brandComponents = (
         children: jsx("tr", {
           children: jsx("td", {
             align: "center",
-            className: classes("text-xs text-gray-500 text-center", className),
+            className: classes("text-xs text-muted-foreground text-center", className),
             style: { padding: "32px 16px" },
             children: jsx("table", {
               role: "presentation",
@@ -208,7 +209,7 @@ export const brandComponents = (
 const unsubscribeLink = (label: string, plugin: BrandPlugin): EmailNode =>
   jsx("a", {
     href: plugin.unsubscribeUrlPlaceholder,
-    className: "text-gray-500 underline",
+    className: "text-muted-foreground underline",
     [UNSUBSCRIBE_LINK]: true,
     children: label,
   });

@@ -13,6 +13,7 @@ import {
 } from "../email/components";
 import { equalColumnWidth } from "../email/components";
 import { drainEmailDiagnostics, type EmailChild } from "../email/jsx-runtime";
+import { PRIMITIVE_CLASSES } from "../email/primitive-css";
 import { isObject } from "../internal/guards";
 import type { IrEach, IrNode, IrValue } from "../ir";
 import { child, children, text, unwrap, type Node } from "./ast";
@@ -39,8 +40,10 @@ export interface ComponentCall {
 export type ChannelLowering = (call: ComponentCall) => IrNode[] | undefined;
 
 const NUMERIC: Readonly<Record<string, readonly string[]>> = {
+  Email: ["gutter"],
   Button: ["height", "paddingX", "borderRadius", "borderWidth", "fontSize", "width"],
   Spacer: ["height"],
+  Columns: ["gap"],
   Divider: ["thickness"],
   BrandLogo: ["width"],
 };
@@ -132,6 +135,7 @@ const equalWidth = (per: number | undefined, list: IrValue): IrValue => {
 const columnsEach = (
   call: ComponentCall,
   bindings: ReadonlyMap<string, Binding>,
+  stack: boolean,
 ): { readonly cells: IrNode; readonly wrap: (table: IrNode[]) => IrNode[] } | undefined => {
   const { lowerer, ctx, node } = call;
   const listValue = bindings.get("each");
@@ -184,6 +188,7 @@ const columnsEach = (
     ...ctx,
     loops: row === undefined ? ctx.loops : [...ctx.loops, row],
     columnWidth: equalWidth(per, list),
+    columnStack: stack,
   };
   const cells = lowerer.eachOver(cellCtx, node, row === undefined ? list : { bind: `$${row}` }, fn);
   if (cells === undefined) return undefined;
@@ -271,14 +276,56 @@ export const runBuiltinComponent = (call: ComponentCall): IrNode[] => {
   let bindings: ReadonlyMap<string, Binding> = declared;
   let wrap = (table: IrNode[]): IrNode[] => table;
   let kids: IrNode[];
-  const childCtx = { ...ctx, columnWidth: undefined };
+  const stackBinding = declared.get("stack");
+  const stack = stackBinding === undefined ? true : bindingValue(stackBinding);
+  if (exported === "Columns" && typeof stack !== "boolean") {
+    lowerer.error(
+      ctx,
+      node,
+      "invalid-columns-stack",
+      "<Columns stack> decides the layout at compile time, so it must be true or false.",
+      "Write stack={false}, or leave it out to stack on narrow screens.",
+    );
+    return [];
+  }
+  const childCtx = {
+    ...ctx,
+    columnWidth: undefined,
+    columnStack: exported === "Columns" ? stack === true : undefined,
+  };
+  if (exported === "Columns" && declared.has("each") && declared.has("gap")) {
+    lowerer.error(
+      ctx,
+      node,
+      "invalid-columns-gap",
+      "<Columns gap> spaces Column children written out in the row; cells repeated with each cannot take it.",
+      'Write the Columns out, or pad each repeated cell (className="px-2").',
+    );
+    return [];
+  }
   if (exported === "Columns" && declared.has("each")) {
-    const chunked = columnsEach(call, declared);
+    const chunked = columnsEach(call, declared, stack === true);
     if (chunked === undefined) return [];
-    bindings = new Map([...declared].filter(([name]) => name !== "each" && name !== "per"));
+    bindings = new Map(
+      [...declared].filter(([name]) => name !== "each" && name !== "per" && name !== "stack"),
+    );
     kids = [chunked.cells];
     wrap = chunked.wrap;
   } else kids = lowerer.jsxChildren(childCtx, node);
+  if (
+    exported === "Columns" &&
+    declared.has("gap") &&
+    kids.some((kid) => !isValueNode(kid) && !("el" in kid))
+  ) {
+    lowerer.error(
+      ctx,
+      node,
+      "invalid-columns-gap",
+      "<Columns gap> spaces Column children that always render; a conditional or repeated Column would leave a stray gap.",
+      'Pad the cells instead (className="pr-6"), or write each Column unconditionally.',
+    );
+    return [];
+  }
   const tokens = new Tokens();
   const props: Record<string, unknown> = {};
   for (const [name, bound] of bindings) props[name] = bindingToProp(call, tokens, name, bound);
@@ -297,6 +344,11 @@ export const runBuiltinComponent = (call: ComponentCall): IrNode[] => {
   }
   if (exported === "Column" && props.width === undefined && ctx.columnWidth !== undefined)
     props.width = propFor(tokens, ctx.columnWidth);
+  if (exported === "Column" && ctx.columnStack === true)
+    props.className =
+      typeof props.className === "string" && props.className !== ""
+        ? `${PRIMITIVE_CLASSES.stack} ${props.className}`
+        : PRIMITIVE_CLASSES.stack;
   if (kids.length > 0) props.children = childrenProp(tokens, kids);
   if (
     exported === "Button" &&

@@ -30,7 +30,7 @@ Authoring entries are what a template file imports:
   mode) and `BrandFooter` (company, postal address, social links and the unsubscribe row the send
   path fills). The compiler binds them to the brand the build resolves; add
   `"types": ["@samva/markup/samva-brand"]` to the project's tsconfig for `tsc`. In `theme.css`,
-  `@import "samva:brand";` layers the brand theme; `samva:brand/<slug>` names one brand. These are
+  `@import "samva:brand";` layers the brand theme over the default theme (`DEFAULT_THEME`); `samva:brand/<slug>` names one brand. These are
   Samva's brand plugin (`samvaBrandPlugin` from `@samva/markup/brand`), the default; a host that
   delivers mail itself passes its own `BrandPlugin` as `brandPlugin` to `compileTemplate`,
   `renderIr` and `renderBrandFooter` to rename the brand import, the footer markers, the
@@ -65,6 +65,7 @@ entry?)` is the synchronous structural check: it runs the compiler's lowering wi
   conditional or element is a locked segment; and JSX source locations. Browser-safe: Babel parser
   only.
 - `@samva/markup/brand` — brand records and their CSS model (`parseBrandCss`, `printBrandCss`), the
+  theme vocabulary (`THEME_COLOR_ROLES`, `THEME_TOKENS`, `DEFAULT_THEME`, `foregroundDefaults`), the
   footer markers a send reads (`renderedFooterMarkers`, `withoutUnsubscribeRow`), and project
   assets (`isAssetPath`, `ASSET_CONTENT_TYPES`, `assetUrl`): which imported files become
   content-addressed assets. The send path imports it, so its closure holds only the css-tree parser
@@ -117,6 +118,15 @@ Read the contract before authoring. Import only subpaths declared in `package.js
   into file paths, so each must match `TEMPLATE_NAME_PATTERN`, one plain path segment.
   `defineTemplate` throws a `TypeError` where the name is declared. Code that builds a path from these
   names imports the pattern instead of restating it.
+- **Naming a second set of tokens for dark mode.** A theme states dark mode once, in
+  `@media (prefers-color-scheme: dark) { @theme { --color-card: … } }`, with the same names as its
+  light `@theme`. The cascade gives every element whose inlined styles read one of those colors a
+  generated `sml-dark-*` class, so `bg-card` switches by itself. A `--color-card-dark` token is just
+  another color, and `dark:` only picks a different token. A block styled with palette colors
+  (`bg-indigo-600`) or raw hex ignores the theme; style with the vocabulary in `THEME_COLOR_ROLES`.
+- **Reading contrast off the light render.** `checkEmailCompatibility` includes `email-contrast`,
+  which judges each fixture in light and dark mode (`CONTRAST_THRESHOLDS`); a color a dark block
+  leaves unpaired is an error there, not a visual nit.
 - **Declaring a webfont as if every client loads it.** A project font is an ordinary `@font-face`
   in the project's CSS (usually `theme.css`) whose `src` is a `.woff2` file in the project, named
   by a path relative to that stylesheet; the compiler serves it as a content-addressed asset and

@@ -12,11 +12,20 @@ import {
   WHATSAPP_HEADER_TYPES,
 } from "../src/channel-specs";
 import { DIAGNOSTIC_CODE_FAMILIES, DIAGNOSTIC_CODES } from "../src/diagnostic-codes";
+import { CONTRAST_THRESHOLDS } from "../src/email/contrast";
 import { EMAIL_ELEMENTS, EMAIL_GLOBAL_ATTRIBUTES } from "../src/email/elements";
+import { PRIMITIVE_CLASSES, STACK_BREAKPOINT_PX } from "../src/email/primitive-css";
 import { FORMATTER_NAMES } from "../src/fmt";
 import { SML_IR_VERSION } from "../src/ir";
 import { PROFILE_FORMS, PROFILE_REJECTED } from "../src/sml/profile";
 import { TEMPLATE_ID_PATTERN } from "../src/template";
+import {
+  DEFAULT_THEME,
+  FILL_COLORS,
+  THEME_COLOR_ROLES,
+  THEME_COLORS,
+  THEME_TOKENS,
+} from "../src/theme-css";
 
 // `generated/contract.json` and `generated/reference.md` are written from the modules that own
 // each fact: interface declarations for component props and formatters, the profile table, the
@@ -185,7 +194,37 @@ const contract = {
   globalAttributes: EMAIL_GLOBAL_ATTRIBUTES,
   styles: {
     dialect: "Tailwind classes plus theme.css tokens. Classes must be literal.",
-    themeLayers: ['@import "./starter.css";', '@import "samva:brand";', "the project's own @theme"],
+    themeLayers: [
+      "the default theme",
+      '@import "./starter.css";',
+      '@import "samva:brand";',
+      "the project's own @theme",
+    ],
+    theme: {
+      colors: THEME_COLORS.map((name) => ({
+        name,
+        variable: `--color-${name}`,
+        role: THEME_COLOR_ROLES[name],
+        light: DEFAULT_THEME.variables[`--color-${name}`],
+        dark: DEFAULT_THEME.dark[`--color-${name}`],
+      })),
+      tokens: THEME_TOKENS.map((variable) => ({
+        variable,
+        default: DEFAULT_THEME.variables[variable],
+      })),
+      darkMode:
+        "One mechanism: the theme's @media (prefers-color-scheme: dark) { @theme { --color-*: … } } block. Write each token's utility once (bg-card); every declaration that reads a color the dark block sets switches in dark mode. Use dark: only to pick a different token in dark mode. Opacity modifiers (bg-primary/10) keep the light value.",
+      layering:
+        "Each layer owns the colors it sets: a color a layer sets in light mode and not in its dark block keeps that value in dark mode.",
+      fillForegrounds: `A layer that sets ${FILL_COLORS.map((fill) => `--color-${fill}`).join(", ")} without its -foreground gets black or white, whichever contrasts more, in each mode.`,
+    },
+    contrast: CONTRAST_THRESHOLDS,
+    primitives: {
+      classes: PRIMITIVE_CLASSES,
+      stackBelowPx: STACK_BREAKPOINT_PX,
+      defaults:
+        "Primitive defaults sit beneath utilities: a class on a primitive overrides its default; a prop is an inline style and overrides both.",
+    },
     fonts: "WOFF2 files in the project through @font-face; a stack must end in a generic family.",
   },
   channels: {
@@ -261,6 +300,52 @@ ${components
       )}`,
   )
   .join("\n\n")}
+
+## Theme
+
+Every project compiles over a default theme in this vocabulary. \`starter.css\`, a brand
+(\`@import "samva:brand";\`) and the project's own \`@theme\` in \`theme.css\` layer over it, each
+setting the same names. A block that reads only these utilities restyles with the theme.
+
+${table(
+  ["Token", "Utilities", "Role", "Default light", "Default dark"],
+  contract.styles.theme.colors.map((color) => [
+    code(color.variable),
+    code(
+      color.name.endsWith("foreground")
+        ? `text-${color.name}`
+        : color.name === "border"
+          ? "border-border"
+          : `bg-${color.name}`,
+    ),
+    color.role,
+    code(color.light ?? ""),
+    code(color.dark ?? ""),
+  ]),
+)}
+
+${table(
+  ["Token", "Utilities", "Default"],
+  contract.styles.theme.tokens.map((token) => [
+    code(token.variable),
+    code(
+      token.variable === "--radius"
+        ? "rounded, rounded-sm … rounded-xl"
+        : token.variable.replace("--font-", "font-"),
+    ),
+    code(token.default ?? ""),
+  ]),
+)}
+
+- Dark mode: ${contract.styles.theme.darkMode}
+- Layers: ${contract.styles.theme.layering}
+- Fills: ${contract.styles.theme.fillForegrounds}
+- Primitives: ${contract.styles.primitives.defaults} \`Email\` paints \`--color-background\` and pads
+  its content 16px each side (\`gutter\`); \`Columns\` stacks its cells below ${STACK_BREAKPOINT_PX}px unless
+  \`stack={false}\`.
+- Contrast: \`email-contrast\` checks every fixture in light and dark mode. Text below
+  ${CONTRAST_THRESHOLDS.textError}:1 and a filled button below ${CONTRAST_THRESHOLDS.shapeError}:1 against its surroundings are errors;
+  text under ${CONTRAST_THRESHOLDS.largePx}px (${CONTRAST_THRESHOLDS.largeBoldPx}px bold) below ${CONTRAST_THRESHOLDS.textWarning}:1 and a button below ${CONTRAST_THRESHOLDS.shapeWarning}:1 are warnings.
 
 ## HTML elements
 

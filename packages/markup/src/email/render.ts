@@ -2,7 +2,7 @@ import type { EmittedPosition } from "../preview";
 /* oxlint-disable eslint/no-control-regex -- Header validation intentionally rejects control characters. */
 import type { JsxSourceLocation } from "../source-locations";
 import type { EmailContent } from "../template";
-import { applyStylesheet } from "./cascade";
+import { applyStylesheet, renderDarkRules } from "./cascade";
 import { preheaderNode } from "./components";
 import type { Stylesheet } from "./css";
 import { EmailCompileError, hasBlockingDiagnostic, type EmailDiagnostic } from "./diagnostics";
@@ -165,12 +165,13 @@ export const renderEmailContent = (
     content.preheader === undefined ? content.body : withPreheader(content.body, content.preheader);
   const styled =
     stylesheet === undefined
-      ? { tree: base, headCss: "", fontFaceCss: "", diagnostics: [] }
+      ? { tree: base, headCss: "", fontFaceCss: "", diagnostics: [], darkRules: new Map() }
       : applyStylesheet(base, stylesheet);
+  const headCss = `${renderDarkRules(styled.darkRules)}${styled.headCss}`;
   const style: EmailDiagnostic[] = [...styled.diagnostics];
   let tree = styled.tree;
-  if (styled.headCss !== "" || styled.fontFaceCss !== "") {
-    const placed = withHeadCss(tree, styled.headCss, styled.fontFaceCss);
+  if (headCss !== "" || styled.fontFaceCss !== "") {
+    const placed = withHeadCss(tree, headCss, styled.fontFaceCss);
     if (placed === undefined)
       style.push({
         code: "missing-head",

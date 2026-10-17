@@ -15,7 +15,7 @@ import {
 import { jsxDEV } from "../src/email/jsx-dev-runtime";
 import type { EmailNode } from "../src/email/jsx-runtime";
 import { compileEmail, EMAIL_DOCTYPE } from "../src/email/render";
-import { corpusTemplate, diagnose } from "./fixtures/email-compile";
+import { corpusTemplate, diagnose, diagnosticCodes } from "./fixtures/email-compile";
 import { renderEmail } from "./support/email-fixture";
 
 const html = (node: EmailNode): string => compileEmail(node).html;
@@ -71,7 +71,9 @@ describe("document shell", () => {
       })),
       {},
     );
-    expect(rendered.html).toContain('<body style="margin:0;padding:0"><div data-samva-preheader=');
+    expect(rendered.html).toMatch(
+      /<body style="margin:0;padding:0[^"]*"><div data-samva-preheader=/,
+    );
   });
 });
 
@@ -92,8 +94,8 @@ describe("layout primitives", () => {
         </Column>
       </Columns>,
     );
-    expect(output).toContain('<tr style="width:100%"><td width="50%">Left</td>');
-    expect(output).toContain('<td align="right" width="50%">Right</td>');
+    expect(output).toContain('<tr style="width:100%"><td class="sml-stack" width="50%">Left</td>');
+    expect(output).toContain('<td class="sml-stack" align="right" width="50%">Right</td>');
     expect(output.match(/<tr/g)).toHaveLength(1);
   });
 
@@ -120,8 +122,7 @@ describe("content primitives", () => {
 
   it("opens links outside the client without reaching back at the opener", () => {
     expect(html(<Link href="https://example.com/help">Help</Link>)).toBe(
-      '<a href="https://example.com/help" target="_blank" rel="noopener noreferrer"' +
-        ' style="color:#067df7;text-decoration:none">Help</a>',
+      '<a class="sml-link" href="https://example.com/help" target="_blank" rel="noopener noreferrer">Help</a>',
     );
   });
 
@@ -239,5 +240,126 @@ describe("generated wrappers keep the authoring origin", () => {
     const Card = () => jsxDEV(Section, { children: "Hi" }, undefined, false, section);
     const tree = jsxDEV(Card, {}, undefined, false, card);
     expect(origins(tree)[0]?.origins).toEqual([section, card]);
+  });
+});
+
+describe("primitive defaults", () => {
+  it("paints the page background and gives the content cell its class and gutter", () => {
+    const output = html(<Email>body</Email>);
+    expect(output).toContain(
+      '<body style="margin:0;padding:0;width:100%;background-color:var(--color-background)">',
+    );
+    expect(output).toContain('bgcolor="var(--color-background)"');
+    expect(output).toContain('<td class="sml-email">body</td>');
+  });
+
+  it("takes an explicit backgroundColor and gutter as inline values", () => {
+    const output = html(
+      <Email backgroundColor="#fafafa" gutter={24}>
+        body
+      </Email>,
+    );
+    expect(output).toContain('bgcolor="#fafafa"');
+    expect(output).toContain("background-color:#fafafa");
+    expect(output).toContain('<td class="sml-email" style="padding-left:24px;padding-right:24px">');
+    expect(output).not.toContain("--color-background");
+  });
+
+  it("rejects a gutter or gap that is not a finite non-negative number", () => {
+    expect(diagnosticCodes(<Email gutter={-1}>x</Email>)).toEqual(["invalid-number-prop"]);
+    expect(
+      diagnosticCodes(
+        <Columns gap={Number.NaN}>
+          <Column>a</Column>
+        </Columns>,
+      ),
+    ).toEqual(["invalid-number-prop"]);
+  });
+
+  it("keeps a Section with a pixel width fluid below it", () => {
+    expect(html(<Section width={600}>x</Section>)).toContain(
+      'width="600" style="width:100%;max-width:600px"',
+    );
+    expect(html(<Section>x</Section>)).not.toContain("max-width");
+  });
+
+  it("stacks every Column cell unless the row opts out", () => {
+    const stacked = html(
+      <Columns>
+        <Column>a</Column>
+        <Column>b</Column>
+      </Columns>,
+    );
+    expect(stacked.match(/class="sml-stack"/g)).toHaveLength(2);
+    const row = html(
+      <Columns stack={false}>
+        <Column>a</Column>
+        <Column>b</Column>
+      </Columns>,
+    );
+    expect(row).not.toContain("sml-stack");
+    expect(row).toContain("<td>a</td><td>b</td>");
+  });
+
+  it("stacks the gap cell with its row, and keeps it a spacer when the row stays", () => {
+    const gap = (stack: boolean) =>
+      html(
+        <Columns gap={8} stack={stack}>
+          <Column>a</Column>
+          <Column>b</Column>
+        </Columns>,
+      );
+    expect(gap(true).match(/class="sml-stack"/g)).toHaveLength(3);
+    expect(gap(false)).not.toContain("sml-stack");
+  });
+
+  it("gives Button, Divider and Link their classes and no inline style of their own", () => {
+    const button = html(
+      <Button href="https://example.com" height={40}>
+        Go
+      </Button>,
+    );
+    expect(button).toContain('<a class="sml-button" href="https://example.com"');
+    expect(button).not.toContain("background-color:");
+    expect(button).toContain('fillcolor="var(--color-primary)"');
+    expect(html(<Divider />)).toContain(
+      '<td class="sml-divider" style="font-size:1px;line-height:1px">',
+    );
+    expect(html(<Link href="https://example.com">x</Link>)).not.toContain("style=");
+  });
+
+  it("puts an explicit Button color, font and radius inline, in the Outlook shape too", () => {
+    const button = html(
+      <Button
+        href="https://example.com"
+        height={40}
+        backgroundColor="#e11d48"
+        color="#ffffff"
+        fontFamily="Georgia, serif"
+        borderRadius={4}
+      >
+        Go
+      </Button>,
+    );
+    expect(button).toContain("background-color:#e11d48;color:#ffffff;border-radius:4px");
+    expect(button).toContain("font-family:Georgia, serif");
+    expect(button).toContain('fillcolor="#e11d48"');
+    expect(button).not.toContain("--color-primary");
+  });
+
+  it("puts an explicit Divider color and thickness inline", () => {
+    expect(html(<Divider color="#cccccc" thickness={3} />)).toContain(
+      "border-top:3px solid #cccccc",
+    );
+  });
+
+  it("lets an author class sit beside a primitive's own", () => {
+    expect(
+      html(
+        <Button href="https://example.com" height={40} className="shadow-sm">
+          Go
+        </Button>,
+      ),
+    ).toContain('class="sml-button shadow-sm"');
   });
 });

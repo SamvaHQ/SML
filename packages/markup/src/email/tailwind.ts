@@ -1,12 +1,15 @@
 import { parse } from "@babel/parser";
-import { parse as parseCss, walk as walkCss, type CssNode } from "css-tree";
+import { parse as parseCss, type CssNode } from "css-tree";
 import { compile } from "tailwindcss";
 
 import { buildLineMap, lineColumn } from "../diagnostic-model";
 import { isObject } from "../internal/guards";
 import type { JsxSourceLocation } from "../source-locations";
+import { DEFAULT_THEME_CSS, foregroundDefaults } from "../theme-css";
 import { parseBrandSpecifier, type BrandPlugin } from "./brand-plugin";
+import { DARK_SCHEME_MEDIA, isDarkSchemeQuery } from "./dark-scheme";
 import type { EmailDiagnostic } from "./diagnostics";
+import { PRIMITIVE_CSS } from "./primitive-css";
 import {
   TAILWIND_PREFLIGHT_CSS,
   TAILWIND_THEME_CSS,
@@ -84,35 +87,113 @@ export interface TailwindImports {
 }
 
 /**
- * Mark every `@theme` in project and brand CSS `static`. Tailwind emits a
- * theme variable only when a utility it generated reads it, but a project's
- * own stylesheets read theme variables too (`color: var(--color-brand)`), and
- * Tailwind never sees those rules. A later layer that redefines a variable
- * replaces its options, so every layer has to carry `static` for the value
- * the cascade settles on to reach the inliner.
+ * Lower one theme stylesheet for Tailwind and the email cascade.
+ *
+ * Every `@theme` becomes `static`. Tailwind emits a theme variable only when a
+ * utility it generated reads it, but a project's own stylesheets read theme
+ * variables too (`color: var(--color-primary)`), and Tailwind never sees those
+ * rules. A later layer that redefines a variable replaces its options, so every
+ * layer has to carry `static` for the value the cascade settles on to reach the
+ * inliner.
+ *
+ * A dark-mode block, `@media (prefers-color-scheme: dark) { @theme { … } }`,
+ * becomes a `:root` rule in that query, which the cascade reads as the dark
+ * values of those variables (Tailwind would hoist a nested `@theme` into the
+ * light theme). A stylesheet owns each color it sets in both modes: a color its
+ * light `@theme` sets and its dark-mode block does not keeps that value in dark
+ * mode too, rather than a dark value from a layer beneath it. A fill it sets
+ * without a text color gets `foregroundDefaults`.
  */
-const staticTheme = (css: string): string => {
+export const lowerThemeCss = (css: string): string => {
   const ast = parseCss(css, {
     positions: true,
     parseValue: false,
     parseRulePrelude: false,
     parseCustomProperty: false,
   });
-  const insertions: number[] = [];
-  walkCss(ast, (node: CssNode) => {
-    if (node.type !== "Atrule" || node.name.toLowerCase() !== "theme" || node.loc == null) return;
-    const prelude =
-      node.prelude === null
-        ? ""
-        : css.slice(node.prelude.loc?.start.offset ?? 0, node.prelude.loc?.end.offset ?? 0);
-    if (/(?:^|\s)static(?:\s|$)/i.test(prelude)) return;
-    insertions.push(node.loc.start.offset + "@theme".length);
-  });
+  const edits: { readonly start: number; readonly end: number; readonly text: string }[] = [];
+  const light: Record<string, string> = {};
+  const dark: Record<string, string> = {};
+  const declarations = (node: CssNode, visit: (property: string, value: string) => void) => {
+    if (node.type !== "Atrule" || node.block === null) return;
+    for (const child of node.block.children)
+      if (child.type === "Declaration" && child.loc != null && child.value.loc != null)
+        visit(child.property, css.slice(child.value.loc.start.offset, child.value.loc.end.offset));
+  };
+  const preludeOf = (node: CssNode): string =>
+    node.type !== "Atrule" || node.prelude === null || node.prelude.loc == null
+      ? ""
+      : css.slice(node.prelude.loc.start.offset, node.prelude.loc.end.offset);
+  const isTheme = (node: CssNode): boolean =>
+    node.type === "Atrule" && node.name.toLowerCase() === "theme" && node.loc != null;
+  if (ast.type === "StyleSheet")
+    for (const node of ast.children) {
+      if (isTheme(node)) {
+        if (!/(?:^|\s)static(?:\s|$)/i.test(preludeOf(node)))
+          edits.push({
+            start: node.loc!.start.offset + "@theme".length,
+            end: node.loc!.start.offset + "@theme".length,
+            text: " static",
+          });
+        declarations(node, (property, value) => {
+          if (property.startsWith("--color-")) light[property] = value.trim();
+        });
+        continue;
+      }
+      if (
+        node.type !== "Atrule" ||
+        node.name.toLowerCase() !== "media" ||
+        node.block === null ||
+        !isDarkSchemeQuery(preludeOf(node))
+      )
+        continue;
+      for (const child of node.block.children) {
+        if (!isTheme(child) || child.type !== "Atrule" || child.block?.loc == null) continue;
+        edits.push({
+          start: child.loc!.start.offset,
+          end: child.block.loc.start.offset,
+          text: ":root",
+        });
+        declarations(child, (property, value) => {
+          dark[property] = value.trim();
+        });
+      }
+    }
+  const defaults = foregroundDefaults(light, dark);
+  const lightAdded = Object.entries(defaults.light);
+  const owned = { ...light, ...defaults.light };
+  const darkAdded = [
+    ...Object.entries(defaults.dark),
+    ...Object.entries(owned).filter(
+      ([property]) => !(property in dark) && !(property in defaults.dark),
+    ),
+  ];
   let output = css;
-  for (const offset of insertions.reverse())
-    output = `${output.slice(0, offset)} static${output.slice(offset)}`;
-  return output;
+  for (const edit of edits.sort((left, right) => right.start - left.start))
+    output = `${output.slice(0, edit.start)}${edit.text}${output.slice(edit.end)}`;
+  const block = (entries: readonly (readonly [string, string])[]) =>
+    entries.map(([property, value]) => `    ${property}: ${value};`).join("\n");
+  return [
+    output,
+    ...(lightAdded.length === 0 ? [] : [`@theme static {\n${block(lightAdded)}\n}`]),
+    ...(darkAdded.length === 0
+      ? []
+      : [`${DARK_SCHEME_MEDIA} {\n  :root {\n${block(darkAdded)}\n  }\n}`]),
+  ].join("\n");
 };
+
+/** The default theme, lowered once: the first layer of every project's theme. */
+const DEFAULT_THEME_TAILWIND_CSS = lowerThemeCss(DEFAULT_THEME_CSS);
+
+/**
+ * What every project compiles beneath its own CSS, for a build that compiles no
+ * Tailwind: the default theme and the primitives' rules, in Tailwind's layers.
+ */
+export const BASE_STYLESHEET_CSS = [
+  "@layer theme, base, components, utilities;",
+  DEFAULT_THEME_TAILWIND_CSS,
+  PRIMITIVE_CSS,
+].join("\n");
 
 /** Compile the discovered class set into CSS with the pinned Tailwind release. */
 export const compileTailwind = async (
@@ -125,7 +206,9 @@ export const compileTailwind = async (
     '@import "tailwindcss/theme.css" layer(theme);',
     ...(options.preflight === true ? ['@import "tailwindcss/preflight.css" layer(base);'] : []),
     '@import "tailwindcss/utilities.css" layer(utilities);',
-    staticTheme(options.css ?? ""),
+    DEFAULT_THEME_TAILWIND_CSS,
+    PRIMITIVE_CSS,
+    lowerThemeCss(options.css ?? ""),
   ].join("\n");
   // `base` is the importing stylesheet's project directory; the entry sits in
   // the theme's own directory, so the theme's relative imports resolve from it.
@@ -138,14 +221,18 @@ export const compileTailwind = async (
         if (imports.brandCss === undefined)
           // oxlint-disable-next-line samva/no-try-catch-or-throw, samva/no-error-constructor -- Unreachable after resolveThemeImports; a brand import without a brand is refused before Tailwind runs.
           throw new TypeError(`${id} has no brand in this build`);
-        return Promise.resolve({ path: id, base, content: staticTheme(imports.brandCss) });
+        return Promise.resolve({ path: id, base, content: lowerThemeCss(imports.brandCss) });
       }
       const path = resolveFromDirectory(base, id.replace(/[?#].*$/, ""));
       const content = path === undefined ? undefined : imports.stylesheets.get(path);
       if (path === undefined || content === undefined)
         // oxlint-disable-next-line samva/no-try-catch-or-throw, samva/no-error-constructor -- Unreachable after resolveThemeImports; an unresolved import is refused before Tailwind runs.
         throw new TypeError(`@import ${JSON.stringify(id)} names no project stylesheet`);
-      return Promise.resolve({ path, base: projectDirectory(path), content: staticTheme(content) });
+      return Promise.resolve({
+        path,
+        base: projectDirectory(path),
+        content: lowerThemeCss(content),
+      });
     },
   });
   const all = [...new Set([...candidates, ...(options.safelist ?? [])])].sort();

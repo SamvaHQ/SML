@@ -408,8 +408,22 @@ describe("retained head rules", () => {
 
   it("warns when a custom property is only overridden inside a conditional block", () => {
     const sheet = parseStylesheet(
-      ":root{--brand:#ffffff}@media (prefers-color-scheme: dark){:root{--brand:#000000}}",
+      ":root{--brand:#ffffff}@media (min-width: 600px){:root{--brand:#000000}}",
     );
     expect(sheet.diagnostics.map((entry) => entry.code)).toEqual(["css-conditional-variable"]);
+    expect(sheet.darkVariables).toEqual({});
+  });
+
+  it("reads the dark-mode query's custom properties as the dark values", () => {
+    const sheet = parseStylesheet(
+      ":root{--brand:#ffffff}@media (prefers-color-scheme: dark){:root{--brand:#000000}}",
+    );
+    expect(sheet.diagnostics).toEqual([]);
+    expect(sheet.variables).toEqual({ "--brand": "#ffffff" });
+    expect(sheet.darkVariables).toEqual({ "--brand": "#000000" });
+    const theme = parseStylesheet(
+      "@theme{--color-brand:#ffffff}@media (prefers-color-scheme: dark){@theme{--color-brand:#000000}}",
+    );
+    expect(theme.darkVariables).toEqual({ "--color-brand": "#000000" });
   });
 });

@@ -7,11 +7,17 @@
     "index.html",
     "package.json",
     "starter.css",
+    "templates/blocks/button.tsx",
+    "templates/blocks/callout.tsx",
+    "templates/blocks/footer.tsx",
+    "templates/blocks/header.tsx",
+    "templates/blocks/hero.tsx",
+    "templates/blocks/key-value.tsx",
     "templates/welcome.tsx",
     "tests/starter-manifest.test.js",
     "theme.css",
     "tsconfig.json",
     "vite.config.ts"
   ],
-  "sha256": "75314ec339f8d047c724d6b2477ff28e998c8ad2971474fe70c3265a1089725f"
+  "sha256": "1a3237fda9d1cf0369f836a9545e72e6f5009d37674adb3ac6535b4ee902885d"
 }

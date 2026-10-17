@@ -1,5 +1,5 @@
 // oxlint-disable samva/no-hand-rolled-object-guard -- IR nodes and Babel nodes are this package's own typed data, discriminated structurally; nothing here validates external input.
-import { applyStylesheet } from "../email/cascade";
+import { applyStylesheet, DARK_CLASS_PREFIX, renderDarkRules } from "../email/cascade";
 import type { Stylesheet } from "../email/css";
 import type { TemplateDiagnostic } from "../email/diagnostics";
 import { serializeStyle } from "../email/html";
@@ -82,6 +82,41 @@ const mapTree = (
     : { if: tree.pred, then, else: otherwise };
 };
 
+/** A class tree as the IR value it was read from: a literal, or a choice between literals. */
+const treeValue = (tree: ClassTree): IrValue =>
+  "leaf" in tree
+    ? tree.leaf
+    : { if: tree.pred, then: treeValue(tree.then), else: treeValue(tree.else) };
+
+const appendClass = (classes: string, name: string | undefined): string =>
+  name === undefined ? classes : classes.trim() === "" ? name : `${classes} ${name}`;
+
+/**
+ * An element's class with the dark-mode class each pass gave it. A choice between literal class
+ * lists resolved one list per pass, so each list gains its own pass's class; any other class
+ * value gains the first pass's. `undefined` when no pass gave the element one.
+ */
+const withDarkClass = (
+  value: IrValue | undefined,
+  tree: ClassTree | undefined,
+  perPass: readonly (string | undefined)[],
+): IrValue | undefined => {
+  if (perPass.every((name) => name === undefined)) return undefined;
+  if (tree !== undefined && leavesOf(tree).length > 1) {
+    let leaf = 0;
+    const extend = (node: ClassTree): ClassTree =>
+      "leaf" in node
+        ? { leaf: appendClass(node.leaf, perPass[Math.min(leaf++, perPass.length - 1)]) }
+        : { pred: node.pred, then: extend(node.then), else: extend(node.else) };
+    return treeValue(extend(tree));
+  }
+  const name = perPass[0];
+  if (name === undefined) return value;
+  if (value === undefined) return name;
+  if (typeof value === "string") return appendClass(value, name);
+  return { concat: [value, ` ${name}`] };
+};
+
 type Item =
   | { readonly kind: "el"; readonly el: IrElement }
   | { readonly kind: "raw"; readonly raw: IrRaw };
@@ -103,6 +138,8 @@ const collect = (nodes: readonly IrNode[], into: Item[]): void => {
 interface PassResult {
   readonly styles: (Readonly<Record<string, string>> | undefined)[];
   readonly bgcolors: (string | undefined)[];
+  /** The generated dark-mode class the cascade gave each element, if any. */
+  readonly darkClasses: (string | undefined)[];
   readonly raws: string[];
 }
 
@@ -219,6 +256,8 @@ export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptio
       if (node.type === "Fragment") read(node.children, into);
       else if (node.type === "Raw") into.raws.push(node.html);
       else if (node.type === "Element") {
+        const classes = typeof node.props.class === "string" ? node.props.class.split(" ") : [];
+        into.darkClasses.push(classes.find((name) => name.startsWith(DARK_CLASS_PREFIX)));
         into.styles.push(
           node.props.style === undefined
             ? undefined
@@ -233,6 +272,7 @@ export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptio
   const results: PassResult[] = [];
   let headCss = "";
   let fontFaceCss = "";
+  const darkRules = new Map<string, string>();
   const seen = new Set<string>();
   for (let pass = 0; pass < passes; pass++) {
     const tree = shadow([root], pass, { next: 0 });
@@ -241,13 +281,14 @@ export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptio
       headCss = applied.headCss;
       fontFaceCss = applied.fontFaceCss;
     }
+    for (const [name, body] of applied.darkRules) darkRules.set(name, body);
     for (const diagnostic of applied.diagnostics) {
       const key = `${diagnostic.code}\0${diagnostic.message}`;
       if (seen.has(key)) continue;
       seen.add(key);
       options.report(diagnostic);
     }
-    const result: PassResult = { styles: [], bgcolors: [], raws: [] };
+    const result: PassResult = { styles: [], bgcolors: [], darkClasses: [], raws: [] };
     read([applied.tree], result);
     results.push(result);
   }
@@ -290,12 +331,18 @@ export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptio
               )
             : styleOf(baseStyle, node);
         const bgcolor = first?.bgcolors[ordinal];
-        const attrs =
+        const painted =
           typeof node.attrs?.bgcolor === "string" &&
           bgcolor !== undefined &&
           bgcolor !== node.attrs.bgcolor
             ? { ...node.attrs, bgcolor: tokens.toValue(bgcolor) ?? bgcolor }
             : node.attrs;
+        const darkClass = withDarkClass(
+          node.attrs?.class,
+          tree,
+          results.map((result) => result.darkClasses[ordinal]),
+        );
+        const attrs = darkClass === undefined ? painted : { ...painted, class: darkClass };
         const kids = rebuild(node.children ?? []);
         const { style: _authored, children: _children, attrs: _attrs, ...rest } = node;
         void _authored;
@@ -322,5 +369,9 @@ export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptio
       return node;
     });
 
-  return { root: rebuild([root])[0] ?? root, headCss, fontFaceCss };
+  return {
+    root: rebuild([root])[0] ?? root,
+    headCss: `${renderDarkRules(darkRules)}${headCss}`,
+    fontFaceCss,
+  };
 };

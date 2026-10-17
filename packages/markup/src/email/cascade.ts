@@ -2,6 +2,7 @@ import { isObject } from "../internal/guards";
 import type { JsxSourceLocation } from "../source-locations";
 import type { CssDeclaration, CssRule, Specificity, Stylesheet } from "./css";
 import { finalizeValue, renderHeadCss } from "./css-values";
+import { DARK_SCHEME_MEDIA } from "./dark-scheme";
 import type { EmailDiagnostic } from "./diagnostics";
 import { fontFallbackDiagnostic, fontShorthandFamilies, lacksGenericFallback } from "./font-stacks";
 import { declarationValue, escapeAttribute, kebab } from "./html";
@@ -149,16 +150,110 @@ const physicalPadding = (
 
 export interface AppliedStyles {
   readonly tree: EmailNode;
-  /** Rules that could not be inlined, ready for a `<style>` element in `<head>`. */
+  /** Rules that could not be inlined, ready for a `<style>` element in `<head>` after `darkRules`. */
   readonly headCss: string;
+  /**
+   * A generated class for each distinct set of dark-mode declarations, mapped
+   * to those declarations. An element whose inlined styles read a color the
+   * theme's dark-mode block redefines carries the class.
+   */
+  readonly darkRules: ReadonlyMap<string, string>;
   /** Project `@font-face` rules, for a `<head>` style classic Outlook cannot see. */
   readonly fontFaceCss: string;
   readonly diagnostics: readonly EmailDiagnostic[];
 }
 
+/** Generated dark-mode classes share this prefix; it is reserved for the compiler. */
+export const DARK_CLASS_PREFIX = "sml-dark-";
+
+/** A class named for its declarations, so equal sets share one rule and builds are stable. */
+const darkClassName = (body: string): string => {
+  // FNV-1a, 32-bit.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < body.length; index++) {
+    hash ^= body.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${DARK_CLASS_PREFIX}${hash.toString(36)}`;
+};
+
+const SIDES = ["top", "right", "bottom", "left"] as const;
+const BORDER_PARTS = ["width", "style", "color"] as const;
+const CORNERS = ["top-left", "top-right", "bottom-right", "bottom-left"] as const;
+const BORDER_IMAGE = ["source", "slice", "width", "outset", "repeat"].map(
+  (part) => `border-image-${part}`,
+);
+
+/**
+ * The longhands a border property writes: `border` writes the twelve per-side longhands and
+ * resets the border image, `border-top` the top three, `border-color` the four colors,
+ * `border-radius` the four corners.
+ * `undefined` for a property outside the border box.
+ */
+const borderLonghands = (property: string): readonly string[] | undefined => {
+  if (property === "border")
+    return [
+      ...SIDES.flatMap((side) => BORDER_PARTS.map((part) => `border-${side}-${part}`)),
+      ...BORDER_IMAGE,
+    ];
+  if (property === "border-image") return BORDER_IMAGE;
+  if (property === "border-radius") return CORNERS.map((corner) => `border-${corner}-radius`);
+  const side = /^border-(top|right|bottom|left)$/.exec(property)?.[1];
+  if (side !== undefined) return BORDER_PARTS.map((part) => `border-${side}-${part}`);
+  const part = /^border-(width|style|color)$/.exec(property)?.[1];
+  if (part !== undefined) return SIDES.map((each) => `border-${each}-${part}`);
+  return property.startsWith("border-") ? [property] : undefined;
+};
+
+/**
+ * Whether two declarations can override one another because they write a property in common:
+ * `background` and `background-color`, `border-color` and `border-top`, `font` and `line-height`.
+ * `border-radius` shares nothing with `border-color`.
+ */
+const overlaps = (left: string, right: string): boolean => {
+  if (left === right) return true;
+  const leftBorder = borderLonghands(left);
+  const rightBorder = borderLonghands(right);
+  if (leftBorder !== undefined || rightBorder !== undefined)
+    return (
+      leftBorder !== undefined &&
+      rightBorder !== undefined &&
+      leftBorder.some((longhand) => rightBorder.includes(longhand))
+    );
+  const sets = (shorthand: string, longhand: string) =>
+    longhand.startsWith(`${shorthand}-`) || (shorthand === "font" && longhand === "line-height");
+  return sets(left, right) || sets(right, left);
+};
+
+/** Add a class to an element's props, whichever of `class` and `className` it uses. */
+const withClass = (
+  props: Readonly<Record<string, unknown>>,
+  name: string,
+): Readonly<Record<string, unknown>> => {
+  const key =
+    typeof props.class === "string" || props.className === undefined ? "class" : "className";
+  const current = props[key];
+  return {
+    ...props,
+    [key]: typeof current === "string" && current.trim() !== "" ? `${current} ${name}` : name,
+  };
+};
+
+/** The generated dark-mode classes as one `@media (prefers-color-scheme:dark)` block, written as the head CSS writes its media queries. */
+export const renderDarkRules = (rules: ReadonlyMap<string, string>): string =>
+  rules.size === 0
+    ? ""
+    : `${DARK_SCHEME_MEDIA.replace(": ", ":")}{${[...rules]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([name, body]) => `.${name}{${body}}`)
+        .join("")}}`;
+
 /**
  * Resolve every stylesheet against the tree: inline what a client will honor on
- * the element, and keep the rest for `<head>`.
+ * the element, and keep the rest for `<head>`. Where the sheet has a dark-mode
+ * theme, an element whose inlined styles read a color it redefines also gets a
+ * generated class whose dark-mode rule restates those styles at their dark
+ * values.
  */
 export const applyStylesheet = (
   root: EmailNode,
@@ -166,6 +261,16 @@ export const applyStylesheet = (
   options: { readonly knownClasses?: ReadonlySet<string> } = {},
 ): AppliedStyles => {
   const diagnostics: EmailDiagnostic[] = [...sheet.diagnostics];
+  const hasDarkTheme = Object.keys(sheet.darkVariables).length > 0;
+  const darkRules = new Map<string, string>();
+  const darkClassFor = (declarations: readonly (readonly [string, string])[]): string => {
+    const body = declarations
+      .map(([property, value]) => `${property}:${value}!important`)
+      .join(";");
+    const name = darkClassName(body);
+    darkRules.set(name, body);
+    return name;
+  };
   const inlinable: CssRule[] = [];
   const retained: CssRule[] = [];
   const styledClasses = new Set<string>();
@@ -212,6 +317,7 @@ export const applyStylesheet = (
     children: readonly EmailNode[],
     ancestry: Ancestry | undefined,
     variables: Readonly<Record<string, string>>,
+    darkScope: Readonly<Record<string, string>>,
     writing: WritingContext,
   ): readonly EmailNode[] => {
     const previous: EmailElementNode[] = [];
@@ -222,6 +328,7 @@ export const applyStylesheet = (
             child,
             { element: child, parent: ancestry, previous: [...previous] },
             variables,
+            darkScope,
             writing,
           );
           previous.push(child);
@@ -246,6 +353,7 @@ export const applyStylesheet = (
     element: EmailElementNode,
     ancestry: Ancestry,
     inherited: Readonly<Record<string, string>>,
+    inheritedDark: Readonly<Record<string, string>>,
     inheritedWriting: WritingContext,
   ): EmailNode => {
     const conditionalWriting = conditionalWritingRules.some((rule) => {
@@ -290,6 +398,9 @@ export const applyStylesheet = (
       if (property.startsWith("--")) declared[property] = entry.value;
     const variables =
       Object.keys(declared).length === 0 ? inherited : { ...inherited, ...declared };
+    // A custom property declared on an element holds in both modes, as it would in a browser.
+    const darkScope =
+      Object.keys(declared).length === 0 ? inheritedDark : { ...inheritedDark, ...declared };
     const inheritedValue = (
       property: string,
       parent: string,
@@ -347,28 +458,81 @@ export const applyStylesheet = (
       }
     }
     const bgcolor = element.props.bgcolor;
-    const props =
+    const lightProps =
       typeof bgcolor === "string" && bgcolor.includes("var(")
         ? { ...element.props, bgcolor: finalizeValue(bgcolor, variables) }
         : element.props;
+    // Dark mode: every inlined declaration that reads a color the dark-mode block redefines, at
+    // its dark value, and a themed `bgcolor` as the background it paints.
+    // A changed declaration is restated with every winning declaration that can override it or
+    // that it can override, in cascade order, so a longhand that wins over a shorthand (an inline
+    // `background-color` after a class's `background`) still wins in dark mode, and nothing it
+    // cannot touch (a `border-radius` beside a `border-color`) is pinned with `!important`.
+    const dark: [string, string][] = [];
+    if (hasDarkTheme) {
+      const changed: string[] = [];
+      for (const [property, entry] of winners) {
+        if (property.startsWith("--") || !entry.value.includes("var(")) continue;
+        if (finalizeValue(entry.value, darkScope) !== finalizeValue(entry.value, variables))
+          changed.push(property);
+      }
+      // Restating a declaration with `!important` lets it beat everything it overlaps, so each
+      // restated declaration brings in the winners it overlaps, until none is added.
+      const restated = new Set(changed);
+      for (let grew = changed.length > 0; grew;) {
+        grew = false;
+        for (const property of winners.keys())
+          if (
+            !property.startsWith("--") &&
+            !restated.has(property) &&
+            [...restated].some((candidate) => overlaps(candidate, property))
+          ) {
+            restated.add(property);
+            grew = true;
+          }
+      }
+      for (const [property, entry] of [...winners].sort(([, left], [, right]) =>
+        compareRank(left.key, right.key),
+      ))
+        if (restated.has(property)) dark.push([property, finalizeValue(entry.value, darkScope)]);
+      if (
+        typeof bgcolor === "string" &&
+        bgcolor.includes("var(") &&
+        !winners.has("background-color") &&
+        !winners.has("background")
+      ) {
+        const value = finalizeValue(bgcolor, darkScope);
+        if (value !== finalizeValue(bgcolor, variables)) dark.push(["background-color", value]);
+      }
+    }
+    const darkClass = dark.length === 0 ? undefined : darkClassFor(dark);
+    const props = darkClass === undefined ? lightProps : withClass(lightProps, darkClass);
     return EmailNode.Element({
       ...element,
       props: emitted.length === 0 ? props : { ...props, style: Object.fromEntries(physical) },
-      children: visitChildren(element.children, ancestry, variables, writing),
+      children: visitChildren(element.children, ancestry, variables, darkScope, writing),
     });
   };
 
+  const rootDark = { ...sheet.variables, ...sheet.darkVariables };
   const tree =
     root.type === "Element"
       ? applyTo(
           root,
           { element: root, parent: undefined, previous: [] },
           sheet.variables,
+          rootDark,
           horizontalWriting,
         )
       : root.type === "Fragment"
         ? EmailNode.Fragment({
-            children: visitChildren(root.children, undefined, sheet.variables, horizontalWriting),
+            children: visitChildren(
+              root.children,
+              undefined,
+              sheet.variables,
+              rootDark,
+              horizontalWriting,
+            ),
           })
         : root;
 
@@ -389,7 +553,8 @@ export const applyStylesheet = (
     });
   return {
     tree,
-    headCss: renderHeadCss(retained, sheet.headAtRules, sheet.variables),
+    headCss: renderHeadCss(retained, sheet.headAtRules, sheet.variables, sheet.darkVariables),
+    darkRules,
     fontFaceCss: sheet.fontFaces.map((face) => face.css).join(""),
     diagnostics,
   };
