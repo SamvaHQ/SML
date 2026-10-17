@@ -72,7 +72,11 @@ export const SIGNATURE_PARTIAL = `import { Section } from "@samva/markup/email";
 export const Signature = () => <Section><p>The Samva team</p></Section>;
 `;
 
-export const THEME = "@theme { --color-brand: #123456; }\n";
+export const THEME = `@theme { --color-brand: #123456; }
+@media (prefers-color-scheme: dark) {
+  @theme { --color-brand: #a5c8ff; }
+}
+`;
 
 export const writeFiles = async (
   root: string,

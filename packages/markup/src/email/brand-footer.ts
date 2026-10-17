@@ -1,5 +1,5 @@
 import type { EmailContent } from "../template";
-import { brandTailwindCss, parseBrandCss } from "../theme-css";
+import { parseBrandCss, printBrandCss } from "../theme-css";
 import {
   BRAND_COMPONENT_CLASSES,
   brandComponents,
@@ -8,7 +8,7 @@ import {
   type EmailBrand,
 } from "./brand";
 import type { BrandPlugin } from "./brand-plugin";
-import { applyStylesheet } from "./cascade";
+import { applyStylesheet, renderDarkRules } from "./cascade";
 import { parseStylesheet } from "./css";
 import { EmailCompileError } from "./diagnostics";
 import { compileEmail, renderEmailContent, type RenderedEmail } from "./render";
@@ -28,13 +28,18 @@ const brandTheme = (brand: EmailBrand, plugin: BrandPlugin): string => {
         origins: [],
       })),
     });
-  return brandTailwindCss(parsed.value);
+  return printBrandCss(parsed.value);
 };
 
 /** A footer block for the send path to append, and its plain-text tail. */
 export interface RenderedBrandFooter {
   readonly html: string;
   readonly text: string;
+  /**
+   * The rules the footer needs in the message's `<head>`: its dark-mode colors and the
+   * `dark:` swap of the brand logo. Empty when it needs none.
+   */
+  readonly headCss: string;
 }
 
 /**
@@ -53,14 +58,18 @@ export const renderBrandFooter = async (
     css: brandTheme(brand, plugin),
   });
   const node = brandComponents(brand, plugin).BrandFooter({});
-  if (node === null) return { html: "", text: "" };
+  if (node === null) return { html: "", text: "", headCss: "" };
   const styled = applyStylesheet(node, parseStylesheet(tailwind.css, { origin: plugin.specifier }));
   const compiled = compileEmail(styled.tree, { brandPlugin: plugin });
   const rendered = options.unsubscribe
     ? compiled
     : withoutUnsubscribeRow({ html: compiled.html, text: compiled.text }, plugin);
   const text = (rendered.text ?? "").trim();
-  return { html: rendered.html ?? "", text: text === "" ? "" : `\n\n---\n${text}` };
+  return {
+    html: rendered.html ?? "",
+    text: text === "" ? "" : `\n\n---\n${text}`,
+    headCss: `${renderDarkRules(styled.darkRules)}${styled.headCss}`,
+  };
 };
 
 /**

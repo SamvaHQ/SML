@@ -1,4 +1,5 @@
 import type { CssRule } from "./css";
+import { isDarkSchemeCondition } from "./dark-scheme";
 
 // The half of the CSS pipeline that runs at render time. Parsing needs css-tree
 // and happens once, at build time; matching and value resolution run per render
@@ -201,8 +202,10 @@ export const renderHeadCss = (
   rules: readonly CssRule[],
   headAtRules: readonly string[],
   variables: Readonly<Record<string, string>>,
+  darkVariables: Readonly<Record<string, string>> = {},
 ): string => {
   const blocks: string[] = [...headAtRules];
+  const darkScope = { ...variables, ...darkVariables };
   const grouped = new Map<string, { conditions: readonly string[]; rules: CssRule[] }>();
   for (const rule of rules) {
     const conditions = rule.conditions.map(downlevelMediaQuery);
@@ -212,6 +215,8 @@ export const renderHeadCss = (
     else bucket.rules.push(rule);
   }
   for (const { conditions, rules: bucket } of grouped.values()) {
+    // A rule inside the dark-mode query reads every theme color at its dark value.
+    const scope = isDarkSchemeCondition(conditions) ? darkScope : variables;
     const body = bucket
       .map((rule) => {
         const declarations = rule.declarations
@@ -220,7 +225,7 @@ export const renderHeadCss = (
             (declaration) =>
               // Retained rules must beat the styles inlined onto the same
               // element, which is the only reason they were retained.
-              `${declaration.property}:${finalizeValue(declaration.value, variables)}!important`,
+              `${declaration.property}:${finalizeValue(declaration.value, scope)}!important`,
           )
           .join(";");
         return declarations === "" ? "" : `${rule.selector}{${declarations}}`;

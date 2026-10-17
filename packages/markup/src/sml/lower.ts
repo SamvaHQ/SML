@@ -49,6 +49,8 @@ export interface Ctx {
   readonly depth: number;
   /** Inside a chunked `<Columns each>`: the width a `Column` that states none takes. */
   readonly columnWidth?: IrValue | undefined;
+  /** Inside a `<Columns>` that stacks on a narrow viewport: its `Column`s carry the stacking class. */
+  readonly columnStack?: boolean | undefined;
 }
 
 const MAX_DEPTH = 40;

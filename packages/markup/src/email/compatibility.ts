@@ -8,6 +8,7 @@ import type { EmittedPosition } from "../preview";
 import type { JsxSourceLocation } from "../source-locations";
 import { assessCompatibility } from "./compatibility-assessment";
 import { compatibilityContext } from "./compatibility-context";
+import { checkEmailContrast } from "./contrast";
 import type { EmailCompatibilityAssessment, EmailDiagnostic } from "./diagnostics";
 
 // Compatibility findings come from caniemail's rules applied to the document the
@@ -239,6 +240,7 @@ export const checkEmailCompatibility = (input: CompatibilityInput): readonly Ema
       provenance: `${COMPATIBILITY_PROVENANCE.rules} (caniemail data ${COMPATIBILITY_PROVENANCE.apiVersion}, updated ${COMPATIBILITY_PROVENANCE.lastUpdate})`,
     });
   }
+  findings.push(...checkEmailContrast(input));
   return findings.sort((left, right) => left.code.localeCompare(right.code));
 };
 

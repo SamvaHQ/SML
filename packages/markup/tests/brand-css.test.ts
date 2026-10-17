@@ -1,10 +1,14 @@
 import { describe, expect, it } from "@effect/vitest";
 
+import { lowerThemeCss } from "../src/email/tailwind";
 import {
-  brandTailwindCss,
   contrastForeground,
+  DEFAULT_THEME,
+  DEFAULT_THEME_CSS,
+  foregroundDefaults,
   parseBrandCss,
   printBrandCss,
+  THEME_COLORS,
   type BrandCss,
 } from "../src/theme-css";
 
@@ -27,13 +31,13 @@ const BRAND = `@font-face {
   font-display: swap;
 }
 @theme {
-  --color-brand: #e11d48;
-  --font-body: "Acme Sans", Helvetica, sans-serif;
-  --radius-card: 8px;
+  --color-primary: #e11d48;
+  --font-sans: "Acme Sans", Helvetica, sans-serif;
+  --radius: 8px;
 }
 @media (prefers-color-scheme: dark) {
   @theme {
-    --color-brand: #fb7185;
+    --color-primary: #fb7185;
   }
 }`;
 
@@ -41,11 +45,11 @@ describe("brand theme CSS", () => {
   it("reads theme variables, dark-mode colors and https WOFF2 fonts", () => {
     expect(parsed(BRAND)).toEqual({
       variables: {
-        "--color-brand": "#e11d48",
-        "--font-body": '"Acme Sans", Helvetica, sans-serif',
-        "--radius-card": "8px",
+        "--color-primary": "#e11d48",
+        "--font-sans": '"Acme Sans", Helvetica, sans-serif',
+        "--radius": "8px",
       },
-      dark: { "--color-brand": "#fb7185" },
+      dark: { "--color-primary": "#fb7185" },
       fontFaces: [
         {
           family: "Acme Sans",
@@ -65,11 +69,29 @@ describe("brand theme CSS", () => {
     expect(printBrandCss({ variables: {}, dark: {}, fontFaces: [] })).toBe("");
   });
 
-  it("lowers dark-mode colors to -dark theme variables for Tailwind", () => {
-    const lowered = parsed(brandTailwindCss(parsed(BRAND)));
-    expect(lowered.dark).toEqual({});
-    expect(lowered.variables["--color-brand"]).toBe("#e11d48");
-    expect(lowered.variables["--color-brand-dark"]).toBe("#fb7185");
+  it("lowers a dark-mode block to a :root rule in the dark query, nothing to -dark names", () => {
+    const lowered = lowerThemeCss(BRAND);
+    expect(lowered).toContain("@theme static {");
+    expect(lowered).toMatch(
+      /@media \(prefers-color-scheme: dark\) \{\s*:root\s*\{\s*--color-primary: #fb7185;/,
+    );
+    expect(lowered).not.toContain("-dark");
+    expect(lowered).not.toMatch(/@theme[^{]*\{\s*--color-primary: #fb7185/);
+  });
+
+  it("accepts the radius token", () => {
+    expect(parsed("@theme { --radius: 12px; }").variables["--radius"]).toBe("12px");
+  });
+
+  it("compiles a default theme that sets every semantic color in both modes", () => {
+    expect(parsed(DEFAULT_THEME_CSS)).toEqual(DEFAULT_THEME);
+    for (const name of THEME_COLORS) {
+      expect(DEFAULT_THEME.variables[`--color-${name}`]).toBeDefined();
+      expect(DEFAULT_THEME.dark[`--color-${name}`]).toBeDefined();
+    }
+    expect(DEFAULT_THEME.variables["--radius"]).toBeDefined();
+    expect(DEFAULT_THEME.variables["--font-sans"]).toBeDefined();
+    expect(DEFAULT_THEME.variables["--font-heading"]).toBeDefined();
   });
 
   it("accepts an empty brand", () => {
@@ -92,15 +114,10 @@ describe("brand theme CSS", () => {
     expect(codes("@theme { --color-a: #000; --color-a: #fff; }")).toEqual(["brand-css-duplicate"]);
   });
 
-  it("keeps the dark-mode block to colors, and to names the light block does not claim", () => {
-    expect(codes("@media (prefers-color-scheme: dark) { @theme { --radius-card: 2px; } }")).toEqual(
-      ["brand-css-dark-namespace"],
-    );
-    expect(
-      codes(
-        "@theme { --color-brand-dark: #111; } @media (prefers-color-scheme: dark) { @theme { --color-brand: #222; } }",
-      ),
-    ).toEqual(["brand-css-dark-conflict"]);
+  it("keeps the dark-mode block to colors", () => {
+    expect(codes("@media (prefers-color-scheme: dark) { @theme { --radius: 2px; } }")).toEqual([
+      "brand-css-dark-namespace",
+    ]);
   });
 
   it("accepts only https WOFF2 font sources", () => {
@@ -156,33 +173,90 @@ describe("text on brand", () => {
       expect(contrastForeground(color)).toBeUndefined();
   });
 
-  it("compiles the contrast pick where the brand leaves the foreground out", () => {
-    const lowered = parsed(
-      brandTailwindCss(
-        parsed(
-          "@theme { --color-brand: #facc15; } @media (prefers-color-scheme: dark) { @theme { --color-brand: #1e3a8a; } }",
-        ),
+  it("picks a foreground per mode for each fill the layer sets without one", () => {
+    expect(
+      foregroundDefaults(
+        { "--color-primary": "#facc15", "--color-accent": "#1e3a8a" },
+        { "--color-primary": "#1e3a8a" },
       ),
-    );
-    expect(lowered.variables["--color-brand-foreground"]).toBe("#000000");
-    expect(lowered.variables["--color-brand-foreground-dark"]).toBe("#ffffff");
+    ).toEqual({
+      light: { "--color-primary-foreground": "#000000", "--color-accent-foreground": "#ffffff" },
+      dark: { "--color-primary-foreground": "#ffffff" },
+    });
   });
 
-  it("keeps a foreground the brand sets, in light and dark mode", () => {
-    const lowered = parsed(
-      brandTailwindCss(
-        parsed(
-          "@theme { --color-brand: #facc15; --color-brand-foreground: #7c2d12; } @media (prefers-color-scheme: dark) { @theme { --color-brand: #1e3a8a; --color-brand-foreground: #bfdbfe; } }",
-        ),
+  it("keeps a foreground the layer sets and guesses nothing for a color it cannot read", () => {
+    expect(
+      foregroundDefaults(
+        { "--color-primary": "#facc15", "--color-primary-foreground": "#7c2d12" },
+        { "--color-primary": "#1e3a8a", "--color-primary-foreground": "#bfdbfe" },
       ),
-    );
-    expect(lowered.variables["--color-brand-foreground"]).toBe("#7c2d12");
-    expect(lowered.variables["--color-brand-foreground-dark"]).toBe("#bfdbfe");
+    ).toEqual({ light: {}, dark: {} });
+    expect(foregroundDefaults({ "--color-primary": "var(--x)" }, {})).toEqual({
+      light: {},
+      dark: {},
+    });
   });
 
-  it("sets no dark foreground without a dark brand color, and none for a color it cannot read", () => {
-    const lowered = parsed(brandTailwindCss(parsed("@theme { --color-brand: var(--x); }")));
-    expect(lowered.variables["--color-brand-foreground"]).toBeUndefined();
-    expect(lowered.variables["--color-brand-foreground-dark"]).toBeUndefined();
+  it("compiles the contrast pick where the layer leaves the foreground out", () => {
+    const lowered = lowerThemeCss(
+      "@theme { --color-primary: #facc15; } @media (prefers-color-scheme: dark) { @theme { --color-primary: #1e3a8a; } }",
+    );
+    expect(lowered).toContain("--color-primary-foreground: #000000;");
+    expect(lowered).toMatch(/:root \{[^}]*--color-primary-foreground: #ffffff;/);
+  });
+});
+
+describe("lowerThemeCss", () => {
+  // Every `:root` declaration list inside a dark-mode query, joined.
+  const darkBlock = (css: string): string =>
+    [...css.matchAll(/@media \(prefers-color-scheme: dark\)\s*\{([^@]*?\})\s*\}/g)]
+      .map((match) => match[1])
+      .join("\n");
+
+  it("marks every @theme static and leaves an already static one alone", () => {
+    expect(lowerThemeCss("@theme { --color-primary: #111111; }")).toContain("@theme static {");
+    const lowered = lowerThemeCss("@theme static { --color-border: #111111; }");
+    expect(lowered.match(/static/g)).toHaveLength(1);
+  });
+
+  it("turns the dark @theme into :root inside the query", () => {
+    const lowered = lowerThemeCss(
+      "@theme { --color-primary: #111111; --color-border: #dddddd; } @media (prefers-color-scheme: dark) { @theme { --color-primary: #eeeeee; --color-border: #333333; } }",
+    );
+    const dark = darkBlock(lowered);
+    expect(dark).toContain(":root");
+    expect(dark).not.toContain("@theme");
+    expect(dark).toContain("--color-primary: #eeeeee;");
+  });
+
+  it("carries a color the layer sets in light but not in dark into dark", () => {
+    const lowered = lowerThemeCss(
+      "@theme { --color-primary: #111111; --color-border: #dddddd; } @media (prefers-color-scheme: dark) { @theme { --color-border: #333333; } }",
+    );
+    const dark = darkBlock(lowered);
+    expect(dark).toContain("--color-primary: #111111;");
+    expect(dark).toContain("--color-border: #333333;");
+    expect(dark).not.toContain("--color-border: #dddddd;");
+  });
+
+  it("carries a light-only color into dark even with no dark block", () => {
+    const dark = darkBlock(lowerThemeCss("@theme { --color-primary: #111111; }"));
+    expect(dark).toContain("--color-primary: #111111;");
+  });
+
+  it("adds fill foregrounds in light and dark and keeps one the layer sets", () => {
+    const lowered = lowerThemeCss(
+      "@theme { --color-primary: #facc15; --color-accent: #1e3a8a; --color-accent-foreground: #bfdbfe; } @media (prefers-color-scheme: dark) { @theme { --color-primary: #1e3a8a; } }",
+    );
+    expect(lowered).toContain("--color-primary-foreground: #000000;");
+    expect(darkBlock(lowered)).toContain("--color-primary-foreground: #ffffff;");
+    expect(lowered).not.toContain("--color-accent-foreground: #ffffff");
+    expect(lowered).toContain("--color-accent-foreground: #bfdbfe;");
+  });
+
+  it("adds nothing for a layer that sets no theme", () => {
+    expect(lowerThemeCss("")).toBe("");
+    expect(lowerThemeCss(".a { color: red; }")).toBe(".a { color: red; }");
   });
 });

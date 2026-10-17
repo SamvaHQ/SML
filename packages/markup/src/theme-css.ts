@@ -8,8 +8,10 @@ import {
 
 import type { Diagnostic, Span } from "./diagnostic-model";
 import { parseColor } from "./email/css-color";
+import { isDarkSchemeQuery } from "./email/dark-scheme";
 
-// A brand theme is the CSS a brand contributes to every project that imports
+// A theme sets the semantic tokens below in light mode and, in its dark-mode
+// block, the colors that change in dark mode. A brand theme is the CSS a brand contributes to every project that imports
 // the brand. It is variables and fonts only, and the grammar is closed:
 //
 //   file       = { theme | dark | font-face }
@@ -47,15 +49,20 @@ const BRAND_NAMESPACES = [
   "--text-",
   "--leading-",
   "--tracking-",
-  "--radius-",
+  "--radius",
   "--spacing",
   "--container-",
   "--shadow-",
 ] as const;
 
+/** `--color-` names a prefix; `--radius` is the variable itself or a `--radius-*` prefix. */
+const inNamespace = (property: string, namespace: string): boolean =>
+  namespace.endsWith("-")
+    ? property.startsWith(namespace)
+    : property === namespace || property.startsWith(`${namespace}-`);
+
 const BRAND_PROPERTY = /^--[a-z][a-z0-9-]*$/;
 const BRAND_UNSAFE_VALUE = /[{};<>\\@]|url\s*\(|expression\s*\(|\/\*/i;
-const BRAND_DARK_MEDIA = /^\(\s*prefers-color-scheme\s*:\s*dark\s*\)$/i;
 const BRAND_FONT_DESCRIPTORS = new Set([
   "font-family",
   "src",
@@ -64,9 +71,6 @@ const BRAND_FONT_DESCRIPTORS = new Set([
   "font-display",
   "unicode-range",
 ]);
-
-/** The theme variable a dark-mode color lowers to: `--color-brand` → `--color-brand-dark`. */
-export const darkVariableName = (property: string): string => `${property}-dark`;
 
 const spanOfNode = (node: CssNode): Span => ({
   start: node.loc?.start.offset ?? 0,
@@ -137,7 +141,7 @@ export const parseBrandCss = (css: string): Result<BrandCss, ReadonlyArray<Diagn
         );
         continue;
       }
-      if (!BRAND_NAMESPACES.some((namespace) => property.startsWith(namespace))) {
+      if (!BRAND_NAMESPACES.some((namespace) => inNamespace(property, namespace))) {
         report(
           "brand-css-namespace",
           `${property} is outside the brand namespaces (${BRAND_NAMESPACES.map((namespace) => (namespace.endsWith("-") ? `${namespace}*` : namespace)).join(", ")}).`,
@@ -266,7 +270,7 @@ export const parseBrandCss = (css: string): Result<BrandCss, ReadonlyArray<Diagn
         if (
           name === "media" &&
           node.prelude !== null &&
-          BRAND_DARK_MEDIA.test(generateCss(node.prelude).trim())
+          isDarkSchemeQuery(generateCss(node.prelude))
         ) {
           for (const child of node.block.children) {
             if (child.type === "Atrule" && child.name.toLowerCase() === "theme")
@@ -287,14 +291,6 @@ export const parseBrandCss = (css: string): Result<BrandCss, ReadonlyArray<Diagn
         spanOfNode(node),
       );
     }
-
-  for (const property of Object.keys(dark))
-    if (darkVariableName(property) in variables)
-      report(
-        "brand-css-dark-conflict",
-        `${darkVariableName(property)} and the dark-mode ${property} name the same theme variable; keep one.`,
-        { start: 0, end: 0 },
-      );
 
   return diagnostics.length > 0
     ? Result.err(diagnostics)
@@ -338,11 +334,108 @@ export const printBrandCss = (brand: BrandCss): string => {
   return blocks.length === 0 ? "" : `${blocks.join("\n\n")}\n`;
 };
 
-// ── Text on brand ───────────────────────────────────────────────────────────
+// ── Vocabulary ──────────────────────────────────────────────────────────────
 
-/** The brand color, and the text color that sits on it. */
-export const BRAND_COLOR_VARIABLE = "--color-brand";
-export const BRAND_FOREGROUND_VARIABLE = "--color-brand-foreground";
+/**
+ * The semantic color tokens, as Tailwind color names (`bg-card`,
+ * `text-primary-foreground`, `border-border`), each with the role a block uses
+ * it for. A block reads only these, so swapping the theme reskins it.
+ */
+export const THEME_COLOR_ROLES = {
+  background: "The page, behind everything.",
+  foreground: "Text on the page.",
+  card: "A surface that groups the message's content.",
+  "card-foreground": "Text on a card.",
+  primary: "The main action's fill (a button), and links.",
+  "primary-foreground": "Text on a primary fill.",
+  secondary: "A quieter action's fill.",
+  "secondary-foreground": "Text on a secondary fill.",
+  muted: "A subdued surface: a code block, a table header.",
+  "muted-foreground":
+    "Secondary text on the page, a card or a muted surface: labels, captions, the footer.",
+  accent: "A highlighted surface: a callout, a selected row.",
+  "accent-foreground": "Text on an accent surface.",
+  border: "Rules, dividers and outlines.",
+} as const;
+
+export const THEME_COLORS = Object.keys(
+  THEME_COLOR_ROLES,
+) as readonly (keyof typeof THEME_COLOR_ROLES)[];
+
+export type ThemeColor = (typeof THEME_COLORS)[number];
+
+/**
+ * The non-color tokens: the corner radius (`rounded`; `rounded-sm` to `rounded-xl` follow it) and
+ * the body and heading families (`font-sans`, `font-heading`).
+ */
+export const THEME_TOKENS = ["--radius", "--font-sans", "--font-heading"] as const;
+
+const colorVariables = (colors: Readonly<Record<ThemeColor, string>>): Record<string, string> =>
+  Object.fromEntries(THEME_COLORS.map((name) => [`--color-${name}`, colors[name]]));
+
+/**
+ * The theme every project compiles with, beneath its own: a neutral light and
+ * dark palette, an 8px radius and the system sans-serif stack. A project's
+ * `theme.css`, its imported stylesheets and its brand layer over it.
+ */
+export const DEFAULT_THEME: BrandCss = {
+  variables: {
+    ...colorVariables({
+      background: "#ffffff",
+      foreground: "#0a0a0a",
+      card: "#ffffff",
+      "card-foreground": "#0a0a0a",
+      primary: "#171717",
+      "primary-foreground": "#fafafa",
+      secondary: "#f5f5f5",
+      "secondary-foreground": "#171717",
+      muted: "#f5f5f5",
+      "muted-foreground": "#737373",
+      accent: "#f5f5f5",
+      "accent-foreground": "#171717",
+      border: "#e5e5e5",
+    }),
+    "--radius": "8px",
+    // The corner scale follows `--radius`, so a theme sets one value: `rounded-sm` for small
+    // marks, `rounded-md` for controls, `rounded-lg` (`rounded`) for blocks, `rounded-xl` for
+    // the outermost card.
+    "--radius-sm": "calc(var(--radius) - 4px)",
+    "--radius-md": "calc(var(--radius) - 2px)",
+    "--radius-lg": "var(--radius)",
+    "--radius-xl": "calc(var(--radius) + 4px)",
+    "--font-sans":
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    "--font-heading": "var(--font-sans)",
+  },
+  dark: colorVariables({
+    background: "#0a0a0a",
+    foreground: "#fafafa",
+    card: "#171717",
+    "card-foreground": "#fafafa",
+    primary: "#fafafa",
+    "primary-foreground": "#171717",
+    secondary: "#262626",
+    "secondary-foreground": "#fafafa",
+    muted: "#262626",
+    "muted-foreground": "#a3a3a3",
+    accent: "#262626",
+    "accent-foreground": "#fafafa",
+    border: "#2e2e2e",
+  }),
+  fontFaces: [],
+};
+
+/** `DEFAULT_THEME` as theme CSS. */
+export const DEFAULT_THEME_CSS = printBrandCss(DEFAULT_THEME);
+
+// ── Text on fills ───────────────────────────────────────────────────────────
+
+/** The fills whose text color a brand may leave out: `--color-primary` and `--color-primary-foreground`, and so on. */
+export const FILL_COLORS = [
+  "primary",
+  "secondary",
+  "accent",
+] as const satisfies readonly ThemeColor[];
 
 /** WCAG relative luminance of an sRGB channel triple in 0–1. */
 const relativeLuminance = (r: number, g: number, b: number): number => {
@@ -372,51 +465,31 @@ export const contrastForeground = (color: string): "#000000" | "#ffffff" | undef
 };
 
 /**
- * The text-on-brand colors a brand gets when it leaves them out: for the light
- * theme and, when the brand sets a dark-mode brand color, for dark mode. Each
- * is the `contrastForeground` of the brand color it sits on. A brand that sets
- * the foreground, or whose brand color does not evaluate, gets no default.
+ * The text colors a theme layer gets for the fills it sets without one: for
+ * each of `FILL_COLORS`, the `contrastForeground` of the fill, in light mode
+ * and, where the layer's dark-mode block sets the fill, in dark mode. A layer
+ * that sets the foreground, or whose fill does not evaluate, gets no default.
+ * Every build lowers each theme layer with these, so stored theme CSS never
+ * carries them.
  */
-export const brandForegroundDefaults = (
-  brand: BrandCss,
-): { readonly light?: string | undefined; readonly dark?: string | undefined } => {
-  const light =
-    brand.variables[BRAND_FOREGROUND_VARIABLE] === undefined &&
-    brand.variables[BRAND_COLOR_VARIABLE] !== undefined
-      ? contrastForeground(brand.variables[BRAND_COLOR_VARIABLE])
-      : undefined;
-  const darkBrand = brand.dark[BRAND_COLOR_VARIABLE];
-  const dark =
-    darkBrand !== undefined &&
-    brand.dark[BRAND_FOREGROUND_VARIABLE] === undefined &&
-    brand.variables[darkVariableName(BRAND_FOREGROUND_VARIABLE)] === undefined
-      ? contrastForeground(darkBrand)
-      : undefined;
-  return { light, dark };
+export const foregroundDefaults = (
+  light: Readonly<Record<string, string>>,
+  dark: Readonly<Record<string, string>>,
+): {
+  readonly light: Readonly<Record<string, string>>;
+  readonly dark: Readonly<Record<string, string>>;
+} => {
+  const defaults = (colors: Readonly<Record<string, string>>): Record<string, string> =>
+    Object.fromEntries(
+      FILL_COLORS.flatMap((fill) => {
+        const color = colors[`--color-${fill}`];
+        const foreground = `--color-${fill}-foreground`;
+        const picked =
+          color === undefined || colors[foreground] !== undefined
+            ? undefined
+            : contrastForeground(color);
+        return picked === undefined ? [] : [[foreground, picked]];
+      }),
+    );
+  return { light: defaults(light), dark: defaults(dark) };
 };
-
-/**
- * A brand theme as flat theme variables, the way a build compiles it. Email
- * inlining resolves `var()` once, so a dark-mode `@theme` cannot switch a
- * value at run time; each dark color lowers to its `-dark` theme variable,
- * which `dark:` utilities read (`dark:bg-brand-dark`). A text-on-brand color
- * the brand leaves out is filled in by `brandForegroundDefaults`, so every
- * build compiles the same default and the stored CSS never carries it.
- */
-export const brandThemeVariables = (brand: BrandCss): Readonly<Record<string, string>> => {
-  const defaults = brandForegroundDefaults(brand);
-  return {
-    ...brand.variables,
-    ...(defaults.light === undefined ? {} : { [BRAND_FOREGROUND_VARIABLE]: defaults.light }),
-    ...Object.fromEntries(
-      Object.entries(brand.dark).map(([property, value]) => [darkVariableName(property), value]),
-    ),
-    ...(defaults.dark === undefined
-      ? {}
-      : { [darkVariableName(BRAND_FOREGROUND_VARIABLE)]: defaults.dark }),
-  };
-};
-
-/** The stylesheet Tailwind compiles for the theme's brand import: `brandThemeVariables` and the font faces. */
-export const brandTailwindCss = (brand: BrandCss): string =>
-  printBrandCss({ fontFaces: brand.fontFaces, variables: brandThemeVariables(brand), dark: {} });

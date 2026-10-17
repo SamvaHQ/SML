@@ -11,9 +11,9 @@ const entry = (className: string) =>
   `/** @jsxImportSource @samva/markup/email */\nexport const view = () => <p className="${className}">hi</p>;`;
 
 const STARTER = `@theme {
-  --color-brand: #4f46e5;
+  --color-primary: #4f46e5;
   --color-surface: #f4f4f5;
-  --font-body: Helvetica, sans-serif;
+  --font-sans: Helvetica, sans-serif;
 }`;
 
 const BRAND: EmailBrand = {
@@ -23,13 +23,13 @@ const BRAND: EmailBrand = {
   src: url("https://cdn.acme.test/acme-sans.woff2") format("woff2");
 }
 @theme {
-  --color-brand: #e11d48;
+  --color-primary: #e11d48;
   --color-accent: #0ea5e9;
-  --font-body: "Acme Sans", Helvetica, sans-serif;
+  --font-sans: "Acme Sans", Helvetica, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   @theme {
-    --color-brand: #fb7185;
+    --color-primary: #fb7185;
   }
 }`,
 };
@@ -56,19 +56,22 @@ describe("theme imports", () => {
       {
         "theme.css": theme,
         "starter.css": STARTER,
-        "emails/welcome.tsx": entry("bg-brand text-accent bg-surface font-body dark:bg-brand-dark"),
+        "emails/welcome.tsx": entry("bg-primary text-accent bg-surface font-sans"),
       },
       { ...options, tailwind: { css: theme }, brand: BRAND },
     );
     expect(project.diagnostics).toEqual([]);
     const sheet = registered(project.tailwindSheet);
     // The brand beats the starter; the project beats the brand.
-    expect(sheet.variables["--color-brand"]).toBe("#e11d48");
+    expect(sheet.variables["--color-primary"]).toBe("#e11d48");
     expect(sheet.variables["--color-accent"]).toBe("#111111");
     // Where the brand is silent, the starter still applies.
     expect(sheet.variables["--color-surface"]).toBe("#f4f4f5");
-    // The dark-mode @theme lowers to the -dark variable `dark:` utilities read.
-    expect(sheet.variables["--color-brand-dark"]).toBe("#fb7185");
+    // The brand's dark-mode @theme is the dark value of the same variable; a color
+    // the project sets without a dark value holds in dark mode too.
+    expect(sheet.darkVariables["--color-primary"]).toBe("#fb7185");
+    expect(sheet.darkVariables["--color-accent"]).toBe("#111111");
+    expect(sheet.darkVariables["--color-surface"]).toBe("#f4f4f5");
     expect(sheet.fontFaces.map((face) => face.family)).toEqual(["Acme Sans"]);
     expect(sheet.fontFaces[0]?.css).toContain("https://cdn.acme.test/acme-sans.woff2");
     // The theme file's own parse does not report the imports Tailwind resolved.
@@ -80,15 +83,15 @@ describe("theme imports", () => {
     const project = await transformProject(
       {
         "theme.css": theme,
-        "emails/welcome.tsx": entry("bg-brand text-brand-foreground"),
+        "emails/welcome.tsx": entry("bg-primary text-primary-foreground"),
       },
       { ...options, tailwind: { css: theme }, brand: BRAND },
     );
     expect(project.diagnostics).toEqual([]);
     const sheet = registered(project.tailwindSheet);
     // #e11d48 carries white text; the dark brand #fb7185 carries black.
-    expect(sheet.variables["--color-brand-foreground"]).toBe("#ffffff");
-    expect(sheet.variables["--color-brand-foreground-dark"]).toBe("#000000");
+    expect(sheet.variables["--color-primary-foreground"]).toBe("#ffffff");
+    expect(sheet.darkVariables["--color-primary-foreground"]).toBe("#000000");
   });
 
   it("compiles a theme's fonts when no utility class is in use", async () => {

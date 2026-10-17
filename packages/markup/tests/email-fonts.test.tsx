@@ -138,7 +138,9 @@ describe("project fonts in the rendered email", () => {
         refused = error;
       }
       return refused instanceof EmailCompileError
-        ? refused.diagnostics.map((finding) => finding.code)
+        ? refused.diagnostics
+            .filter((finding) => finding.severity === "error")
+            .map((finding) => finding.code)
         : [];
     };
     expect(refuses(`.brand{font-family:'Brand Sans', "sans-serif"}`)).toEqual([

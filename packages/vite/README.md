@@ -113,6 +113,8 @@ compatibility findings and inbox tests for client-specific proof.
 
 A root `theme.css` uses Tailwind v4 `@theme` syntax and may `@import` other project `.css` files
 and a brand import recognized by the configured brand plugin; any other import is a compile error.
+It layers over the default theme in `@samva/markup`'s vocabulary (`reference.md`, under Theme),
+and its `@media (prefers-color-scheme: dark) { @theme { … } }` block sets the dark-mode colors.
 A change to the theme, a partial, or an imported stylesheet recompiles every template that reads it.
 
 `samva templates check` and `buildTemplates()` compile every template, render every declared

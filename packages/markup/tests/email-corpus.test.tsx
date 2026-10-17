@@ -82,7 +82,7 @@ describe("marketing corpus", () => {
     const rendered = renderEmail(newsletter, newsletterFixtures.typical);
     expect(rendered.html).toContain('<img src="https://cdn.example.com/hero.png"');
     expect(rendered.html).toContain("Members save 20% this week.");
-    expect(rendered.html.match(/<td valign="top"/g)).toHaveLength(2);
+    expect(rendered.html.match(/<td class="sml-stack" valign="top"/g)).toHaveLength(2);
     expect(rendered.html).toContain("<li>observability</li>");
     expect(rendered.diagnostics).toEqual([]);
   });

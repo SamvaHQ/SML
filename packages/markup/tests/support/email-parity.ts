@@ -20,12 +20,12 @@ const PARITY_BRAND = {
   src: url("https://fonts.samva.test/parity-display.woff2") format("woff2");
 }
 @theme {
-  --color-brand: #be123c;
-  --font-display: "Parity Display", Georgia, serif;
+  --color-primary: #be123c;
+  --font-heading: "Parity Display", Georgia, serif;
 }
 @media (prefers-color-scheme: dark) {
   @theme {
-    --color-brand: #fda4af;
+    --color-primary: #fda4af;
   }
 }
 `,
@@ -65,7 +65,7 @@ export const PARITY_PROJECT: Readonly<Record<string, string>> = {
   "package.json": JSON.stringify({ name: "parity", private: true }),
   "theme.css": PARITY_THEME,
   "starter.css":
-    "@theme {\n  --color-brand: #4f46e5;\n  --color-accent: #4338ca;\n  --color-muted: #71717a;\n}\n",
+    "@theme {\n  --color-primary: #4f46e5;\n  --color-accent: #4338ca;\n  --color-muted-foreground: #71717a;\n}\n",
   "fonts/parity-sans.woff2": "wOF2 parity font bytes",
   "styles.css":
     "@font-face{font-family:'Parity Sans';src:url(./fonts/parity-sans.woff2) format('woff2');font-weight:400}.panel{padding:16px;background-color:#f6f6f6;font-family:'Parity Sans', Helvetica, sans-serif}@media (width>=40rem){.panel{padding:32px}}",
@@ -98,8 +98,8 @@ export default defineTemplate({
       <Email title="Receipt" backgroundColor="#ffffff">
         <Section style={{ padding: 24 }}>
           <BrandLogo width={96} />
-          <h1 className="panel font-display text-brand dark:text-brand-dark">Thanks, {input.name}</h1>
-          <p className="text-muted">Starter-themed copy</p>
+          <h1 className="panel font-heading text-primary">Thanks, {input.name}</h1>
+          <p className="text-muted-foreground">Starter-themed copy</p>
           <p className="text-accent">Project-themed copy</p>
           <p>
             Total <Badge label={input.total} />
@@ -124,7 +124,7 @@ export default defineTemplate({
  */
 export const PARITY_DIGESTS = {
   subject: "57d08cb8284aa1a977674a5cbd235e563cfa08817ef31e71adf0b76301792a4d",
-  html: "a6fdecd04e2e745c40ad5116c22106ca7478d29b03d8f685dcb2ffaed768f6fb",
+  html: "4deb979650daa386b09edcd3c843b5fef12f2ffdd2acc55ad71a6cd26187744e",
   text: "2e6adf328a9e1a8b323e8d091bfbad545161d762b8297fd4b39d544ab8a7f5ec",
 } as const;
 
@@ -134,7 +134,7 @@ export const PARITY_DIGESTS = {
  * on one side.
  */
 export const PARITY_COMPILE_DIGEST =
-  "c6ca9fea6364f8e98801b627a682d1daaaa34a9d0442b73b965022bde0397b12";
+  "b1cc1fff2c70d271a89d22aa70ce7dd494d3eb5144e80c844120dfe1c8b441fe";
 
 const hex = (buffer: ArrayBuffer): string =>
   Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, "0")).join("");

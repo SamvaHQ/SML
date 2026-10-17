@@ -54,7 +54,11 @@ describe("the compiler's own output is publishable", () => {
     // Classic Outlook drops the rounded corner and the anchor's target; both
     // degrade, so both warn rather than refusing the publication.
     expect(codes).toContain("caniemail/target-attribute");
-    expect(findings.every((finding) => finding.clients !== undefined)).toBe(true);
+    expect(
+      findings
+        .filter((finding) => finding.code.startsWith("caniemail/"))
+        .every((finding) => finding.clients !== undefined),
+    ).toBe(true);
   });
 
   it("keeps Tailwind's responsive and dark rules in the head of the campaign", async () => {

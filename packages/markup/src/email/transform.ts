@@ -1,12 +1,17 @@
 import { buildLineMap, lineColumn } from "../diagnostic-model";
-import { brandTailwindCss, parseBrandCss } from "../theme-css";
+import { parseBrandCss, printBrandCss } from "../theme-css";
 import { assetEntry, assetUrl, checkAssetBase, isAssetPath, type AssetEntry } from "./assets";
 import { BRAND_COMPONENT_CLASSES, type EmailBrand } from "./brand";
 import { brandSpecifierPattern, parseBrandSpecifier, type BrandPlugin } from "./brand-plugin";
 import { parseStylesheet, type Stylesheet } from "./css";
 import { EmailCompileError, type EmailDiagnostic } from "./diagnostics";
 import { samvaBrandPlugin } from "./samva-brand-plugin";
-import { compileTailwind, discoverClassCandidates, type TailwindOptions } from "./tailwind";
+import {
+  BASE_STYLESHEET_CSS,
+  compileTailwind,
+  discoverClassCandidates,
+  type TailwindOptions,
+} from "./tailwind";
 import { projectDirectory, resolveFromDirectory, resolveThemeImports } from "./theme-imports";
 
 // The project transform: the parts of a template project that are not its TSX. Every host — the
@@ -69,6 +74,7 @@ const readStylesheet = (
     headAtRules: sheet.headAtRules,
     fontFaces: sheet.fontFaces,
     variables: sheet.variables,
+    darkVariables: sheet.darkVariables,
     diagnostics: [],
   };
   return { sheet: registered, diagnostics: sheet.diagnostics };
@@ -98,7 +104,10 @@ const readFile = async (
 
 export interface ProjectTransform {
   readonly assets: readonly AssetEntry[];
-  /** The compiled Tailwind sheet, when the project used any utility class. */
+  /**
+   * The compiled Tailwind sheet: the default theme, the primitives' rules, the project theme and
+   * the utilities the project uses. Without Tailwind, the default theme and the primitives' rules.
+   */
   readonly tailwindSheet: Stylesheet | undefined;
   /** Every project stylesheet, parsed, by path. */
   readonly stylesheets: ReadonlyMap<string, Stylesheet>;
@@ -228,7 +237,7 @@ const resolveTheme = (
   let brandCss: string | undefined;
   if (refusals.length === 0 && brand !== undefined && cssRequests.length > 0) {
     const parsed = parseBrandCss(brand.css);
-    if (parsed.isOk()) brandCss = brandTailwindCss(parsed.value);
+    if (parsed.isOk()) brandCss = printBrandCss(parsed.value);
     else {
       const lines = buildLineMap(brand.css);
       const specifier = cssRequests[0]!.specifier;
@@ -299,13 +308,15 @@ export const transformProject = async (
     for (const name of reading.classes ?? []) classes.add(name);
     diagnostics.push(...reading.diagnostics);
   }
-  // A theme with no utility in use still carries `@font-face` rules and variables the project's
-  // own stylesheets read, so it compiles regardless.
-  if (
-    wanted === undefined ||
-    (classes.size === 0 && (wanted.safelist?.length ?? 0) === 0 && wanted.css === undefined)
-  )
-    return { assets, tailwindSheet: undefined, stylesheets, diagnostics };
+  // Every project compiles over the default theme and the primitives' rules, whether or not it
+  // uses a utility; a build without Tailwind still gets those.
+  if (wanted === undefined)
+    return {
+      assets,
+      tailwindSheet: readStylesheet(TAILWIND_ORIGIN, BASE_STYLESHEET_CSS, options).sheet,
+      stylesheets,
+      diagnostics,
+    };
   const compiled = await compileTailwind(classes, wanted, theme);
   const generated = readStylesheet(TAILWIND_ORIGIN, compiled.css, options, addressed);
   // The project CSS Tailwind compiled is usually also a project file, already reported under its

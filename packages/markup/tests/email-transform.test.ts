@@ -64,12 +64,19 @@ describe("project transform", () => {
     expect(output.assets.map((asset) => asset.path)).toEqual(["images/logo.png"]);
   });
 
-  it("compiles no Tailwind when the project uses none", async () => {
+  it("compiles the default theme and the primitives' rules when the project uses no Tailwind", async () => {
     const output = await transformProject(
       { "emails/welcome.tsx": "export const view = () => 1;" },
       options,
     );
-    expect(output.tailwindSheet).toBeUndefined();
+    const sheet = output.tailwindSheet;
+    expect(sheet?.variables["--color-primary"]).toBeDefined();
+    expect(sheet?.darkVariables["--color-primary"]).toBeDefined();
+    expect(sheet?.variables["--radius"]).toBe("8px");
+    const selectors = sheet?.rules.map((rule) => rule.selector) ?? [];
+    for (const name of [".sml-email", ".sml-button", ".sml-link", ".sml-divider", ".sml-stack"])
+      expect(selectors).toContain(name);
+    expect(JSON.stringify(sheet)).not.toContain(".text-red-500");
   });
 
   it("produces identical output for identical input", async () => {

@@ -164,7 +164,14 @@
         {
           "name": "backgroundColor",
           "type": "string",
-          "optional": true
+          "optional": true,
+          "description": "The page color, painted across the whole body and, as `bgcolor`, on the wrapper table for clients that drop body styles. Defaults to the theme's `--color-background`, which switches in dark mode."
+        },
+        {
+          "name": "gutter",
+          "type": "number",
+          "optional": true,
+          "description": "Pixels of space each side of the content, so it never touches the screen edge on a narrow viewport. Defaults to 16; `0` lets content run edge to edge."
         },
         {
           "name": "style",
@@ -197,7 +204,8 @@
         {
           "name": "width",
           "type": "number | string",
-          "optional": true
+          "optional": true,
+          "description": "The band's width. A pixel width (`600`) is a maximum: the band fills a narrower screen, and classic Outlook, which ignores `max-width`, draws it at that width."
         },
         {
           "name": "bgcolor",
@@ -258,6 +266,18 @@
           "type": "number",
           "optional": true,
           "description": "With `each`, the cells in a row; each chunk of items is its own `Columns` table."
+        },
+        {
+          "name": "stack",
+          "type": "boolean",
+          "optional": true,
+          "description": "Stack the cells into one column, each full width, on a viewport narrower than 600px. On by default; `stack={false}` keeps a row of small cells (icons, a price beside a label) side by side. Clients that ignore media queries keep the row."
+        },
+        {
+          "name": "gap",
+          "type": "number",
+          "optional": true,
+          "description": "Pixels between the cells of a row. A stacked row puts the same space between the stacked cells instead, so a gap needs no padding on the cells that would misalign them when stacked."
         },
         {
           "name": "children",
@@ -1274,10 +1294,143 @@
   "styles": {
     "dialect": "Tailwind classes plus theme.css tokens. Classes must be literal.",
     "themeLayers": [
+      "the default theme",
       "@import \"./starter.css\";",
       "@import \"samva:brand\";",
       "the project's own @theme"
     ],
+    "theme": {
+      "colors": [
+        {
+          "name": "background",
+          "variable": "--color-background",
+          "role": "The page, behind everything.",
+          "light": "#ffffff",
+          "dark": "#0a0a0a"
+        },
+        {
+          "name": "foreground",
+          "variable": "--color-foreground",
+          "role": "Text on the page.",
+          "light": "#0a0a0a",
+          "dark": "#fafafa"
+        },
+        {
+          "name": "card",
+          "variable": "--color-card",
+          "role": "A surface that groups the message's content.",
+          "light": "#ffffff",
+          "dark": "#171717"
+        },
+        {
+          "name": "card-foreground",
+          "variable": "--color-card-foreground",
+          "role": "Text on a card.",
+          "light": "#0a0a0a",
+          "dark": "#fafafa"
+        },
+        {
+          "name": "primary",
+          "variable": "--color-primary",
+          "role": "The main action's fill (a button), and links.",
+          "light": "#171717",
+          "dark": "#fafafa"
+        },
+        {
+          "name": "primary-foreground",
+          "variable": "--color-primary-foreground",
+          "role": "Text on a primary fill.",
+          "light": "#fafafa",
+          "dark": "#171717"
+        },
+        {
+          "name": "secondary",
+          "variable": "--color-secondary",
+          "role": "A quieter action's fill.",
+          "light": "#f5f5f5",
+          "dark": "#262626"
+        },
+        {
+          "name": "secondary-foreground",
+          "variable": "--color-secondary-foreground",
+          "role": "Text on a secondary fill.",
+          "light": "#171717",
+          "dark": "#fafafa"
+        },
+        {
+          "name": "muted",
+          "variable": "--color-muted",
+          "role": "A subdued surface: a code block, a table header.",
+          "light": "#f5f5f5",
+          "dark": "#262626"
+        },
+        {
+          "name": "muted-foreground",
+          "variable": "--color-muted-foreground",
+          "role": "Secondary text on the page, a card or a muted surface: labels, captions, the footer.",
+          "light": "#737373",
+          "dark": "#a3a3a3"
+        },
+        {
+          "name": "accent",
+          "variable": "--color-accent",
+          "role": "A highlighted surface: a callout, a selected row.",
+          "light": "#f5f5f5",
+          "dark": "#262626"
+        },
+        {
+          "name": "accent-foreground",
+          "variable": "--color-accent-foreground",
+          "role": "Text on an accent surface.",
+          "light": "#171717",
+          "dark": "#fafafa"
+        },
+        {
+          "name": "border",
+          "variable": "--color-border",
+          "role": "Rules, dividers and outlines.",
+          "light": "#e5e5e5",
+          "dark": "#2e2e2e"
+        }
+      ],
+      "tokens": [
+        {
+          "variable": "--radius",
+          "default": "8px"
+        },
+        {
+          "variable": "--font-sans",
+          "default": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif"
+        },
+        {
+          "variable": "--font-heading",
+          "default": "var(--font-sans)"
+        }
+      ],
+      "darkMode": "One mechanism: the theme's @media (prefers-color-scheme: dark) { @theme { --color-*: … } } block. Write each token's utility once (bg-card); every declaration that reads a color the dark block sets switches in dark mode. Use dark: only to pick a different token in dark mode. Opacity modifiers (bg-primary/10) keep the light value.",
+      "layering": "Each layer owns the colors it sets: a color a layer sets in light mode and not in its dark block keeps that value in dark mode.",
+      "fillForegrounds": "A layer that sets --color-primary, --color-secondary, --color-accent without its -foreground gets black or white, whichever contrasts more, in each mode."
+    },
+    "contrast": {
+      "textError": 3,
+      "textWarning": 4.5,
+      "largePx": 24,
+      "largeBoldPx": 18.5,
+      "shapeError": 1.5,
+      "shapeWarning": 3,
+      "border": 3
+    },
+    "primitives": {
+      "classes": {
+        "email": "sml-email",
+        "button": "sml-button",
+        "link": "sml-link",
+        "divider": "sml-divider",
+        "stack": "sml-stack"
+      },
+      "stackBelowPx": 600,
+      "defaults": "Primitive defaults sit beneath utilities: a class on a primitive overrides its default; a prop is an inline style and overrides both."
+    },
     "fonts": "WOFF2 files in the project through @font-face; a stack must end in a generic family."
   },
   "channels": {
@@ -1368,6 +1521,12 @@
       "fix": "Write the number literally, for example height={44}."
     },
     {
+      "code": "email-contrast",
+      "summary": "Text, or a filled button against its surroundings, falls below the contrast ratio in light or dark mode (below 1.5:1 a button is indistinguishable from its surface; WCAG 1.4.11 asks 3:1).",
+      "fix": "Pair background and text tokens (bg-primary with text-primary-foreground), give the theme's dark-mode @theme a value for the token, or choose colors that reach the required ratio.",
+      "upgrade": "Move the project's theme onto the theme vocabulary with one dark-mode block. In starter.css and theme.css, rename each color token to the vocabulary name for its role (reference.md, Theme): a page color to --color-background, the main text to --color-foreground, a surface to --color-card with --color-card-foreground, the brand or action color to --color-primary with --color-primary-foreground, subdued text to --color-muted-foreground, a highlight to --color-accent with --color-accent-foreground, rules to --color-border, body and heading fonts to --font-sans and --font-heading, and a corner radius to --radius. Keep every value.\n\nMove each --color-<name>-dark value into @media (prefers-color-scheme: dark) { @theme { --color-<name>: <value>; } } under the renamed token, and delete the -dark tokens. In every template and partial, rename the utilities to match (bg-surface to bg-card, text-muted to text-muted-foreground, and so on) and delete each dark:…-dark class whose token now has a dark value; keep a dark: class only where it picks a different token in dark mode.\n\nThen fix what email-contrast still reports at its location: pair each fill with its -foreground token, or give the dark block a value that reaches the ratio. Do not weaken the design to pass: keep the brand's colors and adjust the paired token.\n\nCompile every entry and render every fixture in light and dark mode; confirm the light render is unchanged apart from fixes. Resolve errors before requesting one saved version for the whole project, approved by the user; do not publish."
+    },
+    {
       "code": "email-font-fallback",
       "summary": "A font stack names a project font without a generic fallback.",
       "fix": "End the stack with sans-serif, serif or monospace."
@@ -1454,9 +1613,19 @@
       "fix": "Write each={input.items} with a callback returning <Column>."
     },
     {
+      "code": "invalid-columns-gap",
+      "summary": "<Columns gap> is set on a Columns that repeats its cells with each.",
+      "fix": "Write the Column children out, or pad each repeated cell."
+    },
+    {
       "code": "invalid-columns-per",
       "summary": "<Columns per> is not a positive integer literal.",
       "fix": "Write per={2}."
+    },
+    {
+      "code": "invalid-columns-stack",
+      "summary": "<Columns stack> is not a true or false literal.",
+      "fix": "Write stack={false}, or leave it out to stack on narrow screens."
     },
     {
       "code": "invalid-content",
@@ -1472,6 +1641,11 @@
       "code": "invalid-locale",
       "summary": "The template's default locale is not a string literal.",
       "fix": "Write locale: \"en-US\"."
+    },
+    {
+      "code": "invalid-number-prop",
+      "summary": "A primitive's numeric prop, such as <Email gutter>, is not a finite number in range.",
+      "fix": "Pass a finite number the message allows, for example gutter={16}."
     },
     {
       "code": "invalid-preheader",

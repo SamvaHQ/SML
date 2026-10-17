@@ -112,3 +112,22 @@ describe("registry isolation between renders", () => {
     expect(collectStylesheets().rules.map((rule) => rule.selector)).toEqual([".second"]);
   });
 });
+
+describe("merged dark variables", () => {
+  it("keeps the later sheet's dark value for a variable both set", () => {
+    registerStylesheet(
+      parseStylesheet(
+        ":root{--color-card:#ffffff}@media (prefers-color-scheme: dark){:root{--color-card:#111111;--color-border:#222222}}",
+      ),
+    );
+    registerStylesheet(
+      parseStylesheet("@media (prefers-color-scheme: dark){:root{--color-card:#333333}}"),
+    );
+    const merged = collectStylesheets();
+    expect(merged.variables).toEqual({ "--color-card": "#ffffff" });
+    expect(merged.darkVariables).toEqual({
+      "--color-card": "#333333",
+      "--color-border": "#222222",
+    });
+  });
+});

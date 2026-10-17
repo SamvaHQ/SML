@@ -9,6 +9,7 @@ import {
   reportEmailDiagnostic,
   type EmailChild,
 } from "./jsx-runtime";
+import { PRIMITIVE_CLASSES } from "./primitive-css";
 
 // Email primitives are the constructs ordinary HTML cannot express portably:
 // a document shell every client accepts, table layout, and the classic-Outlook
@@ -36,6 +37,31 @@ const presentation = (
     children: jsx("tbody", { children: jsx("tr", { ...rowProps, children: row }) }),
   });
 
+/** A primitive's own class, then the author's. */
+const classNames = (own: string, authored: string | undefined): string =>
+  authored === undefined || authored.trim() === "" ? own : `${own} ${authored}`;
+
+const optionalNumber = (
+  component: string,
+  name: string,
+  value: unknown,
+  bounds: { readonly min?: number } = {},
+): number | undefined => {
+  if (value === undefined) return undefined;
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    (bounds.min === undefined || value >= bounds.min)
+  )
+    return value;
+  reportEmailDiagnostic({
+    code: "invalid-number-prop",
+    severity: "error",
+    message: `<${component} ${name}> must be a finite number${bounds.min === undefined ? "" : ` of at least ${bounds.min}`}.`,
+  });
+  return undefined;
+};
+
 // ── Document shell ──────────────────────────────────────────────────────────
 
 export interface EmailProps {
@@ -45,7 +71,17 @@ export interface EmailProps {
   readonly dir?: "ltr" | "rtl" | undefined;
   /** Document title; several clients use it as the fallback preview line. */
   readonly title?: string | undefined;
+  /**
+   * The page color, painted across the whole body and, as `bgcolor`, on the wrapper table for
+   * clients that drop body styles. Defaults to the theme's `--color-background`, which switches
+   * in dark mode.
+   */
   readonly backgroundColor?: string | undefined;
+  /**
+   * Pixels of space each side of the content, so it never touches the screen edge on a narrow
+   * viewport. Defaults to 16; `0` lets content run edge to edge.
+   */
+  readonly gutter?: number | undefined;
   /** Applied to the content cell, where Yahoo and AOL keep body styling. */
   readonly style?: EmailStyle | undefined;
   readonly children?: EmailChild;
@@ -76,17 +112,29 @@ export const preheaderNode = (text: string): EmailNode =>
     ],
   });
 
-/** Document shell: the head every target client needs, plus the body content cell. */
+/**
+ * Document shell: the head every target client needs, a body painted with the page color, and
+ * the content cell. The content cell sets the theme's text color and body font
+ * (`--color-foreground`, `--font-sans`) for everything inside it, and pads the content off the
+ * screen edge (`gutter`).
+ */
 export const Email = ({
   className,
   lang = "en",
   dir = "ltr",
   title,
-  backgroundColor,
+  backgroundColor = "var(--color-background)",
+  gutter,
   style,
   children,
-}: EmailProps): EmailNode =>
-  jsx("html", {
+}: EmailProps): EmailNode => {
+  const safeGutter = optionalNumber("Email", "gutter", gutter, { min: 0 });
+  const padding =
+    safeGutter === undefined
+      ? {}
+      : { paddingLeft: `${safeGutter}px`, paddingRight: `${safeGutter}px` };
+  const cellStyle = { ...padding, ...style };
+  return jsx("html", {
     lang,
     dir,
     xmlns: "http://www.w3.org/1999/xhtml",
@@ -108,24 +156,26 @@ export const Email = ({
         ],
       }),
       jsx("body", {
-        style: {
-          margin: 0,
-          padding: 0,
-          ...(backgroundColor === undefined ? {} : { backgroundColor }),
-        },
+        style: { margin: 0, padding: 0, width: "100%", backgroundColor },
         children: [
           presentation(
             {
               align: "center",
               width: "100%",
-              ...(backgroundColor === undefined ? {} : { bgcolor: backgroundColor }),
+              bgcolor: backgroundColor,
+              style: { width: "100%", backgroundColor },
             },
-            jsx("td", { className, ...(style === undefined ? {} : { style }), children }),
+            jsx("td", {
+              className: classNames(PRIMITIVE_CLASSES.email, className),
+              ...(Object.keys(cellStyle).length === 0 ? {} : { style: cellStyle }),
+              children,
+            }),
           ),
         ],
       }),
     ],
   });
+};
 
 // ── Layout ──────────────────────────────────────────────────────────────────
 
@@ -133,6 +183,10 @@ export interface SectionProps {
   /** CSS classes applied to the primitive's content element. */
   readonly className?: string | undefined;
   readonly align?: "left" | "center" | "right" | undefined;
+  /**
+   * The band's width. A pixel width (`600`) is a maximum: the band fills a narrower screen, and
+   * classic Outlook, which ignores `max-width`, draws it at that width.
+   */
   readonly width?: number | string | undefined;
   readonly bgcolor?: string | undefined;
   /** Applied to the content cell so padding survives Outlook and Klaviyo. */
@@ -140,6 +194,17 @@ export interface SectionProps {
   readonly tableStyle?: EmailStyle | undefined;
   readonly children?: EmailChild;
 }
+
+/** A pixel width as `width: 100%` capped at it, so a fixed-width table still fits a phone. */
+const fluidWidth = (width: number | string): EmailStyle | undefined => {
+  const pixels =
+    typeof width === "number" ? width : /^\d+(?:\.\d+)?(?:px)?$/.test(width) ? width : undefined;
+  if (pixels === undefined) return undefined;
+  return {
+    width: "100%",
+    maxWidth: typeof pixels === "number" ? `${pixels}px` : `${Number.parseFloat(pixels)}px`,
+  };
+};
 
 /** A full-width band of content, as the single-cell table every client agrees on. */
 export const Section = ({
@@ -150,16 +215,19 @@ export const Section = ({
   style,
   tableStyle,
   children,
-}: SectionProps): EmailNode =>
-  presentation(
+}: SectionProps): EmailNode => {
+  const fluid = fluidWidth(width);
+  const table = fluid === undefined ? tableStyle : { ...fluid, ...tableStyle };
+  return presentation(
     {
       align,
       width,
       ...(bgcolor === undefined ? {} : { bgcolor }),
-      ...(tableStyle === undefined ? {} : { style: tableStyle }),
+      ...(table === undefined ? {} : { style: table }),
     },
     jsx("td", { className, ...(style === undefined ? {} : { style }), children }),
   );
+};
 
 export interface ColumnsProps<Item = never> {
   /** CSS classes applied to the primitive's content element. */
@@ -174,6 +242,17 @@ export interface ColumnsProps<Item = never> {
   readonly each?: readonly Item[] | undefined;
   /** With `each`, the cells in a row; each chunk of items is its own `Columns` table. */
   readonly per?: number | undefined;
+  /**
+   * Stack the cells into one column, each full width, on a viewport narrower than 600px. On by
+   * default; `stack={false}` keeps a row of small cells (icons, a price beside a label) side by
+   * side. Clients that ignore media queries keep the row.
+   */
+  readonly stack?: boolean | undefined;
+  /**
+   * Pixels between the cells of a row. A stacked row puts the same space between the stacked
+   * cells instead, so a gap needs no padding on the cells that would misalign them when stacked.
+   */
+  readonly gap?: number | undefined;
   /** `Column` elements, or with `each` a function that returns one. */
   readonly children?: EmailChild | ((item: Item, index: number) => EmailChild);
 }
@@ -181,26 +260,69 @@ export interface ColumnsProps<Item = never> {
 /** The equal share of a row that each of `count` cells takes, whole percent rounded down. */
 export const equalColumnWidth = (count: number): string => `${Math.floor(100 / count)}%`;
 
-/** Give a `Column` that states no width its equal share, keeping the primitive's attribute order. */
-const withColumnWidth = (node: EmailNode, width: string): EmailNode => {
+/**
+ * Give a `Column` that states no width its equal share, keeping the primitive's attribute order,
+ * and the stacking class when its row stacks.
+ */
+const withColumnLayout = (
+  node: EmailNode,
+  width: string | undefined,
+  stack: boolean,
+): EmailNode => {
   if (node.type === "Fragment")
     return EmailNode.Fragment({
-      children: node.children.map((child) => withColumnWidth(child, width)),
+      children: node.children.map((child) => withColumnLayout(child, width, stack)),
     });
-  if (node.type !== "Element" || node.tag !== "td" || node.props.width !== undefined) return node;
+  if (node.type !== "Element" || node.tag !== "td") return node;
   const props: Record<string, unknown> = {};
+  const sized = width === undefined || node.props.width !== undefined;
   for (const [key, value] of Object.entries(node.props)) {
-    if (key === "style") props.width = width;
+    if (key === "style" && !sized) props.width = width;
     props[key] = value;
   }
-  if (props.width === undefined) props.width = width;
+  if (!sized && props.width === undefined) props.width = width;
+  if (stack)
+    props.className = classNames(
+      PRIMITIVE_CLASSES.stack,
+      typeof props.className === "string" ? props.className : undefined,
+    );
   return EmailNode.Element({ ...node, props });
 };
 
+/** The cell between two `Column`s: `gap` wide in a row, `gap` tall once the row stacks. */
+const gapCell = (gap: number, stack: boolean): EmailNode =>
+  jsx("td", {
+    ...(stack ? { className: PRIMITIVE_CLASSES.stack } : {}),
+    width: gap,
+    style: {
+      width: `${gap}px`,
+      ...(stack ? { height: `${gap}px` } : {}),
+      fontSize: "1px",
+      lineHeight: "1px",
+    },
+    children: "\u200b",
+  });
+
+/** Cells with a gap cell between each two that render something. */
+const withGaps = (cells: readonly EmailNode[], gap: number | undefined, stack: boolean) => {
+  if (gap === undefined || gap === 0) return cells;
+  const output: EmailNode[] = [];
+  for (const cell of cells) {
+    if (cell.type === "Text" && cell.value.trim() === "") {
+      output.push(cell);
+      continue;
+    }
+    if (output.some((placed) => placed.type !== "Text" || placed.value.trim() !== ""))
+      output.push(gapCell(gap, stack));
+    output.push(cell);
+  }
+  return output;
+};
+
 /**
- * A row of side-by-side `Column`s. No flex or grid conversion happens here. With `each` it repeats
- * its cells over a list, `per` to a row, and splits the row equally between cells that state no
- * width.
+ * A row of side-by-side `Column`s that stacks on a narrow viewport (`stack`). No flex or grid
+ * conversion happens here. With `each` it repeats its cells over a list, `per` to a row, and
+ * splits the row equally between cells that state no width.
  */
 export const Columns = <Item = never>({
   className,
@@ -209,11 +331,24 @@ export const Columns = <Item = never>({
   style,
   each,
   per,
+  stack = true,
+  gap,
   children,
 }: ColumnsProps<Item>): EmailNode => {
   const table = { className, align, width, ...(style === undefined ? {} : { style }) };
+  const safeGap = optionalNumber("Columns", "gap", gap, { min: 0 });
   if (each === undefined || typeof children !== "function")
-    return presentation(table, children as EmailChild, { style: { width: "100%" } });
+    return presentation(
+      table,
+      withGaps(
+        normalizeChildren(children as EmailChild).map((cell) =>
+          withColumnLayout(cell, undefined, stack),
+        ),
+        safeGap,
+        stack,
+      ),
+      { style: { width: "100%" } },
+    );
   if (per !== undefined && (!Number.isInteger(per) || per < 1))
     reportEmailDiagnostic({
       code: "invalid-columns-per",
@@ -229,8 +364,14 @@ export const Columns = <Item = never>({
     children: chunks.map((chunk) =>
       presentation(
         table,
-        chunk.flatMap((item, index) =>
-          normalizeChildren(children(item, index)).map((cell) => withColumnWidth(cell, share)),
+        withGaps(
+          chunk.flatMap((item, index) =>
+            normalizeChildren(children(item, index)).map((cell) =>
+              withColumnLayout(cell, share, stack),
+            ),
+          ),
+          safeGap,
+          stack,
         ),
         { style: { width: "100%" } },
       ),
@@ -294,7 +435,6 @@ export interface ButtonProps {
   readonly children?: EmailChild;
 }
 
-const DEFAULT_BUTTON_FONT = "Helvetica, Arial, sans-serif";
 /** Average advance of a bold sans-serif glyph, as a fraction of the font size. */
 const BOLD_GLYPH_ADVANCE = 0.6;
 
@@ -329,20 +469,26 @@ const optionalPositiveButtonNumber = (name: string, value: unknown): number | un
   return undefined;
 };
 
-/** A link styled as a button, with a VML fallback so classic Outlook draws the shape. */
+/**
+ * A link styled as a button, with a VML fallback so classic Outlook draws the shape. Its fill,
+ * label color, font and corners default to the theme (`bg-primary`, `text-primary-foreground`,
+ * `font-sans`, `rounded`), so a class on the button restyles it. Classic Outlook draws the VML
+ * shape from the props alone: set `backgroundColor`, `color` and `borderRadius` when the button
+ * does not use the theme's primary fill.
+ */
 export const Button = ({
   className,
   href,
   width,
   height,
   paddingX = 16,
-  backgroundColor = "#000000",
-  color = "#ffffff",
-  borderRadius = 0,
+  backgroundColor,
+  color,
+  borderRadius,
   borderColor,
   borderWidth = 0,
   fontSize = 16,
-  fontFamily = DEFAULT_BUTTON_FONT,
+  fontFamily,
   align = "left",
   style,
   children,
@@ -350,7 +496,7 @@ export const Button = ({
   const safeWidth = optionalButtonNumber("width", width);
   const safeHeight = optionalPositiveButtonNumber("height", height);
   const safePaddingX = buttonNumber("paddingX", paddingX, 16);
-  const safeBorderRadius = buttonNumber("borderRadius", borderRadius, 0);
+  const safeBorderRadius = optionalButtonNumber("borderRadius", borderRadius);
   const safeBorderWidth = buttonNumber("borderWidth", borderWidth, 0);
   const safeFontSize = buttonNumber("fontSize", fontSize, 16);
   const label = typeof children === "string" ? children : undefined;
@@ -363,11 +509,15 @@ export const Button = ({
         "<Button> draws its classic Outlook shape from VML, which needs a height and a plain string label. Without both, classic Windows Outlook shows an unstyled link.",
       clients: ["outlook-windows"],
     });
-  const arcsize = safeHeight === undefined ? 0 : Math.round((safeBorderRadius / safeHeight) * 100);
+  const arcsize =
+    safeHeight === undefined ? 0 : Math.round(((safeBorderRadius ?? 0) / safeHeight) * 100);
   // VML cannot size to its content, so a label-driven box keeps Outlook in step with the anchor.
   const fallbackWidth =
     safeWidth ??
     Math.ceil((label?.length ?? 0) * safeFontSize * BOLD_GLYPH_ADVANCE) + 2 * safePaddingX;
+  const fill = backgroundColor ?? "var(--color-primary)";
+  const ink = color ?? "var(--color-primary-foreground)";
+  const family = fontFamily ?? "var(--font-sans)";
   return presentation(
     { width: "100%", style: { borderCollapse: "collapse" } },
     jsx("td", {
@@ -379,20 +529,20 @@ export const Button = ({
                 borderColor === undefined
                   ? 'stroke="false"'
                   : `strokecolor="${escapeAttribute(borderColor)}" strokeweight="${safeBorderWidth}px"`
-              } fillcolor="${escapeAttribute(backgroundColor)}"><w:anchorlock/><center style="color:${escapeAttribute(color)};font-family:${escapeAttribute(fontFamily)};font-size:${safeFontSize}px;font-weight:bold;">${escapeText(label)}</center></v:roundrect><![endif]-->`,
+              } fillcolor="${escapeAttribute(fill)}"><w:anchorlock/><center style="color:${escapeAttribute(ink)};font-family:${escapeAttribute(family)};font-size:${safeFontSize}px;font-weight:bold;">${escapeText(label)}</center></v:roundrect><![endif]-->`,
             )
           : null,
         jsx("a", {
-          className,
+          className: classNames(PRIMITIVE_CLASSES.button, className),
           href,
           target: "_blank",
           rel: "noopener noreferrer",
           style: {
-            backgroundColor,
-            color,
-            borderRadius: `${safeBorderRadius}px`,
+            ...(backgroundColor === undefined ? {} : { backgroundColor }),
+            ...(color === undefined ? {} : { color }),
+            ...(safeBorderRadius === undefined ? {} : { borderRadius: `${safeBorderRadius}px` }),
             display: "inline-block",
-            fontFamily,
+            ...(fontFamily === undefined ? {} : { fontFamily }),
             fontSize: `${safeFontSize}px`,
             fontWeight: "bold",
             lineHeight: safeHeight === undefined ? "120%" : `${safeHeight - 2 * safeBorderWidth}px`,
@@ -440,19 +590,19 @@ export interface DividerProps {
   readonly style?: EmailStyle | undefined;
 }
 
-/** A horizontal rule drawn as a cell border, which every target client renders. */
-export const Divider = ({
-  className,
-  color = "#e5e7eb",
-  thickness = 1,
-  style,
-}: DividerProps): EmailNode =>
+/**
+ * A horizontal rule drawn as a cell border, which every target client renders. It defaults to a
+ * 1px line in the theme's `--color-border`.
+ */
+export const Divider = ({ className, color, thickness, style }: DividerProps): EmailNode =>
   presentation(
     { width: "100%" },
     jsx("td", {
-      className,
+      className: classNames(PRIMITIVE_CLASSES.divider, className),
       style: {
-        borderTop: `${thickness}px solid ${color}`,
+        ...(color === undefined && thickness === undefined
+          ? {}
+          : { borderTop: `${thickness ?? 1}px solid ${color ?? "var(--color-border)"}` }),
         fontSize: "1px",
         lineHeight: "1px",
         ...style,
@@ -513,7 +663,10 @@ export interface LinkProps {
   readonly children?: EmailChild;
 }
 
-/** A text link that opens outside the client and cannot reach back at the opener. */
+/**
+ * A text link that opens outside the client and cannot reach back at the opener. It defaults to
+ * the theme's `--color-primary`, underlined.
+ */
 export const Link = ({
   className,
   href,
@@ -523,10 +676,10 @@ export const Link = ({
   children,
 }: LinkProps): EmailNode =>
   jsx("a", {
-    className,
+    className: classNames(PRIMITIVE_CLASSES.link, className),
     href,
     target,
     rel,
-    style: { color: "#067df7", textDecoration: "none", ...style },
+    ...(style === undefined ? {} : { style }),
     children,
   });

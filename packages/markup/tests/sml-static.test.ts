@@ -585,13 +585,13 @@ describe("chunked columns", () => {
     const compiled = await compile({ body: grid("each={input.items} per={2}") });
     expect(errors(compiled.diagnostics)).toEqual([]);
     const html = renderIr(compiled.ir!, withItems(3)).html;
-    expect(html.match(/<td class="cell"/g)).toHaveLength(3);
+    expect(html.match(/<td class="sml-stack cell"/g)).toHaveLength(3);
     expect(html.match(/width="50%"/g)).toHaveLength(3);
     // Index restarts in each row.
     expect(html).toContain("T0 0");
     expect(html).toContain("T1 1");
     expect(html).toContain("T2 0");
-    expect(renderIr(compiled.ir!, withItems(0)).html).not.toContain('class="cell"');
+    expect(renderIr(compiled.ir!, withItems(0)).html).not.toContain('class="cell');
   });
 
   it("splits a single row equally, rounded down, for any count", async () => {
@@ -607,7 +607,7 @@ describe("chunked columns", () => {
     ] as const)
       expect(
         renderIr(compiled.ir!, withItems(count)).html.match(
-          new RegExp(`class="cell" valign="top" width="${width}%"`, "g"),
+          new RegExp(`class="sml-stack cell" valign="top" width="${width}%"`, "g"),
         ),
       ).toHaveLength(count);
   });

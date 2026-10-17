@@ -226,9 +226,21 @@ export const DIAGNOSTIC_CODES = codes({
     summary: "<Columns per> is not a positive integer literal.",
     fix: "Write per={2}.",
   },
+  "invalid-columns-gap": {
+    summary: "<Columns gap> is set on a Columns that repeats its cells with each.",
+    fix: "Write the Column children out, or pad each repeated cell.",
+  },
+  "invalid-columns-stack": {
+    summary: "<Columns stack> is not a true or false literal.",
+    fix: "Write stack={false}, or leave it out to stack on narrow screens.",
+  },
   "invalid-button-number": {
     summary: "A Button size prop is not a finite number.",
     fix: "Pass a finite number.",
+  },
+  "invalid-number-prop": {
+    summary: "A primitive's numeric prop, such as <Email gutter>, is not a finite number in range.",
+    fix: "Pass a finite number the message allows, for example gutter={16}.",
   },
   "unsupported-element": {
     summary: "An element outside the supported email vocabulary.",
@@ -331,6 +343,17 @@ export const DIAGNOSTIC_CODES = codes({
   "css-conditional-variable": {
     summary: "A custom property is redefined inside a conditional at-rule.",
     fix: "Keep the override on a class rule.",
+  },
+  "email-contrast": {
+    summary:
+      "Text, or a filled button against its surroundings, falls below the contrast ratio in light or dark mode (below 1.5:1 a button is indistinguishable from its surface; WCAG 1.4.11 asks 3:1).",
+    fix: "Pair background and text tokens (bg-primary with text-primary-foreground), give the theme's dark-mode @theme a value for the token, or choose colors that reach the required ratio.",
+    upgrade: [
+      "Move the project's theme onto the theme vocabulary with one dark-mode block. In starter.css and theme.css, rename each color token to the vocabulary name for its role (reference.md, Theme): a page color to --color-background, the main text to --color-foreground, a surface to --color-card with --color-card-foreground, the brand or action color to --color-primary with --color-primary-foreground, subdued text to --color-muted-foreground, a highlight to --color-accent with --color-accent-foreground, rules to --color-border, body and heading fonts to --font-sans and --font-heading, and a corner radius to --radius. Keep every value.",
+      "Move each --color-<name>-dark value into @media (prefers-color-scheme: dark) { @theme { --color-<name>: <value>; } } under the renamed token, and delete the -dark tokens. In every template and partial, rename the utilities to match (bg-surface to bg-card, text-muted to text-muted-foreground, and so on) and delete each dark:…-dark class whose token now has a dark value; keep a dark: class only where it picks a different token in dark mode.",
+      "Then fix what email-contrast still reports at its location: pair each fill with its -foreground token, or give the dark block a value that reaches the ratio. Do not weaken the design to pass: keep the brand's colors and adjust the paired token.",
+      "Compile every entry and render every fixture in light and dark mode; confirm the light render is unchanged apart from fixes. Resolve errors before requesting one saved version for the whole project, approved by the user; do not publish.",
+    ].join("\n\n"),
   },
   "email-font-fallback": {
     summary: "A font stack names a project font without a generic fallback.",

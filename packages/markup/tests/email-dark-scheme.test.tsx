@@ -1,0 +1,110 @@
+/** @jsxImportSource @samva/markup/email */
+import { describe, expect, it } from "@effect/vitest";
+
+import { applyStylesheet, DARK_CLASS_PREFIX, renderDarkRules } from "../src/email/cascade";
+import { parseStylesheet } from "../src/email/css";
+import type { EmailNode } from "../src/email/jsx-runtime";
+import { compileEmail } from "../src/email/render";
+
+// A theme redefines `--color-card` and `--color-primary` in dark mode; `--color-border` does not change.
+const THEME = `
+:root{--color-card:#ffffff;--color-primary:#111111;--color-border:#dddddd}
+@media (prefers-color-scheme:dark){:root{--color-card:#222222;--color-primary:#eeeeee}}
+`;
+
+const styled = (css: string, tree: EmailNode) => {
+  const applied = applyStylesheet(tree, parseStylesheet(css, { origin: "theme.css" }));
+  return { ...applied, html: compileEmail(applied.tree).html };
+};
+
+const darkClass = (html: string): string => {
+  const found = new RegExp(`${DARK_CLASS_PREFIX}[a-z0-9]+`).exec(html)?.[0];
+  expect(found).toBeDefined();
+  return found ?? "";
+};
+
+describe("dark classes", () => {
+  it("gives a class rule that reads a themed color a generated class and rule", () => {
+    const applied = styled(
+      `${THEME}.card{background-color:var(--color-card);border:1px solid var(--color-border)}`,
+      <div className="card">hi</div>,
+    );
+    expect(applied.html).toContain("background-color:#ffffff");
+    const name = darkClass(applied.html);
+    expect(applied.darkRules.get(name)).toContain("background-color:#222222!important");
+    // The color the dark theme leaves alone does not change.
+    expect(applied.darkRules.get(name)).not.toContain("#dddddd");
+  });
+
+  it("covers an inline var() style too", () => {
+    const applied = styled(THEME, <p style={{ color: "var(--color-primary)" }}>hi</p>);
+    expect(applied.html).toContain("color:#111111");
+    expect(applied.darkRules.get(darkClass(applied.html))).toBe("color:#eeeeee!important");
+  });
+
+  it("covers a themed bgcolor attribute", () => {
+    const applied = styled(THEME, <table bgcolor="var(--color-card)" />);
+    expect(applied.html).toContain('bgcolor="#ffffff"');
+    expect(applied.darkRules.get(darkClass(applied.html))).toContain(
+      "background-color:#222222!important",
+    );
+  });
+
+  it("shares one class between elements with equal dark declarations", () => {
+    const applied = styled(
+      THEME,
+      <div>
+        <p style={{ color: "var(--color-primary)" }}>one</p>
+        <p style={{ color: "var(--color-primary)" }}>two</p>
+      </div>,
+    );
+    expect(applied.darkRules.size).toBe(1);
+    expect(applied.html.match(new RegExp(DARK_CLASS_PREFIX, "g"))).toHaveLength(2);
+  });
+
+  it("keeps an element's own custom property in both modes", () => {
+    const applied = styled(
+      THEME,
+      <p style={{ "--color-primary": "#ff0000", color: "var(--color-primary)" }}>hi</p>,
+    );
+    expect(applied.html).toContain("color:#ff0000");
+    expect(applied.darkRules.size).toBe(0);
+    expect(applied.html).not.toContain(DARK_CLASS_PREFIX);
+  });
+
+  it("adds no class for a color the dark theme leaves alone", () => {
+    const applied = styled(THEME, <p style={{ color: "var(--color-border)" }}>hi</p>);
+    expect(applied.darkRules.size).toBe(0);
+    expect(applied.html).not.toContain(DARK_CLASS_PREFIX);
+  });
+
+  it("adds none when the sheet has no dark variables", () => {
+    const applied = styled(
+      ":root{--color-card:#ffffff}.card{background-color:var(--color-card)}",
+      <div className="card">hi</div>,
+    );
+    expect(applied.html).toContain("background-color:#ffffff");
+    expect(applied.darkRules.size).toBe(0);
+    expect(applied.html).not.toContain(DARK_CLASS_PREFIX);
+  });
+
+  it("resolves a retained explicit dark rule at the dark values", () => {
+    const applied = styled(
+      `${THEME}@media (prefers-color-scheme:dark){.dark\\:card{background-color:var(--color-card)}}`,
+      <div className="dark:card">hi</div>,
+    );
+    expect(applied.headCss).toContain("background-color:#222222");
+    expect(applied.headCss).not.toContain("var(--color-card)");
+  });
+
+  it("prints the generated classes as one dark-mode block", () => {
+    const rules = new Map([
+      ["sml-dark-b", "color:#eeeeee!important"],
+      ["sml-dark-a", "background-color:#222222!important"],
+    ]);
+    expect(renderDarkRules(rules)).toBe(
+      "@media (prefers-color-scheme:dark){.sml-dark-a{background-color:#222222!important}.sml-dark-b{color:#eeeeee!important}}",
+    );
+    expect(renderDarkRules(new Map())).toBe("");
+  });
+});

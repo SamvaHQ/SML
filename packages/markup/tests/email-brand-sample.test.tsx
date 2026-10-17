@@ -14,12 +14,12 @@ const BRAND: EmailBrand = {
   src: url("https://cdn.acme.test/acme-sans.woff2") format("woff2");
 }
 @theme {
-  --color-brand: #e11d48;
-  --font-body: "Acme Sans", Helvetica, sans-serif;
+  --color-primary: #e11d48;
+  --font-sans: "Acme Sans", Helvetica, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   @theme {
-    --color-brand: #fb7185;
+    --color-primary: #fb7185;
   }
 }`,
   assets: { logoUrl: "https://cdn.acme.test/logo.png" },
@@ -29,22 +29,23 @@ const BRAND: EmailBrand = {
 describe("renderBrandSample", () => {
   it("renders content against the brand theme with the brand components bound", async () => {
     const rendered = await renderBrandSample(BRAND, {
-      classes: ["bg-brand", "dark:bg-brand-dark", "font-body"],
+      classes: ["bg-primary", "font-sans"],
       render: ({ BrandLogo, BrandFooter }) => ({
         subject: "Sample",
         body: (
           <Email>
             <BrandLogo />
-            <p className="bg-brand dark:bg-brand-dark font-body">Hello</p>
+            <p className="bg-primary font-sans">Hello</p>
             <BrandFooter />
           </Email>
         ),
       }),
     });
     expect(rendered.html).toContain("background-color:#e11d48");
-    expect(rendered.html).toContain(
-      "@media (prefers-color-scheme:dark){.dark\\:block\\!{display:block!important}.dark\\:hidden\\!{display:none!important}.dark\\:bg-brand-dark{background-color:#fb7185!important}}",
+    expect(rendered.html).toMatch(
+      /@media \(prefers-color-scheme:dark\)\{[^}]*\.sml-dark-[a-z0-9]+\{background-color:#fb7185!important\}/,
     );
+    expect(rendered.html).toContain('font-family:"Acme Sans"');
     expect(rendered.html).toContain("https://cdn.acme.test/acme-sans.woff2");
     expect(rendered.html).toContain('src="https://cdn.acme.test/logo.png"');
     expect(rendered.html).toContain(`${samvaBrandPlugin.footerAttribute}=""`);
@@ -53,12 +54,12 @@ describe("renderBrandSample", () => {
 
   it("renders text on brand in the contrast color when the brand leaves it out", async () => {
     const rendered = await renderBrandSample(BRAND, {
-      classes: ["bg-brand", "text-brand-foreground"],
+      classes: ["bg-primary", "text-primary-foreground"],
       render: () => ({
         subject: "Sample",
         body: (
           <Email>
-            <p className="bg-brand text-brand-foreground">Hello</p>
+            <p className="bg-primary text-primary-foreground">Hello</p>
           </Email>
         ),
       }),
@@ -66,6 +67,7 @@ describe("renderBrandSample", () => {
     expect(rendered.html).toMatch(
       /background-color:#e11d48;\s*color:#ffffff|color:#ffffff;\s*background-color:#e11d48/,
     );
+    expect(rendered.html).toMatch(/\{[^}]*color:#000000!important/);
   });
 
   it("refuses a brand theme outside the grammar", async () => {
