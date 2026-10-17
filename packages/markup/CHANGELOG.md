@@ -1,3 +1,11 @@
+## @samva/markup@0.13.1
+
+### The authoring reference omits channel-only upgrade recipes
+
+`generated/reference.md` lists upgrade recipes only for diagnostics that apply to every template,
+matching its diagnostics table and `contract.json`. The `whatsapp-template-name` recipe stays in the
+diagnostic codes, where an agent migrating a WhatsApp template reads it.
+
 ## @samva/markup@0.13.0
 
 ### Meta's WhatsApp template name comes from the template's handle
