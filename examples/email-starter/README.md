@@ -1,7 +1,8 @@
 # Samva email starter
 
 One ordinary TSX email project. Clone or copy this directory, install its locked dependencies, and
-author the `welcome` template in `templates/welcome.tsx`.
+author the `welcome` template in `templates/welcome.tsx`, composed from the blocks in
+`templates/blocks/`.
 
 The starter intentionally contains one email entry and no source metadata or sidecar. The
 compiler reads the TSX and never runs it; Git owns this TSX project as the source tree.
@@ -62,13 +63,22 @@ subject, an optional preheader and the body; plain text is derived from the sema
 Fixtures are checked against the schema before publication, and actual send input is validated
 against the immutable publication schema.
 
-`theme.css` is the project theme, in Tailwind v4 syntax, and it layers by `@import`:
-`starter.css` holds this starter's look as theme variables (`--color-brand`, `--color-surface`,
-`--font-body` and the rest), `@import "samva:brand";` when present layers your organization's
-brand over it, and the file's own `@theme` block overrides both. Every color and font in `templates/`
-reads those variables, so a brand restyles the whole starter. Local previews and hosted publication
-builds use the version committed with the project. Build once per exact source tree;
-publication consumes the committed Bun lockfile v2 or npm lockfile v3 and verifies package integrity.
+## Theme and blocks
+
+`theme.css` is the project theme, in Tailwind v4 syntax, and it layers by `@import` over the
+default theme every project compiles with: `starter.css` holds this starter's look in the theme
+vocabulary (`--color-background`, `--color-card`, `--color-primary`, `--color-muted-foreground`,
+`--radius`, `--font-heading` and the rest), `@import "samva:brand";` when present layers your
+organization's brand over it, and the file's own `@theme` block overrides both. Dark mode is the
+same tokens in `starter.css`'s `@media (prefers-color-scheme: dark)` block; a class such as
+`bg-card` switches with it.
+
+The blocks in `templates/blocks/` (`Header`, `Hero`, `PrimaryButton`, `KeyValue`, `Callout`,
+`Footer`) are ordinary project partials that read only that vocabulary, so changing the theme
+restyles every one of them in light and dark mode. Copy a block to make a variant; replace the
+wordmark in `Header` with your logo. Local previews and hosted publication builds use the version
+committed with the project. Build once per exact source tree; publication consumes the committed
+Bun lockfile v2 or npm lockfile v3 and verifies package integrity.
 
 ## Check, build, commit, and publish
 
