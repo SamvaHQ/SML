@@ -16,6 +16,9 @@ type PreviewView = "preview" | "html" | "text" | "payload" | "source";
 
 const DEVICE_WIDTH: Record<DeviceMode, number> = { desktop: 600, mobile: MOBILE_WIDTH };
 
+/** The glyph before a flow button's label, marking that the button opens a WhatsApp Flow form. */
+const FLOW_GLYPH = "\u25A4";
+
 /**
  * The label shown for a WhatsApp copy-code button. Exported as the content contract:
  * the preview renders this exact copy for copy-code buttons (the code itself is
@@ -254,7 +257,16 @@ function OpenPreviewOverlay({ onClose }: { readonly onClose: () => void }) {
                         key={`${button.type}-${index}`}
                         className="border-border-subtle text-accent-email mt-2 border-t pt-2 text-center text-xs"
                       >
-                        {button.type === "copy-code" ? COPY_CODE_LABEL : button.text}
+                        {button.type === "copy-code" ? (
+                          COPY_CODE_LABEL
+                        ) : button.type === "flow" ? (
+                          <>
+                            <span aria-hidden="true">{FLOW_GLYPH} </span>
+                            {button.text}
+                          </>
+                        ) : (
+                          button.text
+                        )}
                       </div>
                     ))}
                   </div>

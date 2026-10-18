@@ -145,6 +145,12 @@ const channelComponents = [
     whatsappInterfaces,
     "WhatsAppCopyCodeButtonProps",
   ),
+  component(
+    "WhatsApp.FlowButton",
+    "@samva/markup/whatsapp",
+    whatsappInterfaces,
+    "WhatsAppFlowButtonProps",
+  ),
 ];
 
 /** `money(amount: number, currency: string, locale?: string): string;` lines of the Fmt interface. */

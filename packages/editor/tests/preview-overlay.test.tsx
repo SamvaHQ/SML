@@ -11,7 +11,7 @@ import { COPY_CODE_LABEL, PreviewOverlay } from "../src/chrome/preview-overlay";
 import { EditorProvider } from "../src/state/provider";
 import { markupEditor, SMS_TSX, WHATSAPP_TSX } from "./markup-host";
 import { emitChange, mockEditor } from "./mock-host";
-import { SMS_BODY_TEXT, WHATSAPP_URL_BUTTON } from "./selector-copy";
+import { SMS_BODY_TEXT, WHATSAPP_FLOW_BUTTON, WHATSAPP_URL_BUTTON } from "./selector-copy";
 
 afterEach(cleanup);
 
@@ -209,6 +209,21 @@ describe("PreviewOverlay — markup channels", () => {
     expect((view.baseElement as HTMLElement).querySelector("pre")?.textContent).toContain(
       '"body": "Hi Ada, your order shipped."',
     );
+  });
+
+  it("renders a flow button with its label", async () => {
+    const source = WHATSAPP_TSX.replace(
+      "<WhatsApp.QuickReplyButton>Stop</WhatsApp.QuickReplyButton>",
+      `<WhatsApp.FlowButton flow="order-survey">${WHATSAPP_FLOW_BUTTON}</WhatsApp.FlowButton>`,
+    );
+    const view = render(
+      <EditorProvider host={markupEditor("whatsapp", source).host}>
+        <PreviewOverlay open onClose={() => {}} />
+      </EditorProvider>,
+    );
+
+    await waitFor(() => expect(view.getByText(WHATSAPP_URL_BUTTON)).toBeTruthy());
+    expect(view.getByText(WHATSAPP_FLOW_BUTTON)).toBeTruthy();
   });
 
   it("says there is nothing to preview when the channel did not build", async () => {

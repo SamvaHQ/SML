@@ -23,7 +23,7 @@ Authoring entries are what a template file imports:
   functions a body may call.
 - `@samva/markup/sms` and `@samva/markup/whatsapp` — the channel components (`Sms`; `WhatsApp` with
   `WhatsApp.Header`, `Body`, `Footer`, `Buttons`, `UrlButton`, `QuickReplyButton`, `PhoneButton`,
-  `CopyCodeButton`). `whatsappTemplate` derives Meta's positional `{{n}}` text.
+  `CopyCodeButton`, `FlowButton`). `whatsappTemplate` derives Meta's positional `{{n}}` text.
 - `@samva/markup/input-schema` — `inputSchema`, which turns any Standard JSON Schema into the
   portable JSON Schema and validator a template's input is checked against.
 - `samva:brand` — `BrandLogo` (light logo, swapped for the dark one where the client honors dark

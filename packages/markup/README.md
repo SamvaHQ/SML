@@ -194,7 +194,7 @@ explicit argument overrides it.
 One template carries one schema and a body for each channel it supports. `@samva/markup/sms` and
 `@samva/markup/whatsapp` export the channel components (`Sms`; `WhatsApp` with `WhatsApp.Header`,
 `.Body`, `.Footer`, `.Buttons`, `.UrlButton`, `.QuickReplyButton`, `.PhoneButton` and
-`.CopyCodeButton`). Their names are distinct per channel, so a wrong prop fails in the type checker.
+`.CopyCodeButton` and `.FlowButton`). Their names are distinct per channel, so a wrong prop fails in the type checker.
 WhatsApp bindings compile to Meta's positional `{{1}}` placeholders (`whatsappTemplate`), and a
 conditional in a WhatsApp text part is refused because Meta templates cannot branch. The platform
 gates these channels.

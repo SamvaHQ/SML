@@ -1223,6 +1223,15 @@ const resolveButtons = (
       case "copy-code":
         out.push({ type: "copy-code", code: value(node.code) });
         break;
+      case "flow":
+        out.push({
+          type: "flow",
+          text: value(node.text),
+          flow: node.flow,
+          action: node.action,
+          ...(node.screen === undefined ? {} : { screen: node.screen }),
+        });
+        break;
       default:
         invalid("Unknown WhatsApp button.");
     }
