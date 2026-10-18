@@ -700,6 +700,36 @@
           "description": "The code the button copies."
         }
       ]
+    },
+    {
+      "name": "WhatsApp.FlowButton",
+      "import": "@samva/markup/whatsapp",
+      "props": [
+        {
+          "name": "flow",
+          "type": "string",
+          "optional": false,
+          "description": "The Samva flow handle: lowercase kebab-case, the file `flows/<handle>.json` in the template project. Samva maps it to Meta's flow id per business account when it registers the template."
+        },
+        {
+          "name": "action",
+          "type": "WhatsAppFlowAction",
+          "optional": true,
+          "description": "`navigate` by default; `data_exchange` has the flow's endpoint choose the first screen."
+        },
+        {
+          "name": "screen",
+          "type": "string",
+          "optional": true,
+          "description": "The screen a `navigate` flow opens on (Meta's `navigate_screen`); omitted, the flow's first entry screen. Refused with `data_exchange`."
+        },
+        {
+          "name": "children",
+          "type": "EmailChild",
+          "optional": true,
+          "description": "The button label."
+        }
+      ]
     }
   ],
   "elements": {

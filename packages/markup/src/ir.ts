@@ -148,7 +148,16 @@ export type IrWhatsAppButton =
   | { readonly type: "quick-reply"; readonly text: IrValue }
   | { readonly type: "url"; readonly text: IrValue; readonly url: IrValue }
   | { readonly type: "phone"; readonly text: IrValue; readonly phone: IrValue }
-  | { readonly type: "copy-code"; readonly code: IrValue };
+  | { readonly type: "copy-code"; readonly code: IrValue }
+  | {
+      readonly type: "flow";
+      readonly text: IrValue;
+      /** The Samva flow handle, resolved to Meta's flow id when the template is registered. */
+      readonly flow: string;
+      readonly action: "navigate" | "data_exchange";
+      /** Meta's `navigate_screen`; absent opens the flow's first entry screen. */
+      readonly screen?: string;
+    };
 
 /** A button, or buttons that appear when a condition over the input holds. */
 export type IrWhatsAppButtonNode =
@@ -223,7 +232,14 @@ export type RenderedWhatsAppButton =
   | { readonly type: "quick-reply"; readonly text: string }
   | { readonly type: "url"; readonly text: string; readonly url: string }
   | { readonly type: "phone"; readonly text: string; readonly phone: string }
-  | { readonly type: "copy-code"; readonly code: string };
+  | { readonly type: "copy-code"; readonly code: string }
+  | {
+      readonly type: "flow";
+      readonly text: string;
+      readonly flow: string;
+      readonly action: "navigate" | "data_exchange";
+      readonly screen?: string;
+    };
 
 /** A WhatsApp message with every text rendered and every conditional button resolved. */
 export interface RenderedIrWhatsApp {

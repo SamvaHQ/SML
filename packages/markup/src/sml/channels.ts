@@ -49,7 +49,12 @@ const BUTTON_TEXT_LIMIT = 25;
 const URL_BUTTON_LIMIT = 2;
 const PHONE_BUTTON_LIMIT = 1;
 const QUICK_REPLY_LIMIT = 10;
+const FLOW_BUTTON_LIMIT = 1;
 const BUTTON_LIMIT = 10;
+const FLOW_HANDLE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const FLOW_HANDLE_LIMIT = 64;
+const FLOW_SCREEN_PATTERN = /^[A-Za-z_]{1,100}$/;
+const FLOW_ACTIONS = ["navigate", "data_exchange"] as const;
 
 const jsxName = (name: Node): string => {
   if (name.type === "JSXIdentifier") return text(name, "name") ?? "";
@@ -252,10 +257,11 @@ interface ButtonCounts {
   readonly url: number;
   readonly phone: number;
   readonly quickReply: number;
+  readonly flow: number;
   readonly total: number;
 }
 
-const ZERO: ButtonCounts = { url: 0, phone: 0, quickReply: 0, total: 0 };
+const ZERO: ButtonCounts = { url: 0, phone: 0, quickReply: 0, flow: 0, total: 0 };
 
 /** The most buttons of each kind any combination of the conditions can produce. */
 const maximalCounts = (nodes: readonly IrWhatsAppButtonNode[]): ButtonCounts => {
@@ -269,6 +275,7 @@ const maximalCounts = (nodes: readonly IrWhatsAppButtonNode[]): ButtonCounts => 
         url: Math.max(then.url, otherwise.url),
         phone: Math.max(then.phone, otherwise.phone),
         quickReply: Math.max(then.quickReply, otherwise.quickReply),
+        flow: Math.max(then.flow, otherwise.flow),
         total: Math.max(then.total, otherwise.total),
       };
     } else
@@ -276,12 +283,14 @@ const maximalCounts = (nodes: readonly IrWhatsAppButtonNode[]): ButtonCounts => 
         url: node.type === "url" ? 1 : 0,
         phone: node.type === "phone" ? 1 : 0,
         quickReply: node.type === "quick-reply" ? 1 : 0,
+        flow: node.type === "flow" ? 1 : 0,
         total: 1,
       };
     counts = {
       url: counts.url + add.url,
       phone: counts.phone + add.phone,
       quickReply: counts.quickReply + add.quickReply,
+      flow: counts.flow + add.flow,
       total: counts.total + add.total,
     };
   }
@@ -308,6 +317,8 @@ const buttonNodes = (buttons: readonly IrWhatsAppButtonNode[]): IrNode[] =>
         return [button.text, button.phone];
       case "copy-code":
         return [button.code];
+      case "flow":
+        return [button.text];
     }
   });
 
@@ -514,6 +525,7 @@ const whatsappChannel = (input: ChannelInput, field: Node): IrWhatsApp | undefin
     over("URL buttons", counts.url, URL_BUTTON_LIMIT);
     over("phone buttons", counts.phone, PHONE_BUTTON_LIMIT);
     over("quick-reply buttons", counts.quickReply, QUICK_REPLY_LIMIT);
+    over("flow buttons", counts.flow, FLOW_BUTTON_LIMIT);
     over("buttons in all", counts.total, BUTTON_LIMIT);
     roots.push(...buttonNodes(buttons));
   }
@@ -530,7 +542,13 @@ const whatsappChannel = (input: ChannelInput, field: Node): IrWhatsApp | undefin
   };
 };
 
-const BUTTON_TAGS = ["UrlButton", "QuickReplyButton", "PhoneButton", "CopyCodeButton"] as const;
+const BUTTON_TAGS = [
+  "UrlButton",
+  "QuickReplyButton",
+  "PhoneButton",
+  "CopyCodeButton",
+  "FlowButton",
+] as const;
 
 const buttonList = (
   input: ChannelInput,
@@ -591,6 +609,100 @@ const buttonList = (
       );
     return value;
   };
+  // Samva resolves the flow handle when it registers the template, so these are string literals.
+  const flowButton = (element: Node): IrWhatsAppButton | undefined => {
+    const label_ = label(element, "label");
+    const values = new Map<string, string>();
+    let valid = true;
+    const refuse = (
+      node: Node,
+      code: "invalid-attribute" | "missing-attribute",
+      message: string,
+      fix: string,
+    ) => {
+      valid = false;
+      lowerer.error(ctx, node, code, message, fix);
+    };
+    for (const item of attributesOf(element)) {
+      if (item.type === "JSXSpreadAttribute") {
+        refuse(
+          item,
+          "invalid-attribute",
+          "A spread attribute runs code, and templates render without running code.",
+          "Write flow, action and screen as string literals.",
+        );
+        continue;
+      }
+      const nameNode = child(item, "name");
+      const name = nameNode === undefined ? "" : jsxName(nameNode);
+      if (name === "key") continue;
+      if (name !== "flow" && name !== "action" && name !== "screen") {
+        refuse(
+          item,
+          "invalid-attribute",
+          `\`${name}\` is not an attribute of this button.`,
+          "The attributes are flow, action and screen.",
+        );
+        continue;
+      }
+      const raw = child(item, "value");
+      const literal = raw?.type === "JSXExpressionContainer" ? child(raw, "expression") : raw;
+      if (literal?.type !== "StringLiteral") {
+        refuse(
+          item,
+          "invalid-attribute",
+          `\`${name}\` is fixed when the template is registered, so it is a string literal, not a binding.`,
+          `Write ${name}="…".`,
+        );
+        continue;
+      }
+      values.set(name, text(literal, "value") ?? "");
+    }
+    const flow = values.get("flow");
+    if (flow === undefined) {
+      if (valid)
+        refuse(element, "missing-attribute", "This button needs `flow`.", 'Write flow="handle".');
+    } else if (flow.length > FLOW_HANDLE_LIMIT || !FLOW_HANDLE_PATTERN.test(flow))
+      refuse(
+        element,
+        "invalid-attribute",
+        `\`${flow}\` is not a flow handle.`,
+        `Use the lowercase kebab-case handle of flows/<handle>.json, at most ${FLOW_HANDLE_LIMIT} characters.`,
+      );
+    const action = values.get("action") ?? "navigate";
+    if (!(FLOW_ACTIONS as readonly string[]).includes(action))
+      refuse(
+        element,
+        "invalid-attribute",
+        `\`${action}\` is not a flow action.`,
+        `Use one of ${FLOW_ACTIONS.join(", ")}.`,
+      );
+    const screen = values.get("screen");
+    if (screen !== undefined) {
+      if (action === "data_exchange")
+        refuse(
+          element,
+          "invalid-attribute",
+          "A data_exchange flow has its endpoint choose the first screen, so it takes no `screen`.",
+          'Remove screen, or use action="navigate".',
+        );
+      else if (!FLOW_SCREEN_PATTERN.test(screen) || screen === "SUCCESS")
+        refuse(
+          element,
+          "invalid-attribute",
+          `\`${screen}\` is not a flow screen id.`,
+          "Use the screen's id: letters and underscores, at most 100 characters, and not SUCCESS.",
+        );
+    }
+    if (!valid || flow === undefined || label_ === undefined) return undefined;
+    return {
+      type: "flow",
+      text: label_,
+      flow,
+      action: action as (typeof FLOW_ACTIONS)[number],
+      ...(screen === undefined ? {} : { screen }),
+    };
+  };
   const single = (element: Node): IrWhatsAppButton | undefined => {
     const tag = tagOf(element);
     const kind = tag.startsWith(`${local}.`) ? tag.slice(local.length + 1) : "";
@@ -618,6 +730,8 @@ const buttonList = (
         const code = label(element, "code");
         return code === undefined ? undefined : { type: "copy-code", code };
       }
+      case "FlowButton":
+        return flowButton(element);
       default:
         lowerer.error(
           ctx,

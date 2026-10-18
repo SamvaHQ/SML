@@ -142,7 +142,14 @@ export type WhatsAppRenderedButton =
   | { readonly type: "quick-reply"; readonly text: string }
   | { readonly type: "url"; readonly text: string; readonly url: string }
   | { readonly type: "phone"; readonly text: string; readonly phone: string }
-  | { readonly type: "copy-code"; readonly code: string };
+  | { readonly type: "copy-code"; readonly code: string }
+  | {
+      readonly type: "flow";
+      readonly text: string;
+      readonly flow: string;
+      readonly action: "navigate" | "data_exchange";
+      readonly screen?: string;
+    };
 
 /**
  * One render of the WhatsApp channel from the template's IR, mirroring what the renderer returns:

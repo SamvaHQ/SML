@@ -46,12 +46,31 @@ export interface WhatsAppCopyCodeButtonProps {
   readonly children?: EmailChild;
 }
 
+export type WhatsAppFlowAction = "navigate" | "data_exchange";
+
+export interface WhatsAppFlowButtonProps {
+  /**
+   * The Samva flow handle: lowercase kebab-case, the file `flows/<handle>.json` in the template
+   * project. Samva maps it to Meta's flow id per business account when it registers the template.
+   */
+  readonly flow: string;
+  /** `navigate` by default; `data_exchange` has the flow's endpoint choose the first screen. */
+  readonly action?: WhatsAppFlowAction | undefined;
+  /**
+   * The screen a `navigate` flow opens on (Meta's `navigate_screen`); omitted, the flow's first
+   * entry screen. Refused with `data_exchange`.
+   */
+  readonly screen?: string | undefined;
+  /** The button label. */
+  readonly children?: EmailChild;
+}
+
 // Executed, every part is a fragment of its children; the compiler reads the structure from source.
 const fragment = (children: EmailChild): EmailNode => jsx(Fragment, { children });
 
 /**
  * The root of a WhatsApp body. Meta's template anatomy is the vocabulary: `WhatsApp.Header`,
- * `WhatsApp.Body`, `WhatsApp.Footer` and `WhatsApp.Buttons`, whose children are the four button
+ * `WhatsApp.Body`, `WhatsApp.Footer` and `WhatsApp.Buttons`, whose children are the five button
  * kinds.
  */
 export const WhatsApp = Object.assign(
@@ -65,5 +84,6 @@ export const WhatsApp = Object.assign(
     QuickReplyButton: (props: WhatsAppQuickReplyButtonProps): EmailNode => fragment(props.children),
     PhoneButton: (props: WhatsAppPhoneButtonProps): EmailNode => fragment(props.children),
     CopyCodeButton: (props: WhatsAppCopyCodeButtonProps): EmailNode => fragment(props.children),
+    FlowButton: (props: WhatsAppFlowButtonProps): EmailNode => fragment(props.children),
   },
 );

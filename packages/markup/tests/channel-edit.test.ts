@@ -279,6 +279,23 @@ describe("WhatsApp channel form", () => {
     ]);
   });
 
+  it("reads a flow button as a locked row and keeps it when another button is removed", () => {
+    const withFlow = wrapWhatsApp(`    <WhatsApp language="en_US" category="marketing">
+      <WhatsApp.Body>Hello</WhatsApp.Body>
+      <WhatsApp.Buttons>
+        <WhatsApp.QuickReplyButton>Stop</WhatsApp.QuickReplyButton>
+        <WhatsApp.FlowButton flow="survey" screen="START">Take survey</WhatsApp.FlowButton>
+      </WhatsApp.Buttons>
+    </WhatsApp>`);
+    expect(readWhatsAppChannel(withFlow)!.buttons).toMatchObject([
+      { kind: "editable", type: "quick-reply" },
+      { kind: "locked" },
+    ]);
+    expect(whatsapp(withFlow, { kind: "buttonRemove", button: 0 })).toContain(
+      '<WhatsApp.FlowButton flow="survey" screen="START">Take survey</WhatsApp.FlowButton>',
+    );
+  });
+
   it("removes a button, and the group with the last one", () => {
     const removed = whatsapp(WHATSAPP, { kind: "buttonRemove", button: 1 });
     expect(removed).not.toContain("QuickReplyButton");

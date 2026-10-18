@@ -267,6 +267,106 @@ describe("the whatsapp channel", () => {
     expect(await errorCodes(wrap(quick))).toContain("whatsapp-button-limit");
   });
 
+  describe("flow buttons", () => {
+    const flowTemplate = (buttons: string) => `whatsapp: (input) => (
+      <WhatsApp language="en_US" category="marketing">
+        <WhatsApp.Body>Hi</WhatsApp.Body>
+        <WhatsApp.Buttons>${buttons}</WhatsApp.Buttons>
+      </WhatsApp>
+    ),`;
+
+    it("compiles to a flow button with navigate as the default action", async () => {
+      const compiled = await ok(
+        flowTemplate(`<WhatsApp.FlowButton flow="order-survey">Take survey</WhatsApp.FlowButton>`),
+      );
+      expect(compiled.ir!.whatsapp!.buttons).toEqual([
+        { type: "flow", text: "Take survey", flow: "order-survey", action: "navigate" },
+      ]);
+      expect(renderIrWhatsApp(compiled.ir!, compiled.fixtures.default).buttons).toEqual([
+        { type: "flow", text: "Take survey", flow: "order-survey", action: "navigate" },
+      ]);
+    });
+
+    it("keeps an explicit screen and the data_exchange action", async () => {
+      const screen = await ok(
+        flowTemplate(
+          `<WhatsApp.FlowButton flow="order-survey" screen="RATE_ORDER">Rate</WhatsApp.FlowButton>`,
+        ),
+      );
+      expect(screen.ir!.whatsapp!.buttons).toEqual([
+        {
+          type: "flow",
+          text: "Rate",
+          flow: "order-survey",
+          action: "navigate",
+          screen: "RATE_ORDER",
+        },
+      ]);
+      const exchange = await ok(
+        flowTemplate(
+          `<WhatsApp.FlowButton flow="order-survey" action="data_exchange">Rate</WhatsApp.FlowButton>`,
+        ),
+      );
+      expect(exchange.ir!.whatsapp!.buttons).toEqual([
+        { type: "flow", text: "Rate", flow: "order-survey", action: "data_exchange" },
+      ]);
+    });
+
+    it("refuses bindings in flow, action and screen", async () => {
+      for (const attributes of [
+        "flow={input.name}",
+        'flow="a" action={input.name}',
+        'flow="a" screen={input.name}',
+      ])
+        expect(
+          await errorCodes(
+            flowTemplate(`<WhatsApp.FlowButton ${attributes}>Go</WhatsApp.FlowButton>`),
+          ),
+        ).toContain("invalid-attribute");
+    });
+
+    it("refuses a bad handle, action or screen, and a missing flow", async () => {
+      const bad = [
+        'flow="Order_Survey"',
+        `flow="${"a".repeat(65)}"`,
+        'flow="a" action="submit"',
+        'flow="a" screen="not-valid"',
+        'flow="a" screen="SUCCESS"',
+        'flow="a" extra="1"',
+      ];
+      for (const attributes of bad)
+        expect(
+          await errorCodes(
+            flowTemplate(`<WhatsApp.FlowButton ${attributes}>Go</WhatsApp.FlowButton>`),
+          ),
+        ).toContain("invalid-attribute");
+      expect(
+        await errorCodes(flowTemplate("<WhatsApp.FlowButton>Go</WhatsApp.FlowButton>")),
+      ).toContain("missing-attribute");
+    });
+
+    it("refuses a screen with data_exchange", async () => {
+      expect(
+        await errorCodes(
+          flowTemplate(
+            '<WhatsApp.FlowButton flow="a" action="data_exchange" screen="START">Go</WhatsApp.FlowButton>',
+          ),
+        ),
+      ).toContain("invalid-attribute");
+    });
+
+    it("allows one flow button over the conditional maximum", async () => {
+      const flow = (n: number) => `<WhatsApp.FlowButton flow="f-${n}">Go</WhatsApp.FlowButton>`;
+      expect(await errorCodes(flowTemplate(`${flow(1)}${flow(2)}`))).toContain(
+        "whatsapp-button-limit",
+      );
+      expect(await errorCodes(flowTemplate(`${flow(1)}{input.vip && ${flow(2)}}`))).toContain(
+        "whatsapp-button-limit",
+      );
+      expect(await errorCodes(flowTemplate(`{input.vip ? ${flow(1)} : ${flow(2)}}`))).toEqual([]);
+    });
+  });
+
   it("warns on length, requires a body, and limits header variables", async () => {
     const long = "x".repeat(70);
     const compiled = await compile(`whatsapp: (input) => (
