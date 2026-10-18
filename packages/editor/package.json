@@ -1,6 +1,6 @@
 {
   "name": "@samva/editor",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Embeddable editor for Samva template projects written in TSX",
   "keywords": [
     "editor",
