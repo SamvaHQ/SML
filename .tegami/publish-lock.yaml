@@ -1,19 +1,19 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/markup:\n    type: minor\n  npm:@samva/vite:\n    type: minor\n---\n\n## A semantic theme vocabulary, one dark-mode mechanism and a contrast check\n\nEvery project compiles over a default theme in a shadcn-style vocabulary: `background`,\n`foreground`, `card`, `primary`, `secondary`, `muted`, `accent` (each with its `-foreground`),\n`border`, `--radius` (with `rounded-sm` to `rounded-xl` derived from it), `--font-sans` and\n`--font-heading`. `starter.css`, a brand and the project's own `@theme` set the same names, so\n`bg-card` or `text-primary-foreground` resolve in any project and a theme restyles every block that\nreads them. `reference.md` and `contract.json` list the tokens, their roles and their defaults;\n`@samva/markup/brand` exports `THEME_COLOR_ROLES`, `THEME_TOKENS` and `DEFAULT_THEME`.\n\nDark mode is one mechanism: the theme's `@media (prefers-color-scheme: dark) { @theme { … } }`\nblock, in project CSS and brand CSS alike. The compiler gives each element whose inlined styles\nread a color that block redefines a generated `sml-dark-*` class with a dark-mode rule, so a block\nwrites `bg-card` once. Explicit `dark:` utilities still apply after it and resolve theme colors at\ntheir dark values. A layer that sets a color in light mode only keeps it in dark mode, and a layer\nthat sets `--color-primary`, `--color-secondary` or `--color-accent` without its `-foreground` gets\nblack or white by contrast.\n\nBreaking: the `-dark` suffix convention is gone. Nothing lowers a dark color to\n`--color-<name>-dark` any more; move those values into the dark-mode block and drop the matching\n`dark:…-dark` classes. `brandTailwindCss`, `brandThemeVariables`, `darkVariableName`,\n`BRAND_COLOR_VARIABLE`, `BRAND_FOREGROUND_VARIABLE` and the `brand-css-dark-conflict` finding are\nremoved; `brandForegroundDefaults(brand)` is `foregroundDefaults(light, dark)` over the fills.\nThe brand footer and logo use `text-muted-foreground`.\n\nThe primitives read the theme. `Email` paints the page color (`--color-background` by default) on\nthe body and, as `bgcolor`, on the wrapper table, and pads its content 16px each side (`gutter`).\n`Section` treats a pixel width as a maximum, so it fits a phone. `Columns` stacks its cells below\n600px (`stack={false}` keeps a row) and spaces them with `gap` in both layouts. `Button`, `Link`\nand `Divider` default to the primary fill, the primary color and the border color through classes\na utility on them overrides; their explicit props are inline styles as before. These change the\ncompiled output of every template, so the email-parity golden digests change.\n\n`checkEmailCompatibility` adds `email-contrast`: each fixture is judged in light and dark mode,\nand text below 3:1 or a button below 1.5:1 against its surroundings is an error located at the\nelement; normal-size text below 4.5:1 and a button below 3:1 are warnings. New diagnostic codes:\n`email-contrast`, `invalid-columns-stack`, `invalid-columns-gap` and `invalid-number-prop`.\n\nThe email starter is redesigned on the vocabulary from copyable blocks in `templates/blocks/`.\n"
-    filename: theme-vocabulary-design-layer.md
+  - content: "---\npackages:\n  npm:@samva/markup:\n    type: minor\n  npm:@samva/editor:\n    type: minor\n---\n\n## WhatsApp template FLOW buttons\n\n`<WhatsApp.FlowButton flow=\"order-survey\">Take survey</WhatsApp.FlowButton>` adds a Meta FLOW\nbutton to a WhatsApp template. `flow` is the Samva flow handle (lowercase kebab-case, the file\n`flows/<handle>.json` in the template project); Samva maps it to Meta's flow id per business\naccount when it registers the template. `action` is `navigate` by default or `data_exchange`, and\n`screen` names the screen a `navigate` flow opens on (omitted, the flow's first entry screen);\n`screen` is refused with `data_exchange`. `flow`, `action` and `screen` are string literals, and a\ntemplate holds at most one flow button.\n\nThe IR button is `{ type: \"flow\", text, flow, action, screen? }`, and the rendered WhatsApp\nchannel and the editor preview carry it. The editor shows a flow button as a locked row; it is\nauthored in source.\n"
+    filename: whatsapp-flow-button.md
     v: 0.0.0
 core:packages:
-  - changelogIds:
-      - theme-vocabulary-design-layer.md
-    id: npm:@samva/vite
+  - id: npm:@samva/vite
     updated: true
   - changelogIds:
-      - theme-vocabulary-design-layer.md
+      - whatsapp-flow-button.md
+    id: npm:@samva/editor
+    updated: true
+  - changelogIds:
+      - whatsapp-flow-button.md
     id: npm:@samva/markup
-    updated: true
-  - id: npm:@samva/editor
     updated: true
 npm:packages:
   - id: npm:@samva/vite
-  - id: npm:@samva/markup
   - id: npm:@samva/editor
+  - id: npm:@samva/markup
