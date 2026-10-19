@@ -469,6 +469,8 @@ export interface UserSelection {
 
 export interface CreateEditorBundleOptions {
   readonly hostChecks: ReadonlyArray<CheckItem>;
+  /** The pane a docked workspace too narrow for both shows first. */
+  readonly initialPane?: FocusedPane | undefined;
 }
 
 const renderOf = (document: EditorDocument | null): EmailRender | null =>
@@ -1327,7 +1329,7 @@ export const createEditorBundle = (
       workTabs: initialWorkTabs,
       activeWorkTab: readStoredWorkTab(initialWorkTabs),
       chatCollapsed: readStored(CHAT_COLLAPSED_KEY) === "true",
-      focusedPane: "assistant",
+      focusedPane: options.initialPane ?? "assistant",
       previewUnseen: false,
       previewEpoch: 0,
       previewRefreshing: false,

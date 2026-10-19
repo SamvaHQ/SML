@@ -67,7 +67,9 @@ its "+" menu and closes them again. The open tabs, the shown tab, the chat width
 chat is collapsed persist per browser like the other layout preferences. From 1280px of editor
 frame width the chat and the work pane sit side by side with a draggable divider (280–640px,
 dragging below 140px collapses the chat); below it a Chat | Preview switch shows one at a time,
-and Preview carries a dot when the host changed the email while the chat was shown. The host's
+starting on the chat unless `EditorProvider`'s `initialPane` is `"preview"` (for a host whose own
+app is the conversation), and Preview carries a dot when the host changed the email while the
+chat was shown. The host's
 assistant stays mounted across those changes. Without an assistant the shell keeps layers,
 canvas and inspector around a Visual | Source switch.
 

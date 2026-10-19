@@ -307,6 +307,27 @@ describe("container-responsive rail policy", () => {
     expect(again.getByTestId("agent-column.resize")).toBeTruthy();
   });
 
+  it("opens a narrow docked workspace on the pane the host names", async () => {
+    stubFrame(1000);
+    const view = render(
+      <EditorProvider host={await host()} initialPane="preview">
+        <EditorShell
+          contributions={[
+            { slot: "rail.assistant", id: "assistant", render: () => <div>Assistant</div> },
+          ]}
+        />
+      </EditorProvider>,
+    );
+    await waitFor(() =>
+      expect(view.container.querySelector('[data-agent-workspace-layout="focused"]')).toBeTruthy(),
+    );
+    expect(view.getByTestId("agent-workspace.tab.preview").getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(view.getByTestId("agent-column").closest("[hidden]")).not.toBeNull();
+    expect(view.getByTestId("work-pane").closest("[hidden]")).toBeNull();
+  });
+
   it("marks Preview when the host changes the email while the chat is shown", async () => {
     stubFrame(1440);
     const notify = observeResizes();
