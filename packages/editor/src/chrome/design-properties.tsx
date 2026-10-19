@@ -276,6 +276,8 @@ export function DesignProperties({
   const tokens = plain(classTokens(className?.kind === "literal" ? className.value : ""));
   const allTokens = classTokens(className?.kind === "literal" ? className.value : "");
   const colorNames = new Set(colors.map((color) => color.name));
+  // Neutrals, then the brand colors, then borders: the order a designer scans a palette in.
+  const orderedColors = colors.toSorted((a, b) => colorGroup(a.name) - colorGroup(b.name));
 
   const setClasses = (next: ReadonlyArray<string>, label: string) => {
     const result = classNameEdit(source, target, { kind: "set", value: next.join(" ") });
@@ -426,36 +428,46 @@ export function DesignProperties({
         <div
           data-slot="editor-design-swatches"
           data-testid={testId}
-          className="flex flex-wrap gap-1"
+          className="flex flex-wrap items-center gap-2 py-0.5"
         >
-          {colors.map((color) => {
-            const token = `${prefix}-${color.name}`;
-            const selected = current === token;
+          {[{ name: "", value: undefined }, ...orderedColors].map((color) => {
+            const token = color.name === "" ? null : `${prefix}-${color.name}`;
+            const selected =
+              token === null ? current === undefined && custom === undefined : current === token;
+            const name = token === null ? "Not set" : color.name;
             return (
-              <Toggle
-                key={color.name}
-                variant="outline"
-                size="sm"
-                aria-label={`${label}: ${color.name}`}
-                pressed={selected}
-                data-testid={`${testId}.${color.name}`}
-                disabled={!available}
-                onPressedChange={() =>
-                  swap(isColor(prefix), selected ? [] : [token], `Change ${label.toLowerCase()}`)
-                }
-                className="text-foreground aria-pressed:border-ring aria-pressed:ring-ring/30 h-6 min-w-0 gap-1.5 rounded-md pr-2 pl-1 text-[11px] font-normal aria-pressed:ring-2"
-              >
-                <span
-                  aria-hidden
-                  className="size-3.5 shrink-0 rounded-[4px] border border-black/10 dark:border-white/15"
-                  style={{
-                    background:
-                      color.value ??
-                      "repeating-linear-gradient(45deg, var(--muted), var(--muted) 3px, transparent 3px, transparent 6px)",
+              <Tip key={name} label={name} side="top">
+                <Toggle
+                  aria-label={`${label}: ${name}`}
+                  pressed={selected}
+                  data-testid={`${testId}.${token === null ? "none" : color.name}`}
+                  disabled={!available}
+                  onPressedChange={() => {
+                    if (!selected)
+                      swap(
+                        isColor(prefix),
+                        token === null ? [] : [token],
+                        `Change ${label.toLowerCase()}`,
+                      );
                   }}
-                />
-                {color.name}
-              </Toggle>
+                  className="ring-offset-background aria-pressed:ring-ring size-5 min-w-0 rounded-full p-0 hover:bg-transparent aria-pressed:bg-transparent aria-pressed:ring-2 aria-pressed:ring-offset-2"
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "size-5 rounded-full border border-black/15 dark:border-white/20",
+                      token === null && "border-muted-foreground/60 border-dashed",
+                    )}
+                    style={{
+                      background:
+                        token === null
+                          ? "linear-gradient(135deg, transparent 44%, var(--muted-foreground) 44%, var(--muted-foreground) 56%, transparent 56%)"
+                          : (color.value ??
+                            "repeating-linear-gradient(45deg, var(--muted), var(--muted) 3px, transparent 3px, transparent 6px)"),
+                    }}
+                  />
+                </Toggle>
+              </Tip>
             );
           })}
         </div>
@@ -557,7 +569,7 @@ export function DesignProperties({
             {(["width", "height"] as const).map((name) => {
               const field = prop(name);
               return field?.kind === "literal" ? (
-                <Field key={name} label={propLabel(name)}>
+                <Field key={name} label={`${propLabel(name)} (px)`}>
                   <CommitInput
                     type="number"
                     ariaLabel={propLabel(name)}
@@ -577,7 +589,7 @@ export function DesignProperties({
           <div className="grid grid-cols-2 gap-2">
             {literalProps.map((field) =>
               field.kind === "literal" ? (
-                <Field key={field.name} label={propLabel(field.name)}>
+                <Field key={field.name} label={withUnit(field)}>
                   <CommitInput
                     type={field.literalType === "number" ? "number" : "text"}
                     ariaLabel={propLabel(field.name)}
@@ -590,7 +602,7 @@ export function DesignProperties({
                   />
                 </Field>
               ) : (
-                <Field key={field.name} label={propLabel(field.name)}>
+                <Field key={field.name} label={withUnit(field)}>
                   <Badge
                     variant="secondary"
                     className="w-fit rounded-md font-mono text-[11px] font-normal"
@@ -722,6 +734,21 @@ export function DesignProperties({
     </div>
   );
 }
+
+/** A pixel setting names its unit: "Width (px)". */
+const withUnit = (field: SourceProperty): string =>
+  field.literalType === "number" && /width|height|padding|radius|size|margin|gap/i.test(field.name)
+    ? `${propLabel(field.name)} (px)`
+    : propLabel(field.name);
+
+/** 0 neutrals, 1 brand (primary, secondary, accent, destructive), 2 borders, 3 anything else. */
+const colorGroup = (name: string): number => {
+  const base = name.replace(/-foreground$/, "");
+  if (["background", "foreground", "card", "popover", "muted"].includes(base)) return 0;
+  if (["primary", "secondary", "accent", "destructive"].includes(base)) return 1;
+  if (["border", "input", "ring"].includes(base)) return 2;
+  return 3;
+};
 
 /** Order type sizes small to large: named steps, then pixel sizes by value. */
 const sizeRank = (token: string): number => {
