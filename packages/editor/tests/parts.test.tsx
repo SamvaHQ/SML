@@ -5,7 +5,9 @@
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { cleanup, render, waitFor } from "@testing-library/react";
 
+import { EditorCanvas } from "../src/chrome/canvas-pane";
 import { EditorPreviewBar } from "../src/chrome/preview-bar";
+import { EditorDivider } from "../src/chrome/resize";
 import { EditorRoot, EditorStatusBar, EditorTopBar, EditorWorkspace } from "../src/chrome/shell";
 import { EditorProvider } from "../src/state/provider";
 import { mockEditor } from "./mock-host";
@@ -104,5 +106,39 @@ describe("chrome parts", () => {
     expect(bar.tagName).toBe("NAV");
     expect(bar.dataset.slot).toBe("editor-preview-bar");
     expect(bar.hasAttribute("data-busy")).toBe(false);
+  });
+
+  it("let the canvas and divider take className and render, keeping their own behaviour", async () => {
+    stubFrame(1440);
+    const keys: string[] = [];
+    const view = render(
+      <EditorProvider host={(await mockEditor()).host}>
+        <EditorRoot>
+          <div data-testid="test.row" className="flex">
+            <EditorDivider
+              side="assistant"
+              className={(state) => `side-${state.side}`}
+              onKeyDown={(event) => keys.push(event.key)}
+            />
+          </div>
+          <EditorCanvas render={<section data-testid="test.canvas" />} className="rounded-xl" />
+        </EditorRoot>
+      </EditorProvider>,
+    );
+    const canvas = await view.findByTestId("test.canvas");
+    expect(canvas.tagName).toBe("SECTION");
+    expect(canvas.dataset.slot).toBe("editor-canvas");
+    expect(canvas.className).toContain("rounded-xl");
+    const divider = view
+      .getByTestId("test.row")
+      .querySelector<HTMLElement>('[data-slot="editor-divider"]');
+    if (divider === null) throw new Error("no divider");
+    expect(divider.className).toContain("side-assistant");
+    const before = Number(divider.getAttribute("aria-valuenow"));
+    divider.focus();
+    divider.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    // The host's handler ran, and so did the divider's own.
+    expect(keys).toEqual(["ArrowRight"]);
+    await waitFor(() => expect(Number(divider.getAttribute("aria-valuenow"))).toBe(before + 8));
   });
 });

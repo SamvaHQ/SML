@@ -20,8 +20,8 @@ export type { EditorRootProps, EditorRootState } from "./chrome/shell";
 // `render`, carries a `data-slot`, and exposes its state as data attributes. Render them inside
 // `EditorRoot` to lay the editor out differently from `EditorShell`.
 export { EditorAssistantDock, type AssistantDockState } from "./chrome/assistant-rail";
-export { EditorCanvas } from "./chrome/canvas-pane";
-export { EditorDivider } from "./chrome/resize";
+export { EditorCanvas, type CanvasState } from "./chrome/canvas-pane";
+export { EditorDivider, type DividerState } from "./chrome/resize";
 export { EditorPaneSwitch, type EditorPaneSwitchState } from "./chrome/pane-switch";
 export { EditorPreviewBar, FixtureSelect as EditorFixtureSelect } from "./chrome/preview-bar";
 export type { PreviewBarState } from "./chrome/preview-bar";

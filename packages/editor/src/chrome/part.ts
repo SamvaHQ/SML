@@ -41,16 +41,24 @@ export function usePart<State extends Record<string, unknown>>(
   },
 ): ReactElement {
   const resolved = typeof className === "function" ? className(options.state) : className;
+  // The host's attributes win over the part's defaults, its classes merge with them, and an event
+  // handler both define runs the host's first and then the part's own.
+  const merged: Record<string, unknown> = { "data-slot": slot, ...options.props };
+  for (const [key, value] of Object.entries(props)) {
+    const own = merged[key];
+    merged[key] =
+      /^on[A-Z]/.test(key) && typeof own === "function" && typeof value === "function"
+        ? (...args: ReadonlyArray<unknown>) => {
+            value(...args);
+            own(...args);
+          }
+        : value;
+  }
+  merged.className = cn(options.className, resolved);
   return useRender({
     render,
     state: options.state,
     defaultTagName: options.tag ?? "div",
-    // The host's attributes win over the part's defaults; its classes merge with them.
-    props: {
-      "data-slot": slot,
-      ...options.props,
-      ...props,
-      className: cn(options.className, resolved),
-    },
+    props: merged,
   });
 }

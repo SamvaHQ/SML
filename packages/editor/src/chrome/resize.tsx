@@ -9,6 +9,7 @@ import {
 
 import { useEditorStore, useEditorStoreApi } from "../state/context";
 import { ASSISTANT_MAX, ASSISTANT_MIN, CHAT_COLLAPSE_BELOW } from "../state/store";
+import { usePart, type PartProps } from "./part";
 import { cn, focusRing } from "./ui-classes";
 
 type ResizeSide = "assistant" | "left" | "right";
@@ -42,13 +43,16 @@ const restoreBody = () => {
  * Keyboard: arrow keys step (Shift for a larger step), Home and End jump to the limits.
  * Dragging the chat divider below `CHAT_COLLAPSE_BELOW` collapses the chat and keeps its width.
  */
+/** The state an `EditorDivider` exposes. */
+export interface DividerState extends Record<string, unknown> {
+  readonly side: ResizeSide;
+  readonly dragging: boolean;
+}
+
 export function ResizeHandle({
   side,
-  className,
-}: {
-  readonly side: ResizeSide;
-  readonly className?: string | undefined;
-}) {
+  ...props
+}: PartProps<"div", DividerState> & { readonly side: ResizeSide }) {
   const storeApi = useEditorStoreApi();
   const width = useEditorStore((state) =>
     side === "assistant"
@@ -123,36 +127,37 @@ export function ResizeHandle({
     resizeTo(next);
   };
 
-  return (
-    <div
-      data-slot="editor-divider"
-      data-side={side}
-      data-editor-resize={side}
-      data-dragging={isDragging ? "" : undefined}
-      role="separator"
-      aria-orientation="vertical"
-      aria-label={LABELS[side]}
-      aria-valuenow={width}
-      aria-valuemin={side === "assistant" ? ASSISTANT_MIN : undefined}
-      aria-valuemax={side === "assistant" ? ASSISTANT_MAX : undefined}
-      data-testid={TEST_IDS[side]}
-      tabIndex={0}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onLostPointerCapture={endDrag}
-      onKeyDown={onKeyDown}
-      className={cn(
+  return usePart<DividerState>(
+    "editor-divider",
+    { ...props },
+    {
+      state: { side, dragging: isDragging },
+      className: cn(
         "relative z-10 -mx-1.5 w-3 shrink-0 cursor-col-resize touch-none outline-none",
         "before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-border before:transition-colors",
         "hover:before:w-0.5 hover:before:bg-accent-email",
         "data-[dragging]:before:w-0.5 data-[dragging]:before:bg-accent-email",
         "focus-visible:before:w-0.5 focus-visible:before:bg-accent-email",
         focusRing,
-        className,
-      )}
-    />
+      ),
+      props: {
+        "data-editor-resize": side,
+        role: "separator",
+        "aria-orientation": "vertical",
+        "aria-label": LABELS[side],
+        "aria-valuenow": width,
+        "aria-valuemin": side === "assistant" ? ASSISTANT_MIN : undefined,
+        "aria-valuemax": side === "assistant" ? ASSISTANT_MAX : undefined,
+        "data-testid": TEST_IDS[side],
+        tabIndex: 0,
+        onPointerDown,
+        onPointerMove,
+        onPointerUp: endDrag,
+        onPointerCancel: endDrag,
+        onLostPointerCapture: endDrag,
+        onKeyDown,
+      },
+    },
   );
 }
 

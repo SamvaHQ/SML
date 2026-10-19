@@ -27,6 +27,7 @@ import { useContributions } from "./contributions";
 import { outlineAncestry, selectionLabel } from "./email-outline";
 import { EnvelopeCard } from "./envelope-card";
 import { NodeContextMenu, type AncestorEntry } from "./node-context-menu";
+import { usePart, type PartProps } from "./part";
 import { EditorPreviewBar, PreviewNotice } from "./preview-bar";
 import { useEditorPortalContainer } from "./use-editor-portal";
 import { EditorZoomControl } from "./zoom-control";
@@ -38,11 +39,20 @@ import { EditorZoomControl } from "./zoom-control";
  * store, and drops to document scope when the backdrop outside the email is clicked. While
  * `active`, a pinch or ⌘/Ctrl with +, − or 0 zooms the canvas rather than the page.
  */
+/** The state an `EditorCanvas` exposes. */
+export interface CanvasState extends Record<string, unknown> {
+  /** `fit`, or the zoom percentage. */
+  readonly zoom: string;
+  /** The width the email is shown at. */
+  readonly device: string;
+}
+
 export function CanvasPane({
   pointing = false,
   active = true,
   viewMenu,
-}: {
+  ...props
+}: PartProps<"div", CanvasState> & {
   /** Extra rows for the preview bar's menu. */
   readonly viewMenu?: ReactNode | undefined;
   readonly pointing?: boolean | undefined;
@@ -207,8 +217,8 @@ export function CanvasPane({
       />
     );
 
-  return (
-    <div data-slot="editor-canvas" className="flex min-h-0 min-w-0 flex-1 flex-col">
+  const children = (
+    <>
       {doc !== null && doc.channel === "email" && (
         <>
           <EditorPreviewBar viewMenu={viewMenu} />
@@ -279,7 +289,16 @@ export function CanvasPane({
         </div>
         {doc !== null && <EditorZoomControl percent={percent} />}
       </div>
-    </div>
+    </>
+  );
+  return usePart<CanvasState>(
+    "editor-canvas",
+    { ...props },
+    {
+      state: { zoom: canvasZoom === "fit" ? "fit" : String(canvasZoom), device: previewDevice },
+      className: "flex min-h-0 min-w-0 flex-1 flex-col",
+      props: { children },
+    },
   );
 }
 
