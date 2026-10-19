@@ -195,7 +195,7 @@ export function EditorDesignDock(props: PartProps<"div", DesignDockState>) {
       aria-label="Reset edits"
       data-slot="editor-design-dock-confirm"
       data-testid="design-dock.reset-confirm"
-      className={cn(floatingClass, "flex items-center gap-1 p-1 pl-3")}
+      className="flex items-center gap-1 pl-3"
     >
       <span className="text-foreground mr-1 text-xs font-medium">
         Reset {pending === 1 ? "this edit" : `all ${pending} edits`}?
@@ -230,7 +230,7 @@ export function EditorDesignDock(props: PartProps<"div", DesignDockState>) {
       data-testid="design-dock"
       data-pending={pending}
       data-state={apply.status}
-      className={cn(floatingClass, "flex items-center gap-0.5 p-1")}
+      className="flex items-center gap-0.5"
     >
       <span
         data-slot="editor-design-dock-status"
@@ -332,7 +332,7 @@ export function EditorDesignDock(props: PartProps<"div", DesignDockState>) {
 
   return usePart<DesignDockState>("editor-design-dock", props, {
     state: { pending, apply: apply.status, compare, confirming },
-    className: "pointer-events-none flex flex-col items-center gap-1.5",
+    className: "flex min-w-0 items-center gap-2",
     props: {
       children: (
         <>
@@ -341,10 +341,7 @@ export function EditorDesignDock(props: PartProps<"div", DesignDockState>) {
               role="alert"
               data-slot="editor-design-dock-error"
               data-testid="design-dock.error"
-              className={cn(
-                floatingClass,
-                "text-destructive max-w-sm px-3 py-1.5 text-center text-xs",
-              )}
+              className="text-destructive max-w-xs truncate text-xs"
             >
               {apply.reason} Your edits are kept.
             </p>

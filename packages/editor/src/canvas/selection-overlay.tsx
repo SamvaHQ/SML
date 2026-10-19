@@ -11,7 +11,8 @@ const outlineStyle = (box: Box, color: string, weight: number): CSSProperties =>
   width: box.width,
   height: box.height,
   outline: `${weight}px solid ${color}`,
-  outlineOffset: -weight,
+  // The selection sits just outside the element, so its text never touches the line.
+  outlineOffset: weight > 1 ? 2 : -weight,
   pointerEvents: "none",
   zIndex: 2147483646,
 });

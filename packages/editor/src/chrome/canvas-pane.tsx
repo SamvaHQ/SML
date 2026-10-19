@@ -319,8 +319,8 @@ export function CanvasPane({
             // from moving when the zoomed email starts or stops overflowing.
             className={cn(
               "samva-editor-scroll relative flex-1 [scrollbar-gutter:stable] overflow-auto px-10 pt-10 pb-24 [overflow-anchor:none]",
-              // Room to scroll the end of the email above the dock and the pin tray.
-              (designing || pins.length > 0 || canvasMode === "pin") && "pb-64",
+              // Room to scroll the end of the email above the pin tray.
+              (pins.length > 0 || canvasMode === "pin") && "pb-64",
             )}
             onClick={selectDocument}
           >
@@ -368,14 +368,31 @@ export function CanvasPane({
               </span>
             </div>
           )}
-          {doc !== null && (designing || pins.length > 0 || canvasMode === "pin") && (
-            // Above the zoom control: the tray, then the Design dock.
-            <div className="pointer-events-none absolute inset-x-0 bottom-15 z-20 flex flex-col items-center gap-2 px-3">
+          {doc !== null && (pins.length > 0 || canvasMode === "pin") && (
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-x-0 z-20 flex flex-col items-center gap-2 px-3",
+                designing ? "bottom-3" : "bottom-15",
+              )}
+            >
               <EditorPinTray />
-              {designing && <EditorDesignDock />}
             </div>
           )}
-          {doc !== null && <EditorZoomControl percent={percent} />}
+          {doc !== null && !designing && <EditorZoomControl percent={percent} />}
+          {doc !== null && designing && (
+            // In Design the zoom and the staged edits share one bar under the email, in the
+            // layout rather than over it, so neither covers the email.
+            <div
+              data-slot="editor-design-bar"
+              className="border-border bg-background flex shrink-0 items-center justify-between gap-2 border-t px-2 py-1.5"
+            >
+              <EditorZoomControl
+                percent={percent}
+                className="static translate-x-0 rounded-none bg-transparent p-0 shadow-none ring-0"
+              />
+              <EditorDesignDock />
+            </div>
+          )}
         </div>
         {pointing && designing && (
           // Beside a docked chat the work pane has no inspector of its own, so Design brings the

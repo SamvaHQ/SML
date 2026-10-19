@@ -88,7 +88,7 @@ compare with the preview from before the edits, and **Apply**, which saves them 
 through the `versions` capability, named "Design: N edits" (without `versions` Apply keeps the
 draft as it is). Leaving Design waits until the edits are applied or reset, and Design and Apply
 wait while `previewBusy` reports an assistant turn, so the two never edit the email at once.
-Source is read-only while edits are staged, so undo and reset walk one history in order. An
+Source is read-only while edits are staged, so undo and reset walk one history in order. The top bar's Undo and Redo and the dock's act on the same history: the staged edits first, then the source history. An
 element written in a partial is saved through `lifecycle` immediately, because other templates
 share it.
 
