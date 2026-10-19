@@ -214,7 +214,11 @@ export function PreviewBar() {
                   {size.text}
                 </div>
                 {openInNewTab !== undefined && (
-                  <Menu.Item className={menuItemClass} onClick={openInNewTab}>
+                  <Menu.Item
+                    className={menuItemClass}
+                    data-editor-control=""
+                    onClick={openInNewTab}
+                  >
                     <OpenExternal className="size-3.5" />
                     Open in a new tab
                   </Menu.Item>
@@ -271,6 +275,7 @@ export function PreviewNotice() {
           type="button"
           onClick={showChecks}
           data-testid="canvas.preview-stale.checks"
+          data-editor-control=""
           className={cn(
             softRaised,
             "h-7 shrink-0 rounded-md px-2.5 text-xs font-medium",

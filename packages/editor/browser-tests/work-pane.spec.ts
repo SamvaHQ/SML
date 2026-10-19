@@ -241,6 +241,18 @@ test("on a phone every visible editor control is at least 44px and Design is rea
     expect(await undersized()).toEqual([]);
     await addTab(page, "checks");
     expect(await undersized()).toEqual([]);
+
+    // The "+" menu's rows and the broken-edit notice's action are controls too.
+    await page.getByTestId("work-pane.add").click();
+    await expect(page.getByTestId("work-pane.add-menu")).toBeVisible();
+    expect(await undersized()).toEqual([]);
+    await page.keyboard.press("Escape");
+    await page.getByTestId("agent-workspace.tab.assistant").click();
+    await page.getByTestId("dev-app.stale-preview").click();
+    await page.getByTestId("agent-workspace.tab.preview").click();
+    await page.getByTestId("work-pane.tab.preview").click();
+    await expect(page.getByTestId("canvas.preview-stale.checks")).toBeVisible();
+    expect(await undersized()).toEqual([]);
   } finally {
     await context.close();
   }

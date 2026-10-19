@@ -215,6 +215,7 @@ export function WorkPane({
                       <Menu.Item
                         key={tab}
                         data-testid={`work-pane.add.${tab}`}
+                        data-editor-control=""
                         onClick={() => openWorkTab(tab)}
                         className={cn(menuItemClass, "py-1.5")}
                       >
