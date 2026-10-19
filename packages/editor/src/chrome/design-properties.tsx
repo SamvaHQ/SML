@@ -12,6 +12,7 @@ import { Badge } from "../ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import { Toggle } from "../ui/toggle";
 import { AlignCenter, AlignLeft, AlignRight, ChevronRight } from "./editor-icons";
 import { classTokens, propLabel, themeColors, usedColorTokens, type ThemeColor } from "./friendly";
 import { THEME_PATH } from "./theme-brand";
@@ -431,20 +432,18 @@ export function DesignProperties({
             const token = `${prefix}-${color.name}`;
             const selected = current === token;
             return (
-              <button
+              <Toggle
                 key={color.name}
-                type="button"
+                variant="outline"
+                size="sm"
                 aria-label={`${label}: ${color.name}`}
-                aria-pressed={selected}
+                pressed={selected}
                 data-testid={`${testId}.${color.name}`}
                 disabled={!available}
-                onClick={() =>
+                onPressedChange={() =>
                   swap(isColor(prefix), selected ? [] : [token], `Change ${label.toLowerCase()}`)
                 }
-                className={cn(
-                  "border-border text-foreground hover:bg-muted focus-visible:ring-ring/50 inline-flex h-6 items-center gap-1.5 rounded-md border pr-2 pl-1 text-[11px] outline-none focus-visible:ring-3 disabled:opacity-50",
-                  selected && "border-ring bg-muted ring-ring/30 ring-2",
-                )}
+                className="text-foreground aria-pressed:border-ring aria-pressed:ring-ring/30 h-6 min-w-0 gap-1.5 rounded-md pr-2 pl-1 text-[11px] font-normal aria-pressed:ring-2"
               >
                 <span
                   aria-hidden
@@ -456,7 +455,7 @@ export function DesignProperties({
                   }}
                 />
                 {color.name}
-              </button>
+              </Toggle>
             );
           })}
         </div>

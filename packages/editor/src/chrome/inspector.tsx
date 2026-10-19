@@ -271,13 +271,14 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
           <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {siblings.map((sibling, index) => (
               <li key={sibling.instancePath}>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   data-testid={`inspector.iteration.${sibling.instancePath}`}
                   aria-current={sibling.instancePath === selection.instancePath || undefined}
                   onClick={() => select(sibling.instancePath)}
                   className={cn(
-                    "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[12.5px]",
+                    "w-full justify-start gap-2 px-2 text-left text-[12.5px] font-normal",
                     sibling.instancePath === selection.instancePath &&
                       "bg-muted text-foreground font-medium",
                   )}
@@ -286,7 +287,7 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
                   <span className="min-w-0 flex-1 truncate">
                     {selectionTextExcerpt(sibling, html) ?? `Copy ${index + 1}`}
                   </span>
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -444,24 +445,26 @@ export function Inspector({
                 <span className="text-foreground truncate px-1 font-semibold">Envelope</span>
               ) : (
                 <>
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="xs"
                     onClick={selectDocument}
                     data-testid="inspector.document"
-                    className="hover:bg-muted hover:text-foreground shrink-0 rounded px-1"
+                    className="text-muted-foreground shrink-0 px-1 font-normal"
                   >
                     Email
-                  </button>
+                  </Button>
                   {crumbs.map((crumb) => (
                     <span key={crumb.instancePath} className="contents">
                       <ChevronRight className="text-placeholder size-3 shrink-0" />
-                      <button
-                        type="button"
+                      <Button
+                        variant="ghost"
+                        size="xs"
                         onClick={() => select(crumb.instancePath)}
-                        className="hover:bg-muted hover:text-foreground max-w-[88px] truncate rounded px-1"
+                        className="text-muted-foreground max-w-[88px] truncate px-1 font-normal"
                       >
                         {crumb.label}
-                      </button>
+                      </Button>
                     </span>
                   ))}
                   <ChevronRight className="text-placeholder size-3 shrink-0" />

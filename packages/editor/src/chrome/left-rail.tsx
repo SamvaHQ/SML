@@ -70,13 +70,14 @@ function TreeRow({ node, depth }: { node: AuthoredNode; depth: number }) {
           )}
         >
           {hasChildren ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon-xs"
               aria-expanded={open}
               data-testid="left-rail.layer.toggle"
               aria-label={`${open ? "Collapse" : "Expand"} ${name}`}
               className={cn(
-                "grid size-4 shrink-0 place-items-center text-muted-foreground transition-transform",
+                "text-muted-foreground size-5 shrink-0 transition-transform hover:bg-transparent",
                 open && "rotate-90",
               )}
               onClick={(event) => {
@@ -85,17 +86,18 @@ function TreeRow({ node, depth }: { node: AuthoredNode; depth: number }) {
               }}
             >
               <ChevronRight className="size-3" />
-            </button>
+            </Button>
           ) : (
-            <span aria-hidden className="size-4 shrink-0" />
+            <span aria-hidden className="size-5 shrink-0" />
           )}
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             data-layer-instance-path={node.instancePath}
             data-layer-name={name}
             data-testid={`layers.node.${node.instancePath}`}
-            type="button"
             onClick={() => select(node.instancePath)}
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            className="h-full min-w-0 flex-1 justify-start gap-2 rounded-md px-1 text-left font-normal hover:bg-transparent dark:hover:bg-transparent"
           >
             {createElement(iconForTag(selection.tag), {
               className: cn(
@@ -114,7 +116,7 @@ function TreeRow({ node, depth }: { node: AuthoredNode; depth: number }) {
                 {repeat}
               </span>
             )}
-          </button>
+          </Button>
         </div>
       </div>
       {hasChildren && open && (
