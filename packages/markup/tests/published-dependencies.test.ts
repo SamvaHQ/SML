@@ -15,6 +15,7 @@ const PUBLIC_ENTRIES = [
   ".",
   "./brand",
   "./brand-sample",
+  "./compatibility",
   "./compiler",
   "./contract.json",
   "./diagnostics",

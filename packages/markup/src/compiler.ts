@@ -11,18 +11,6 @@
 // drift from the others.
 
 export {
-  checkEmailCompatibility,
-  COMPATIBILITY_PROVENANCE,
-  EMAIL_CLIENT_MATRIX,
-  ESSENTIAL_CONSTRUCTS,
-  hasBlockingCompatibility,
-  unknownCoverage,
-  type CompatibilityInput,
-  type CompatibilityProvenance,
-  type EmailClientTarget,
-} from "./email/compatibility";
-
-export {
   compileSelector,
   parseStylesheet,
   type CssDeclaration,

@@ -1,5 +1,6 @@
 import type { AssetEntry, BrandPlugin } from "@samva/markup/brand";
-import { checkEmailCompatibility, compileTemplate } from "@samva/markup/compiler";
+import { checkEmailCompatibility } from "@samva/markup/compatibility";
+import { compileTemplate } from "@samva/markup/compiler";
 import type { EmailDiagnostic } from "@samva/markup/diagnostics";
 import type {
   RenderedIrEmail,
