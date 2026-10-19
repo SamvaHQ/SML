@@ -58,6 +58,36 @@ A contribution names the region it lands in: `frame.start`, `toolbar.leading`,
 `statusbar.headline`. The editor owns each region's layout. A region that holds one thing
 refuses a second contribution, and an id used twice fails, so a host bug is loud.
 
+### Layout
+
+A `rail.assistant` contribution puts the host's chat beside one **work pane**. The work pane's
+tab bar always has Preview; the author adds Source, Design (layers beside the inspector),
+Review (the `rail.review` content, offered only when the host contributes one) and Checks from
+its "+" menu and closes them again. The open tabs, the shown tab, the chat width and whether the
+chat is collapsed persist per browser like the other layout preferences. From 1280px of editor
+frame width the chat and the work pane sit side by side with a draggable divider (280–640px,
+dragging below 140px collapses the chat); below it a Chat | Preview switch shows one at a time,
+and Preview carries a dot when the host changed the email while the chat was shown. The host's
+assistant stays mounted across those changes. Without an assistant the shell keeps layers,
+canvas and inspector around a Visual | Source switch.
+
+Above the canvas, the preview bar holds the version picker (with the `lifecycle` capability; an
+older version is restored only after the author confirms), the desktop/phone width, the fixture
+picker, the size readout, open in a new tab and refresh. The canvas zooms from 50% to 200% or
+fits its pane, by its floating control, a pinch, or ⌘/Ctrl with +, − and 0.
+
+`EditorShell` takes two preview signals from the host:
+
+- `previewBusy` — the host is producing a change the author will see (an assistant turn at
+  work). The preview bar runs a thin progress line while it is true, as it does for the editor's
+  own waits.
+- `onOpenPreview` — opens the current preview in a new browser tab; omit it where the host has
+  no page for that.
+
+A host that knows the size of the email as sent reports it on each render as
+`EmailRender.sentBytes`. The size readout and the Gmail clipping check then measure the sent
+email; without it they measure the preview and say so.
+
 `icons` replaces any of the editor's icons by name (`EditorIconName`); the rest keep the
 defaults, the Hugeicons free set (Stroke Rounded, MIT). `<EditorGlyph name="moon" />` draws one
 of those glyphs in host chrome beside the editor, so a host's own navigation follows the same
@@ -176,8 +206,13 @@ example of a host theme.
   (a switcher's selected option), `--editor-pressed-*` (a toggle that is on) and
   `--editor-well-*` (the source panel), defined on `.samva-editor-shell` with light and `.dark`
   values. A host restyles a material by setting its variables on `.samva-editor-shell`;
-- the **chrome component CSS** — the workspace grid backdrop, scoped scrollbars, and
-  the agent-pulse animation, all under a `samva-editor-*` prefix.
+- the **chrome component CSS** — the workspace grid backdrop, scoped scrollbars, the preview
+  progress line, and the 44px touch targets a phone-width editor gives its own controls, all
+  under a `samva-editor-*` prefix.
+
+The chrome's class recipes (tabs, segmented switches, toolbar and icon buttons, menus,
+popovers, tooltips) match the dashboard design system's, so the editor sits inside a host
+built on it without a seam; they live in `src/chrome/ui-classes.ts`.
 
 The host imports it once, after its own Tailwind import and base tokens. The standalone dev
 harness (`dev/styles.css`) imports the packaged neutral base theme so `bun run dev` renders fully.

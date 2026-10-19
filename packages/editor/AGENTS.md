@@ -42,10 +42,25 @@ boundaries—not compiler transforms—provide render isolation.
   stable and can be selected as one slice.
 - Keep queue, revision, and generation state in the non-rendering spine. Components reach it only
   through actions such as save flushing, retry, and reload.
-- Do not add zustand middleware. Persistence remains explicit and limited to the existing UI
-  preferences.
+- Do not add zustand middleware. Persistence remains explicit and limited to layout preferences:
+  rail and chat widths, whether the chat is collapsed, and the work pane's open and shown tabs.
 - Effect Atom owns host application and server state; zustand owns editor-internal state. Do not
   cross that boundary.
+
+## Layout
+
+- A docked assistant (`rail.assistant`) sits beside one work pane; there is no third column.
+  Every view beyond Preview (Source, Design, Review, Checks) is a work-pane tab, so each is
+  reachable at every frame width. Open a view through the store's `openWorkTab`, and reveal the
+  host's review through `openReview`, never by writing layout state from a component.
+- The split needs 1280px of editor frame width (`layoutMode === "wide"`); below it the docked
+  workspace is a Chat | Preview switch. Both layouts render one tree, so crossing the threshold
+  never remounts the host's assistant. Measure against the frame, never the window.
+- Fold chrome by its own width with container queries (`@container/preview-bar`,
+  `@container/design`), and mark the editor's own controls `data-editor-control` so a phone
+  width gives them 44px targets.
+- Secondary controls (tab close, per-row actions) use `revealOnRowHover`: shown on hover or
+  keyboard focus, always shown where the device cannot hover.
 
 ## Chrome copy
 

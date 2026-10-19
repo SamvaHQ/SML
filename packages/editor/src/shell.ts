@@ -1,5 +1,5 @@
-// Shell entry for @samva/editor — the chrome around the canvas: editor
-// state/provider, three-pane shell layout, left rail, and contextual inspector.
+// Shell entry for @samva/editor — the chrome around the canvas: editor state/provider, the shell
+// layout (chat beside a tabbed work pane, or layers · canvas · inspector), and the inspector.
 // Import the companion stylesheet once in the host: `@samva/editor/styles.css`.
 // The editor's state hooks are deliberately NOT exported: hosts talk to the
 // editor only through EditorProvider props and EditorShell; everything inside

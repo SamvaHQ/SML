@@ -12,8 +12,8 @@ import type { EditorAssistantControls } from "./use-assistant";
  * - `toolbar.leading`: host identity at the start of the toolbar.
  * - `toolbar.actions`: host actions beside the canonical toolbar actions, in `order`.
  * - `document.switcher`: controls beside the document name, such as a channel or entry picker.
- * - `rail.assistant`: a docked assistant. Its presence makes Assistant the default rail mode.
- * - `rail.review`: a review surface docked as the Design rail's Review view.
+ * - `rail.assistant`: a docked assistant. Its presence puts the chat beside a tabbed work pane.
+ * - `rail.review`: a review surface the work pane offers as its Review tab.
  * - `canvas.overlay`: a notice pinned over the canvas without taking its clicks.
  * - `statusbar.headline`: one sentence that replaces the draft revision in the status bar.
  */
