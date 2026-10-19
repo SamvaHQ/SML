@@ -6,7 +6,7 @@ import type {
   ProjectCommit,
   ProjectLifecycleState,
 } from "@samva/editor/host";
-import { type EditorContribution, EditorShell } from "@samva/editor/shell";
+import { type EditorBrandSource, type EditorContribution, EditorShell } from "@samva/editor/shell";
 import { useState } from "react";
 
 import { useEditorStoreApi } from "../src/state/context";
@@ -126,6 +126,25 @@ const openHold = () => {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 };
 
+/**
+ * `?brand` gives the top bar a brand chip whose theme read lands after the document, with a name
+ * long enough to reach the chip's maximum width.
+ */
+const demoBrand = (): EditorBrandSource | undefined => {
+  if (!new URLSearchParams(window.location.search).has("brand")) return undefined;
+  return {
+    readTheme: () =>
+      openHold().then(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ theme: '@import "samva:brand";\n', starter: false }), 500),
+          ),
+      ),
+    brands: [{ slug: "northwind", name: "Northwind Seasonal Collection", isDefault: true }],
+    brandLink: (slug) => ({ href: `#brands/${slug}` }),
+  };
+};
+
 const BUSY_FOR_MS = 2_500;
 
 /** How long the harness takes to save a version, so Apply's wait is on screen. */
@@ -183,6 +202,7 @@ export function WorkspaceDemoShell({
 
   const emit = (input: Parameters<CompiledHostControls["emit"]>[0]) => void controls.emit(input);
 
+  const [brand] = useState(demoBrand);
   const openInNewTab = () => {
     const render = store.getState().render;
     if (render === null) return;
@@ -192,6 +212,7 @@ export function WorkspaceDemoShell({
 
   return (
     <EditorShell
+      brand={brand}
       previewBusy={busy}
       onOpenPreview={openInNewTab}
       contributions={[

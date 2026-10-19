@@ -20,6 +20,12 @@ const geometry = (page: Page) =>
       previewBar: box('[data-testid="preview-bar"]'),
       preview: box('[data-testid="topbar.preview"]'),
       paneSwitch: box('[data-testid="agent-workspace.tab.preview"]'),
+      // The chip holds its row. Its left edge follows the document name before it and its width
+      // follows the brand name, both text the editor has only once they load.
+      brandChip: (() => {
+        const chip = box('[data-testid="topbar.brand-pending"], [data-testid="topbar.brand"]');
+        return chip === null ? null : { y: chip.y, height: chip.height };
+      })(),
     };
   });
 
@@ -33,17 +39,19 @@ for (const [layout, size] of [
     page,
   }) => {
     await page.setViewportSize(size);
-    await page.goto(`/?demo=workspace&openHold=${HOLD_MS}`);
+    await page.goto(`/?demo=workspace&brand&openHold=${HOLD_MS}`);
     if (layout === "standard") await page.getByTestId("agent-workspace.tab.preview").click();
     await expect(page.getByTestId("preview-bar")).toBeVisible();
     await expect(page.getByText("Loading document…")).toBeVisible();
     const loading = await geometry(page);
 
     await expect(page.locator("[data-editor-rendered]")).toHaveText("true");
+    await expect(page.getByTestId("topbar.brand")).toHaveText("Northwind Seasonal Collection");
     const loaded = await geometry(page);
 
     expect(loading.canvas).not.toBeNull();
     expect(loading.preview).not.toBeNull();
+    expect(loading.brandChip).not.toBeNull();
     expect(loaded).toEqual(loading);
   });
 }
