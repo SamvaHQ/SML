@@ -92,6 +92,16 @@ Source is read-only while edits are staged, so undo and reset walk one history i
 element written in a partial is saved through `lifecycle` immediately, because other templates
 share it.
 
+The Design tab and the properties beside the email speak the author's language. Layers list
+the blocks and elements the template wrote, by component name (`Section`, `Button`) or a plain
+word (`Heading`, `Text`, `Image`), and leave out the tables and cells the compiler renders them
+into; the compiler's authored marks decide which is which. The properties edit the selected
+element's text (data bindings stay chips), image description and size, component settings,
+colors from the theme's tokens (a custom hex sits behind a disclosure), type size from the
+template's own scale and weight, alignment, and padding or spacing. Each change is a class or
+prop edit, staged like the toolbar's. **Advanced** keeps the raw props and classes and the
+block edits, and the Source tab keeps the whole template.
+
 Beside a docked assistant the **Pin** switch makes a click drop a numbered pin on an element. A
 tray under the email lists the pins with a note each, removes one (the rest renumber) and clears
 all after a confirm.
@@ -159,7 +169,10 @@ Every part follows Base UI's and shadcn's conventions:
 | `EditorPinTray`          | `editor-pin-tray`           | `data-count`, `data-open`, `data-confirming`, `data-pinning`                                   | `editor-pin-tray-list`, `editor-pin-tray-row`                                                                                                                                                            |
 | `EditorStatusBar`        | `editor-status-bar`         | `data-layout`, `data-save`                                                                     | `editor-status-bar-start`, `editor-status-bar-end`                                                                                                                                                       |
 
-In Design the canvas shows `editor-design-properties` beside the email. The toolbar on the
+In Design the canvas shows `editor-design-properties` beside the email. Inside the inspector,
+`editor-element-inspector`, `editor-design-properties-controls`, `editor-design-group`,
+`editor-design-field` and `editor-design-swatches` mark the controls, and each row of the layers
+is an `editor-layer` with `data-selected`. The toolbar on the
 selected element is drawn inside the email's frame, so it is styled by the frame's own sheet
 (`--editor-canvas-toolbar-bg` and `-fg`) rather than by Tailwind; it carries
 `data-testid="design-toolbar"`. The Design and Checks tabs render `editor-design-panel` (with `editor-layers`) and

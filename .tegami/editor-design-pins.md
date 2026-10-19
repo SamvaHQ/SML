@@ -16,6 +16,14 @@ dock counts them, and undo, redo, reset (after a confirm) and a locked before-an
 work over them. **Apply** saves them as one version named "Design: N edits". Leaving Design waits
 for the edits to be applied or reset, and Design waits while an assistant turn is running.
 
+The Design tab speaks the author's language. Layers name the blocks and elements the template
+wrote (`Section`, `Button`, `Heading`, `Text`, `Image`) and leave out the compiler's tables and
+cells; a loop's copies are one layer. The inspector names the element and the blocks around it,
+with no internal paths, and edits it with plain controls: text with data bindings shown as chips,
+image description and size, component settings, theme colors as named swatches, type size and
+weight, alignment, and spacing. Each change is staged like any Design edit. The raw props and
+classes are under **Advanced**, and the whole template is in Source.
+
 Beside a docked assistant, the **Pin** switch drops numbered pins on parts of the email. A tray
 lists them with a note each, removes one at a time, and clears all after a confirm.
 
