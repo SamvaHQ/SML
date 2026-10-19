@@ -138,6 +138,10 @@ export function WorkspaceDemoShell({
     }, BUSY_FOR_MS);
   };
 
+  const emit = (input: Parameters<MockHostControls["emit"]>[0]) =>
+    // oxlint-disable-next-line eslint/no-restricted-properties -- the harness drives its mock host from a click
+    void Effect.runPromise(controls.emit(input));
+
   const openInNewTab = () => {
     const render = store.getState().render;
     if (render === null) return;
@@ -173,6 +177,35 @@ export function WorkspaceDemoShell({
                   className="border-border hover:bg-muted rounded-md border px-2.5 py-1.5"
                 >
                   Simulate a turn
+                </button>
+                <button
+                  type="button"
+                  data-testid="dev-app.stale-preview"
+                  onClick={() =>
+                    emit({
+                      origin: "agent",
+                      staleReason: "Unexpected token in src/Welcome.tsx:17:5",
+                    })
+                  }
+                  className="border-border hover:bg-muted rounded-md border px-2.5 py-1.5"
+                >
+                  Break the latest edit
+                </button>
+                <button
+                  type="button"
+                  data-testid="dev-app.unbuilt-preview"
+                  onClick={() => emit({ origin: "agent", broken: "not-built" })}
+                  className="border-border hover:bg-muted rounded-md border px-2.5 py-1.5"
+                >
+                  Clear the preview
+                </button>
+                <button
+                  type="button"
+                  data-testid="dev-app.restore-preview"
+                  onClick={() => emit({ origin: "agent", broken: false })}
+                  className="border-border hover:bg-muted rounded-md border px-2.5 py-1.5"
+                >
+                  Restore the preview
                 </button>
                 <button
                   type="button"
