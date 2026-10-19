@@ -1,68 +1,15 @@
-// The bundler-agnostic compiler boundary.
+// The compiler entry: a template project's files in, a compiled template and its diagnostics out,
+// plus the brand compiles a host stores or previews. It imports no Vite, esbuild, Node builtins or
+// caniemail, so the same functions run in a Vite plugin, a Worker, the CLI and the browser.
 //
-// Everything a host needs to turn an authored TSX project into email output
-// lives behind this module as plain functions with explicit inputs and outputs.
-// It imports no Vite, no esbuild and no Node builtins, so the same functions run
-// in a Vite plugin, in an esbuild plugin, and inside an isolated render worker.
-//
-// `@samva/vite` and Samva's hosted editor are adapters over this surface: they
-// own module resolution, watching and transport, never compilation semantics. A
-// host that reaches past this module for a transform is a host whose output can
-// drift from the others.
+// `@samva/vite` and Samva's hosted editor are adapters over this surface: they own module
+// resolution, watching and transport, never compilation semantics.
 
-export {
-  compileSelector,
-  parseStylesheet,
-  type CssDeclaration,
-  type CssRule,
-  type Specificity,
-  type Stylesheet,
-} from "./email/css";
-
-export {
-  downlevelMediaQuery,
-  finalizeValue,
-  foldCalc,
-  renderHeadCss,
-  resolveVariables,
-} from "./email/css-values";
-
-export {
-  classListOf,
-  matchesSelector,
-  type Ancestry,
-  type CompiledSelector,
-  type Compound,
-} from "./email/selectors";
-
-export { downlevelColors, formatColor, parseColor } from "./email/css-color";
-
-export { applyStylesheet, type AppliedStyles } from "./email/cascade";
-
-export {
-  compileTailwind,
-  discoverClassCandidates,
-  TAILWIND_VERSION,
-  type ClassDiscovery,
-  type TailwindLimits,
-  type TailwindOptions,
-  type TailwindOutput,
-} from "./email/tailwind";
-
-export {
-  projectBrandSpecifier,
-  transformProject,
-  type ProjectTransform,
-  type TransformOptions,
-} from "./email/transform";
-
+export { compileTemplate, type CompiledTemplate, type CompileTemplateOptions } from "./sml/compile";
+export { checkStaticProfile, introducedProfileErrors } from "./sml/profile";
+export { renderBrandFooter, type RenderedBrandFooter } from "./email/brand-footer";
+export { previewBrand, type BrandPreview } from "./email/brand-preview";
 export { parseBrandSpecifier } from "./email/brand-plugin";
-
-export {
-  renderBrandFooter,
-  renderBrandSample,
-  type RenderedBrandFooter,
-} from "./email/brand-footer";
-
-export * from "./static";
-export { TEMPLATE_NAME_PATTERN, type EmailContent } from "./template";
+export { projectBrandSpecifier } from "./email/transform";
+export type { TailwindOptions } from "./email/tailwind";
+export { TEMPLATE_NAME_PATTERN } from "./template";

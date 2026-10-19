@@ -39,15 +39,18 @@ Authoring entries are what a template file imports:
 Tooling entries are what a host (Vite, the CLI, the editor, the API, the template agent) imports:
 
 - `@samva/markup/compiler` — `compileTemplate`, which reads a project's files and returns the IR,
-  the fixtures, the assets and the diagnostics; `checkTemplateCompatibility` checks each fixture
-  against the client matrix and locates findings at source. `checkStaticProfile(source | files,
-entry?)` is the synchronous structural check: it runs the compiler's lowering without Tailwind, a
-  brand or the files an import names, and returns only findings the source itself owns.
+  the fixtures, the assets and the diagnostics. `checkStaticProfile(source | files, entry?)` is the
+  synchronous structural check: it runs the compiler's lowering without Tailwind, a brand or the
+  files an import names, and returns only findings the source itself owns.
   `introducedProfileErrors(before, after)` is what a visual edit is refused on. It also holds the
-  compiler's building blocks (`transformProject`, Tailwind, the cascade, CSS), the brand footer and
-  sample renders (`renderBrandFooter`, `renderBrandSample`), and `TEMPLATE_NAME_PATTERN`. It imports
-  no Vite, esbuild, or Node builtins, so it runs in Node, Bun and Workers; caniemail's glob
-  dependency reads `process` when it loads, so a browser takes `./brand-sample` instead.
+  brand compiles: `renderBrandFooter`, the footer a send appends, and `previewBrand`, a sample email
+  in an unsaved brand compiled and rendered as a template that imports the brand. It imports no
+  Vite, esbuild, Node builtins or caniemail, so it runs in Node, Bun, Workers and the browser
+  (`tests/browser-entries.test.ts` loads it without `process`).
+- `@samva/markup/compatibility` — `checkTemplateCompatibility`, which checks each fixture against
+  the client matrix and locates findings at source; `checkEmailCompatibility` for HTML a host
+  already has; `hasBlockingCompatibility` and the matrix. It is the only entry that loads
+  caniemail, whose glob dependency reads `process` when it loads.
 - `@samva/markup/diagnostics` — source spans and line maps, the `DIAGNOSTIC_CODES` registry with
   each code's fix and upgrade recipe, and `EmailDiagnostic`/`EmailCompileError`. It does not load
   the compiler, so a host that only reports imports it.
@@ -71,10 +74,6 @@ entry?)` is the synchronous structural check: it runs the compiler's lowering wi
   assets (`isAssetPath`, `ASSET_CONTENT_TYPES`, `assetUrl`): which imported files become
   content-addressed assets. The send path imports it, so its closure holds only the css-tree parser
   `theme.css` needs; rendering a footer compiles Tailwind and lives in `./compiler`.
-- `@samva/markup/brand-sample` — `renderBrandSample`, the brand preview a dashboard compiles in
-  the browser against an unsaved brand. Its closure holds Tailwind, Babel and css-tree but not
-  caniemail (`tests/entry-closure.test.ts`), and it loads without `process`
-  (`tests/brand-sample-entry.test.ts`).
 
 `tests/published-dependencies.test.ts` pins this list. The compiler's libraries (Babel, Tailwind,
 css-tree, caniemail) are dependencies, because a template project depends on this package alone and

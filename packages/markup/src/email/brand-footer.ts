@@ -1,17 +1,15 @@
-import type { EmailContent } from "../template";
 import { parseBrandCss, printBrandCss } from "../theme-css";
 import {
   BRAND_COMPONENT_CLASSES,
   brandComponents,
   withoutUnsubscribeRow,
-  type BrandComponents,
   type EmailBrand,
 } from "./brand";
 import type { BrandPlugin } from "./brand-plugin";
 import { applyStylesheet, renderDarkRules } from "./cascade";
 import { parseStylesheet } from "./css";
 import { EmailCompileError } from "./diagnostics";
-import { compileEmail, renderEmailContent, type RenderedEmail } from "./render";
+import { compileEmail } from "./render";
 import { samvaBrandPlugin } from "./samva-brand-plugin";
 import { compileTailwind } from "./tailwind";
 
@@ -70,33 +68,4 @@ export const renderBrandFooter = async (
     text: text === "" ? "" : `\n\n---\n${text}`,
     headCss: `${renderDarkRules(styled.darkRules)}${styled.headCss}`,
   };
-};
-
-/**
- * Render content against a brand as a project whose `theme.css` imports only
- * the brand renders it: Tailwind compiles the brand theme for
- * the classes the content names, `BrandLogo` and `BrandFooter` are bound to the
- * brand, and the render inlines the result. A brand preview renders through
- * this, so it shows what a template importing the brand compiles to.
- */
-export const renderBrandSample = async (
-  brand: EmailBrand,
-  sample: {
-    /** Every class the content names; nothing is discovered from source here. */
-    readonly classes: readonly string[];
-    readonly render: (components: BrandComponents) => EmailContent;
-  },
-  brandPlugin: BrandPlugin = samvaBrandPlugin,
-): Promise<RenderedEmail> => {
-  const tailwind = await compileTailwind(
-    [...BRAND_COMPONENT_CLASSES, ...sample.classes],
-    { css: `@import ${JSON.stringify(brandPlugin.specifier)};` },
-    { stylesheets: new Map(), brandCss: brandTheme(brand, brandPlugin), brandPlugin },
-  );
-  const components = brandComponents(brand, brandPlugin);
-  return renderEmailContent(
-    parseStylesheet(tailwind.css, { origin: brandPlugin.specifier }),
-    () => sample.render(components),
-    { brandPlugin },
-  );
 };

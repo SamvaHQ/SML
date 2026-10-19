@@ -43,7 +43,6 @@ describe("entry import closure", () => {
   it.each([
     { entry: "render.ts", allowed: [] },
     { entry: "brand.ts", allowed: ["css-tree"] },
-    { entry: "brand-sample.ts", allowed: ["@babel/parser", "css-tree", "tailwindcss"] },
     { entry: "compiler.ts", allowed: ["@babel/parser", "css-tree", "tailwindcss"] },
   ])("keeps $entry free of the compiler's libraries", ({ entry, allowed }) => {
     const packages = [...closure(entry)];

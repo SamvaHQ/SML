@@ -14,7 +14,6 @@ const COMPILER_LIBRARIES = ["@babel/parser", "caniemail", "css-tree", "tailwindc
 const PUBLIC_ENTRIES = [
   ".",
   "./brand",
-  "./brand-sample",
   "./compatibility",
   "./compiler",
   "./contract.json",
