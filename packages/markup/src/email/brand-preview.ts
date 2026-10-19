@@ -81,6 +81,7 @@ export const previewBrand = async (
     const { html } = render(compiled.template, {}, { channel: "email", brandPlugin: plugin });
     return { html, diagnostics: compiled.diagnostics };
   } catch (cause) {
+    // oxlint-disable-next-line samva/no-try-catch-or-throw -- Anything but a RenderError is a defect, not a finding about the brand.
     if (!RenderError.is(cause)) throw cause;
     return {
       html: undefined,
