@@ -1557,6 +1557,11 @@
       "upgrade": "Move the project's theme onto the theme vocabulary with one dark-mode block. In starter.css and theme.css, rename each color token to the vocabulary name for its role (reference.md, Theme): a page color to --color-background, the main text to --color-foreground, a surface to --color-card with --color-card-foreground, the brand or action color to --color-primary with --color-primary-foreground, subdued text to --color-muted-foreground, a highlight to --color-accent with --color-accent-foreground, rules to --color-border, body and heading fonts to --font-sans and --font-heading, and a corner radius to --radius. Keep every value.\n\nMove each --color-<name>-dark value into @media (prefers-color-scheme: dark) { @theme { --color-<name>: <value>; } } under the renamed token, and delete the -dark tokens. In every template and partial, rename the utilities to match (bg-surface to bg-card, text-muted to text-muted-foreground, and so on) and delete each dark:…-dark class whose token now has a dark value; keep a dark: class only where it picks a different token in dark mode.\n\nThen fix what email-contrast still reports at its location: pair each fill with its -foreground token, or give the dark block a value that reaches the ratio. Do not weaken the design to pass: keep the brand's colors and adjust the paired token.\n\nCompile every entry and render every fixture in light and dark mode; confirm the light render is unchanged apart from fixes. Resolve errors before requesting one saved version for the whole project, approved by the user; do not publish."
     },
     {
+      "code": "email-external-asset",
+      "summary": "An image points at another site's URL; a hotlinked image can disappear, be blocked, track recipients or slow the message.",
+      "fix": "Add the image to the project's files and import it (import logo from './logo.png'), then use the import as the src."
+    },
+    {
       "code": "email-font-fallback",
       "summary": "A font stack names a project font without a generic fallback.",
       "fix": "End the stack with sans-serif, serif or monospace."

@@ -376,6 +376,11 @@ export const DIAGNOSTIC_CODES = codes({
     summary: "@font-face names a file the project does not hold.",
     fix: "Add the file; paths resolve from the stylesheet's directory.",
   },
+  "email-external-asset": {
+    summary:
+      "An image points at another site's URL; a hotlinked image can disappear, be blocked, track recipients or slow the message.",
+    fix: "Add the image to the project's files and import it (import logo from './logo.png'), then use the import as the src.",
+  },
   "invalid-asset-base": {
     summary: "The asset base is not an https URL or a path.",
     fix: "Use an https URL, an absolute path, or a relative path.",

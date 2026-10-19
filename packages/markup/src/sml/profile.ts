@@ -10,6 +10,9 @@ import { loadProject } from "./project";
 // files an import would need, so a visual editor can ask it synchronously about every edit.
 
 const DEFAULT_ENTRY = "template.tsx";
+
+/** A stand-in base: a structural check has no build, and an imported asset must read as a project asset. */
+const ASSET_BASE = "https://assets.invalid";
 /** Findings that come from the inputs this check leaves out, not from the source. */
 // `unmatched-class` is a stylesheet finding: without Tailwind every class is unmatched.
 const MISSING_INPUT_CODES = new Set(["brand-unavailable", "unmatched-class"]);
@@ -36,11 +39,11 @@ export const checkStaticProfile = (
     lenient: true,
   });
   if (project === undefined) return findings.items;
-  lowerProject({ entry, brand: undefined, brandPlugin }, project, findings, {
+  lowerProject({ entry, brand: undefined, brandPlugin, assetBase: ASSET_BASE }, project, findings, {
     assets: [],
     stylesheets: new Map(),
     tailwindSheet: undefined,
-    urlFor: (path) => `https://assets.invalid/${path}`,
+    urlFor: (path) => `${ASSET_BASE}/${path}`,
   });
   const unresolved = [...project.unresolved];
   return findings.items.filter(

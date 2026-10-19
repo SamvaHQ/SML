@@ -203,7 +203,40 @@ export interface LowerOptions {
   readonly brand?: EmailBrand | undefined;
   /** Names the brand import and marks the footer `BrandFooter` renders; `samvaBrandPlugin` when omitted. */
   readonly brandPlugin?: BrandPlugin | undefined;
+  /** Where project assets are served from; an image URL under it is a project asset. */
+  readonly assetBase?: string | undefined;
 }
+
+interface ExternalImage {
+  readonly url: string;
+  readonly host: string;
+  readonly src: IrSource | undefined;
+}
+
+/** Literal absolute http(s) image sources outside the project's asset base. */
+const externalImages = (root: IrNode, assetBase: string | undefined): readonly ExternalImage[] => {
+  const found: ExternalImage[] = [];
+  const base = assetBase === undefined ? undefined : assetBase.replace(/\/+$/, "") + "/";
+  const visit = (node: IrNode): void => {
+    if (typeof node !== "object" || node === null) return;
+    if ("el" in node) {
+      const url = node.el === "img" ? node.attrs?.src : undefined;
+      if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+        const host = /^https?:\/\/([^/?#]+)/i.exec(url)?.[1] ?? url;
+        if (base === undefined || !url.toLowerCase().startsWith(base.toLowerCase()))
+          found.push({ url, host, src: node.src });
+      }
+    }
+    const nested = "el" in node || "each" in node ? node.children : undefined;
+    for (const item of nested ?? []) visit(item);
+    if ("if" in node && "then" in node && Array.isArray(node.then)) {
+      for (const item of node.then) visit(item);
+      if (Array.isArray(node.else)) for (const item of node.else) visit(item);
+    }
+  };
+  visit(root);
+  return found;
+};
 
 export const completed = (
   findings: Findings,
@@ -584,6 +617,16 @@ export const lowerProject = (
         else root = edited.nodes[0] ?? root;
       }
       checkStructure([root], (finding) => checks.push(finding));
+      for (const external of externalImages(root, options.assetBase)) {
+        const where = locate(external.src);
+        findings.report({
+          code: "email-external-asset",
+          severity: "warning",
+          message: `The image ${JSON.stringify(external.url)} is hosted on ${external.host}, outside the project. A hotlinked image can disappear, be blocked by the client, track recipients or slow the message.`,
+          fix: "Add the image to the project's files and import it (import logo from './logo.png'), then use the import as the src.",
+          origins: where === undefined ? [] : [where],
+        });
+      }
       if (schemaJson !== undefined)
         checks.push(
           ...checkBindings(
