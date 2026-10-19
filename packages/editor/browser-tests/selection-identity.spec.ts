@@ -71,7 +71,7 @@ test("switching fixture re-renders and keeps the selection honest", async ({ pag
   const before = await selected.textContent();
   expect(before).not.toBe("");
 
-  const fixture = page.getByTestId("topbar.fixture");
+  const fixture = page.getByTestId("preview-bar.fixture");
   await expect(fixture).toHaveValue("welcome");
   await fixture.selectOption("returning");
 
