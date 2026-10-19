@@ -413,13 +413,22 @@ export interface AsyncLifecycleApi {
   }): Promise<ProjectLifecycleState>;
 }
 
+/** How the editor describes a version it asks the host to save. */
+export interface VersionSaveOptions {
+  readonly message?: string | undefined;
+}
+
 /**
  * Save the draft as a version (a Git commit) and read whether the open revision already is one.
  * A host offers it apart from `lifecycle`, because a draft can be saved where nothing is published.
  */
 export interface AsyncVersionsApi {
-  /** Commit the draft at `revision` and resolve the revision that now names the saved head. */
-  save(revision: RevisionToken): Promise<RevisionToken>;
+  /**
+   * Commit the draft at `revision` and resolve the revision that now names the saved head.
+   * `message` names the version when the editor knows what it holds, such as "Design: 3 edits";
+   * without one the host names it.
+   */
+  save(revision: RevisionToken, options?: VersionSaveOptions): Promise<RevisionToken>;
   /** The open revision when it equals the saved head, or null while the draft differs from it. */
   savedRevision(): Promise<RevisionToken | null>;
 }

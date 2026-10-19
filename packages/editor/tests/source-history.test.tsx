@@ -32,6 +32,21 @@ function Probe() {
         Edit source
       </button>
       <button
+        data-testid="probe.design-edit"
+        type="button"
+        onClick={() => {
+          if (doc !== null)
+            actions.applySourceEdit({
+              revision: doc.rev,
+              source: doc.origin.authoredSource,
+              edits: [{ start: 0, end: 0, before: "", after: "// Design edit\n" }],
+              design: { label: "Design edit" },
+            });
+        }}
+      >
+        Design edit
+      </button>
+      <button
         data-testid="probe.stale"
         type="button"
         onClick={() => {
@@ -82,6 +97,24 @@ describe("source history persistence boundary", () => {
     await waitFor(() =>
       expect(view.getByTestId("source").textContent).toBe(`// Visual edit\n${original}`),
     );
+  });
+  it("undoes and redoes a staged Design edit from the same controls", async () => {
+    const editor = await mockEditor();
+    const view = render(
+      <EditorProvider host={editor.host}>
+        <Probe />
+      </EditorProvider>,
+    );
+    await waitFor(() => expect(view.getByTestId("source").textContent).toContain("WelcomeEmail"));
+    const original = view.getByTestId("source").textContent!;
+    expect(view.getByTestId("source.undo")).toHaveProperty("disabled", true);
+    fireEvent.click(view.getByTestId("probe.design-edit"));
+    fireEvent.click(view.getByTestId("probe.flush"));
+    await waitFor(() => expect(view.getByTestId("source.undo")).toHaveProperty("disabled", false));
+    fireEvent.click(view.getByTestId("source.undo"));
+    fireEvent.click(view.getByTestId("probe.flush"));
+    await waitFor(() => expect(view.getByTestId("source").textContent).toBe(original));
+    expect(view.getByTestId("source.redo")).toHaveProperty("disabled", false);
   });
   it("rejects stale revisions and preserves foreign edits when undo conflicts", async () => {
     const editor = await mockEditor();

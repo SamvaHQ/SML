@@ -201,6 +201,10 @@ export const createEditorSpine = (
       }
       // Only the live drain owns the lock; a stale one already returned above.
       if (generation !== drainGeneration) return;
+      // A foreign change that landed while edits were still queued marked the base stale
+      // before any of them was sent. Those edits are dropped like a rejected save's, so a
+      // flush waiting on them settles instead of waiting for a drain that will not run.
+      if (conflicted) queue = [];
       draining = false;
       // Settled — the queue is empty, or a conflict stopped and cleared it.
       settleFlush();

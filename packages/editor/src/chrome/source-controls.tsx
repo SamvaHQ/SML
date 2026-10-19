@@ -38,8 +38,13 @@ function PropertyControl({
   readonly field: SourceProperty;
   readonly source: string;
   readonly propose: (edit: SourceReplacement) => void;
-  readonly apply: (edit: SourceReplacement) => void;
+  readonly apply: (edit: SourceReplacement, label: string) => void;
 }) {
+  const label = `Edit ${propertyLabel(field.name).toLowerCase()}`;
+  const stage = () => {
+    const edit = literalReplacement(source, field, value);
+    if (edit !== null) apply(edit, label);
+  };
   const [value, setValue] = useState(field.value);
   const [expression, setExpression] = useState(
     field.kind === "literal" && field.literalType === "string"
@@ -58,6 +63,9 @@ function PropertyControl({
             className={inputClass}
             value={value}
             onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") stage();
+            }}
           />
         ) : (
           <code className="bg-muted mt-1 block rounded p-2 break-all">{field.value}</code>
@@ -69,12 +77,9 @@ function PropertyControl({
           type="button"
           className={buttonClass}
           disabled={literalReplacement(source, field, value) === null}
-          onClick={() => {
-            const edit = literalReplacement(source, field, value);
-            if (edit !== null) apply(edit);
-          }}
+          onClick={stage}
         >
-          Apply literal
+          Update
         </button>
       )}
       <details>
@@ -111,6 +116,8 @@ function PropertyControl({
 
 interface Reviewed {
   readonly edits: readonly SourceReplacement[];
+  /** What the change does, as the staged edit names it. */
+  readonly label: string;
   /** Why the change cannot be applied; the diff is still shown so the author can see it. */
   readonly refusal: string | null;
 }
@@ -159,11 +166,13 @@ function useProjectFiles(path: string | null) {
 
 /** Why the controls show nothing to edit: waiting, a file this host cannot read, or read-only. */
 function unavailableReason(input: {
+  readonly assistant: boolean;
   readonly busy: boolean;
   readonly file: string | null;
   readonly project: "entry" | "loading" | "unavailable" | "ready";
   readonly resolved: boolean;
 }): string {
+  if (input.assistant) return "Edits wait for the assistant to finish.";
   if (input.busy) return "Waiting for the latest source to render.";
   if (input.file !== null && input.project === "loading") return `Reading ${input.file}.`;
   if (input.file !== null && input.project === "unavailable")
@@ -184,7 +193,7 @@ function scopeNote(selection: EmailElementSelection, shared: boolean): string {
 
 /** Properties operate on an explicit authoring origin, never an inferred rendered value. */
 function SourceControlsSession({ selection }: { readonly selection: EmailElementSelection }) {
-  const { doc, pending, revision, editable, storeError, lifecycleBusy } = useEditorStore(
+  const { doc, pending, revision, editable, storeError, lifecycleBusy, hostBusy } = useEditorStore(
     useShallow((state) => ({
       doc: state.doc,
       pending: state.pendingAuthoredSource,
@@ -192,6 +201,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
       editable: state.sourceEditable,
       storeError: state.sourceEditError,
       lifecycleBusy: state.lifecycleBusy,
+      hostBusy: state.hostBusy,
     })),
   );
   const { applySourceEdit, openSource, requestSourceAssistance, beginLifecycle, endLifecycle } =
@@ -234,21 +244,25 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
     editable &&
     pending === null &&
     !lifecycleBusy &&
+    !hostBusy &&
     !saving &&
     revision === doc.rev &&
     target !== null &&
     source !== null;
-  const check = (edits: readonly SourceReplacement[]): Reviewed => {
+  const check = (edits: readonly SourceReplacement[], label: string): Reviewed => {
     const result = applySourceReplacements(source ?? "", edits, { profile: guard });
-    return { edits, refusal: result.ok ? null : result.reason };
+    return { edits, label, refusal: result.ok ? null : result.reason };
   };
-  /** Commit through the entry's saved source, or through the host's project files for a partial. */
-  const commit = (edits: readonly SourceReplacement[]) => {
+  /**
+   * Stage an entry edit as a Design edit, or save a partial's change through the host's project
+   * files: a partial is shared by other templates, so it is not part of this template's draft.
+   */
+  const commit = (edits: readonly SourceReplacement[], label: string) => {
     if (source === null) return;
     setLocalError(null);
     setStructureError(null);
     if (!foreign) {
-      applySourceEdit({ revision: revision ?? "", source, edits });
+      applySourceEdit({ revision: revision ?? "", source, edits, design: { label } });
       return;
     }
     const result = applySourceReplacements(source, edits, { profile: guard });
@@ -268,8 +282,8 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
         setSaving(false);
       });
   };
-  const apply = (edit: SourceReplacement) => {
-    commit([edit]);
+  const apply = (edit: SourceReplacement, label: string) => {
+    commit([edit], label);
     setProposal(null);
   };
   const shownError = localError ?? storeError;
@@ -322,6 +336,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
       {!available ? (
         <p data-testid="source.unavailable" className="text-muted-foreground mt-2 text-xs">
           {unavailableReason({
+            assistant: hostBusy,
             busy: pending !== null || saving || lifecycleBusy,
             file: foreign ? origin.fileName : null,
             project: project.status,
@@ -349,7 +364,11 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                 field={field}
                 source={source}
                 apply={apply}
-                propose={(edit) => setProposal(check([edit]))}
+                propose={(edit) =>
+                  setProposal(
+                    check([edit], `Edit ${propertyLabel(field.name).toLowerCase()} expression`),
+                  )
+                }
               />
             ))}
           {classRefusal !== null && (
@@ -376,12 +395,12 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                 disabled={classes.trim() === ""}
                 onClick={() => {
                   const edit = classNameEdit(source, target, { kind: "add", tokens: classes });
-                  if (edit.ok) commit(edit.edits);
+                  if (edit.ok) commit(edit.edits, "Add style classes");
                   else setLocalError(edit.reason);
                   setClasses("");
                 }}
               >
-                {className === undefined ? "Apply styles" : "Add classes"}
+                {className === undefined ? "Add styles" : "Add classes"}
               </button>
             </div>
           )}
@@ -411,7 +430,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                   kind: "insert",
                   tsx: insert,
                 });
-                setStructuralProposal(edits === null ? null : check(edits));
+                setStructuralProposal(edits === null ? null : check(edits, "Insert content"));
               }}
             >
               Review insert
@@ -423,7 +442,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
               disabled={!target.structural}
               onClick={() => {
                 const edits = structuralReplacements(source, target, { kind: "delete" });
-                setStructuralProposal(edits === null ? null : check(edits));
+                setStructuralProposal(edits === null ? null : check(edits, "Delete block"));
               }}
             >
               Review delete
@@ -435,7 +454,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
               disabled={!target.structural}
               onClick={() => {
                 const edits = structuralReplacements(source, target, { kind: "duplicate" });
-                setStructuralProposal(edits === null ? null : check(edits));
+                setStructuralProposal(edits === null ? null : check(edits, "Duplicate block"));
               }}
             >
               Review duplicate
@@ -450,7 +469,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                   kind: "reorder",
                   direction: "before",
                 });
-                setStructuralProposal(edits === null ? null : check(edits));
+                setStructuralProposal(edits === null ? null : check(edits, "Move block earlier"));
               }}
             >
               Move earlier
@@ -465,7 +484,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                   kind: "reorder",
                   direction: "after",
                 });
-                setStructuralProposal(edits === null ? null : check(edits));
+                setStructuralProposal(edits === null ? null : check(edits, "Move block later"));
               }}
             >
               Move later
@@ -517,7 +536,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                             kind: "move",
                             destination: container,
                           });
-                    setStructuralProposal(edits === null ? null : check(edits));
+                    setStructuralProposal(edits === null ? null : check(edits, "Move block"));
                     setStructureError(
                       edits === null
                         ? "This destination cannot accept the selected block. Choose another source container or use Source."
@@ -552,11 +571,11 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                   className={buttonClass}
                   disabled={structuralProposal.refusal !== null}
                   onClick={() => {
-                    commit(structuralProposal.edits);
+                    commit(structuralProposal.edits, structuralProposal.label);
                     setStructuralProposal(null);
                   }}
                 >
-                  Apply structural change
+                  Use this change
                 </button>{" "}
                 <button
                   type="button"
@@ -585,11 +604,11 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                 className={buttonClass}
                 disabled={proposal.refusal !== null}
                 onClick={() => {
-                  commit(proposal.edits);
+                  commit(proposal.edits, proposal.label);
                   setProposal(null);
                 }}
               >
-                Apply reviewed change
+                Use this change
               </button>{" "}
               <button type="button" className={buttonClass} onClick={() => setProposal(null)}>
                 Cancel
@@ -624,8 +643,9 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
 export function SourceHistory() {
   const { undo, redo, error, editable } = useEditorStore(
     useShallow((state) => ({
-      undo: state.undoHistory.length,
-      redo: state.redoHistory.length,
+      // Undo and redo walk the staged Design edits first, as the store's history does.
+      undo: state.undoHistory.length + (state.designDraft?.edits.length ?? 0),
+      redo: state.redoHistory.length + (state.designDraft?.undone.length ?? 0),
       error: state.sourceEditError,
       editable: state.sourceEditable,
     })),
@@ -726,12 +746,13 @@ function FixtureSourceSession() {
                         after: draft,
                       },
                     ],
+                    design: { label: "Edit fixture data" },
                   });
                   setDraft(null);
                   setReview(false);
                 }}
               >
-                Apply fixture change
+                Use this change
               </button>{" "}
               <button
                 type="button"

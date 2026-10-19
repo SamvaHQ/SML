@@ -22,6 +22,7 @@ import {
   defaultExpanded,
   outlineAncestry,
   outlineBreadcrumb,
+  selectionLabel,
   type Crumb,
   type EmailOutline,
 } from "../chrome/email-outline";
@@ -37,6 +38,7 @@ import {
   DOCUMENT_SELECTION,
   ENVELOPE_SELECTION,
   type CheckItem,
+  type EditorPin,
   type EditorSelection,
 } from "./types";
 
@@ -85,6 +87,64 @@ export const ASSISTANT_MAX = 640;
 export const CHAT_COLLAPSE_BELOW = 140;
 const RIGHT_MIN = 260;
 const RIGHT_MAX = 440;
+
+/**
+ * How a click on the email reads: point the assistant at an element, edit it in Design, or drop
+ * a pin for the next message.
+ */
+export type CanvasMode = "point" | "design" | "pin";
+
+/** One staged Design edit: the entry before and after it, and what the author did. */
+export interface DesignEdit {
+  readonly label: string;
+  readonly before: string;
+  readonly after: string;
+  /** Consecutive edits under one key (typing in one field) are one staged edit. */
+  readonly key?: string | undefined;
+}
+
+/**
+ * Design edits staged on the draft and not yet applied as a version. Each edit is in the draft
+ * the host renders, so the preview shows it; Apply saves them all as one version, Reset writes
+ * the entry back to what it was before the first.
+ */
+export interface DesignDraft {
+  /** The authored entry before the first staged edit. */
+  readonly baseSource: string;
+  /** The preview on screen before the first staged edit, which Compare shows. */
+  readonly baseRender: EmailRender | null;
+  readonly edits: ReadonlyArray<DesignEdit>;
+  /** Edits undone since the last new one, most recent last, for redo. */
+  readonly undone: ReadonlyArray<DesignEdit>;
+}
+
+export type DesignApplyState =
+  | { readonly status: "idle" }
+  | { readonly status: "applying" }
+  | { readonly status: "failed"; readonly reason: string };
+
+const DESIGN_IDLE: DesignApplyState = { status: "idle" };
+
+const STAGED_EDITS_FIRST = "Apply or reset your Design edits before editing the source.";
+
+/** The name of the version Apply saves. */
+export const designVersionMessage = (count: number): string =>
+  `Design: ${count} ${count === 1 ? "edit" : "edits"}`;
+
+/**
+ * The host's chat waits while this is true: edits are staged, Apply is saving them, or Design
+ * is writing the draft (an undo or a reset) and the host has not taken the write yet.
+ */
+export const designWaiting = (
+  state: Pick<EditorState, "designDraft" | "designApply" | "designSettling">,
+): boolean =>
+  (state.designDraft?.edits.length ?? 0) > 0 ||
+  state.designApply.status === "applying" ||
+  state.designSettling;
+
+/** Staged Design edits waiting for Apply. */
+export const pendingDesignEdits = (state: Pick<EditorState, "designDraft">): number =>
+  state.designDraft?.edits.length ?? 0;
 
 const readStored = (key: string): string | null => {
   // oxlint-disable-next-line samva/no-try-catch-or-throw -- Browser localStorage adapter boundary (not Effect domain): access throws in private mode / SSR, so fall back to the default.
@@ -150,7 +210,13 @@ export interface EditorActions {
      * under one key are one save and one undo step.
      */
     readonly coalesceKey?: string | undefined;
+    /**
+     * Stage the edit as a Design edit under this label instead of adding it to the source
+     * history. The draft still renders it; Apply saves the staged edits as one version.
+     */
+    readonly design?: { readonly label: string } | undefined;
   }) => void;
+  /** Undo and redo also walk the staged Design edits while there are any. */
   readonly undo: () => void;
   readonly redo: () => void;
   readonly openSource: () => void;
@@ -229,6 +295,27 @@ export interface EditorActions {
   readonly ancestryOf: (instancePath: string) => ReadonlyArray<string>;
   readonly breadcrumbOf: (instancePath: string) => ReadonlyArray<Crumb>;
   readonly setHovered: (instancePath: string | null) => void;
+
+  /**
+   * Point, Design or pin mode. Leaving Design is refused while edits are staged; apply or reset
+   * them first.
+   */
+  readonly setCanvasMode: (mode: CanvasMode) => void;
+  /** Write the entry back to what it was before the first staged Design edit. */
+  readonly resetDesign: () => void;
+  /** Show the preview from before the first staged edit until turned off or the draft moves. */
+  readonly setDesignCompare: (on: boolean) => void;
+  /** Save the staged Design edits as one version through the host's `versions`. */
+  readonly applyDesign: () => void;
+  /** Drop a numbered pin on a rendered element of the preview on screen. */
+  readonly addPin: (instancePath: string) => void;
+  /** Remove one pin; the pins after it move up one number. */
+  readonly removePin: (id: string) => void;
+  readonly clearPins: () => void;
+  readonly setPinNote: (id: string, note: string) => void;
+
+  /** Shell-internal: the host reports an assistant turn at work (`previewBusy`). */
+  readonly setHostBusy: (busy: boolean) => void;
 
   /** Provider-internal: sync a changed host `checks` prop into the merged check list. */
   readonly setHostChecks: (checks: ReadonlyArray<CheckItem>) => void;
@@ -332,6 +419,24 @@ export interface EditorState {
   readonly storageError: string | null;
   // ── hover (raw candidate; validity is derived in the selector against the outline)
   readonly hoveredCandidatePath: string | null;
+  // ── design mode and pins
+  readonly canvasMode: CanvasMode;
+  /** Staged Design edits; null when nothing has been staged since the last Apply or Reset. */
+  readonly designDraft: DesignDraft | null;
+  readonly designApply: DesignApplyState;
+  /** The canvas shows the preview from before the staged edits. */
+  readonly designCompare: boolean;
+  /**
+   * Design's undo or reset is writing the draft and the writer has not accepted it yet, or the
+   * write failed. A reload clears it.
+   */
+  readonly designSettling: boolean;
+  readonly pins: ReadonlyArray<EditorPin>;
+  /**
+   * The host reports an assistant turn at work. Design edits, entering Design and Apply wait for
+   * it, so a turn and the author never write the email at once.
+   */
+  readonly hostBusy: boolean;
   readonly actions: EditorActions;
 }
 
@@ -349,6 +454,10 @@ export interface EditorBundle {
    */
   readonly setUserSelectListener: (
     listener: ((selection: UserSelection) => void) | undefined,
+  ) => void;
+  /** Listen for every change to the pins, with the whole list in tray order. */
+  readonly setPinsListener: (
+    listener: ((pins: ReadonlyArray<EditorPin>) => void) | undefined,
   ) => void;
 }
 
@@ -374,6 +483,8 @@ export const createEditorBundle = (
   // action or the provider's open effect fires, both post-creation.
   let spine!: EditorSpine;
   let userSelectListener: ((selection: UserSelection) => void) | undefined;
+  let pinsListener: ((pins: ReadonlyArray<EditorPin>) => void) | undefined;
+  let pinSequence = 0;
 
   /**
    * An uneditable host, readonly document, active lifecycle operation, or a refresh still waiting
@@ -430,9 +541,95 @@ export const createEditorBundle = (
         coalesceKey: enqueueOptions?.coalesceKey ?? "authored-source",
       });
     };
+    /**
+     * Hold the chat until the writer accepts a Design write. The spine's flush resolves once its
+     * queue drains; a conflict or a storage failure keeps the hold until a reload or a retry.
+     */
+    const settleDesignWrite = (): void => {
+      set({ designSettling: true });
+      spine.flushSaves().then(
+        () => {
+          const state = get();
+          if (!state.conflict && state.storageError === null) set({ designSettling: false });
+        },
+        () => {},
+      );
+    };
+    const designHistory = (direction: "undo" | "redo", draft: DesignDraft): void => {
+      const state = get();
+      if (state.doc === null || state.designApply.status === "applying") return;
+      const from = direction === "undo" ? draft.edits : draft.undone;
+      const entry = from.at(-1);
+      if (entry === undefined) return;
+      if (state.doc.origin.authoredSource !== (direction === "undo" ? entry.after : entry.before)) {
+        set({
+          sourceEditError:
+            "Your edits conflict with a newer change. Your current work is kept. Review the saved versions.",
+        });
+        return;
+      }
+      set({
+        designDraft:
+          direction === "undo"
+            ? { ...draft, edits: draft.edits.slice(0, -1), undone: [...draft.undone, entry] }
+            : { ...draft, undone: draft.undone.slice(0, -1), edits: [...draft.edits, entry] },
+        designCompare: false,
+        designApply: DESIGN_IDLE,
+      });
+      commitSource(direction === "undo" ? entry.before : entry.after);
+      settleDesignWrite();
+    };
+    /** Record a Design edit on the draft and write it, so the host renders it. */
+    const stageDesignEdit = (input: {
+      readonly before: string;
+      readonly after: string;
+      readonly label: string;
+      readonly key: string | undefined;
+    }): void => {
+      const state = get();
+      // With every staged edit undone, the next one starts a new draft from the source as it is
+      // now: the old base may predate a change made elsewhere since.
+      const fresh = state.designDraft === null || state.designDraft.edits.length === 0;
+      const draft: DesignDraft = fresh
+        ? { baseSource: input.before, baseRender: state.render, edits: [], undone: [] }
+        : state.designDraft;
+      const last = draft.edits.at(-1);
+      const merges =
+        input.key !== undefined && last?.key === input.key && last.after === input.before;
+      set({
+        // A new draft starts a new chronology: the source history before it is kept until Apply
+        // folds the batch in as one step, and its redo no longer applies.
+        ...(fresh ? { redoHistory: [] } : {}),
+        canvasMode: "design",
+        designCompare: false,
+        designApply: DESIGN_IDLE,
+        designDraft: {
+          ...draft,
+          edits: merges
+            ? [
+                ...draft.edits.slice(0, -1),
+                { label: input.label, before: last.before, after: input.after, key: input.key },
+              ]
+            : [
+                ...draft.edits,
+                { label: input.label, before: input.before, after: input.after, key: input.key },
+              ],
+          undone: [],
+        },
+      });
+      commitSource(input.after, { coalesceKey: input.key });
+    };
     const history = (direction: "undo" | "redo"): void => {
       const state = get();
       if (gated(state) || !state.sourceEditable || state.conflict || state.doc === null) return;
+      const draft = state.designDraft;
+      if (
+        draft !== null &&
+        (direction === "undo" ? draft.edits.length > 0 : draft.undone.length > 0)
+      ) {
+        designHistory(direction, draft);
+        return;
+      }
       const entries = direction === "undo" ? state.undoHistory : state.redoHistory;
       const entry = entries.at(-1);
       if (entry === undefined) return;
@@ -517,12 +714,30 @@ export const createEditorBundle = (
           return;
         }
         if (result.source === input.source) return;
+        if (input.design !== undefined) {
+          if (state.hostBusy) {
+            set({ sourceEditError: "Design waits for the assistant to finish." });
+            return;
+          }
+          stageDesignEdit({
+            before: input.source,
+            after: result.source,
+            label: input.design.label,
+            key: input.coalesceKey,
+          });
+          return;
+        }
+        if (pendingDesignEdits(state) > 0) {
+          set({ sourceEditError: STAGED_EDITS_FIRST });
+          return;
+        }
         const last = state.undoHistory.at(-1);
         const merges =
           input.coalesceKey !== undefined &&
           last?.key === input.coalesceKey &&
           last.after === input.source;
         set({
+          designDraft: null,
           undoHistory: merges
             ? [
                 ...state.undoHistory.slice(0, -1),
@@ -547,7 +762,12 @@ export const createEditorBundle = (
         ) {
           return;
         }
+        if (pendingDesignEdits(state) > 0) {
+          set({ sourceEditError: STAGED_EDITS_FIRST });
+          return;
+        }
         set({
+          designDraft: null,
           undoHistory: [
             ...state.undoHistory,
             { before: state.doc.origin.authoredSource, after: authoredSource },
@@ -582,7 +802,7 @@ export const createEditorBundle = (
 
       reload: () => {
         if (get().lifecycleBusy) return;
-        set({ conflict: false, storageError: null, fixtureError: null });
+        set({ conflict: false, storageError: null, fixtureError: null, designSettling: false });
         spine.reload();
       },
 
@@ -616,10 +836,13 @@ export const createEditorBundle = (
               authoredSource: input.authoredSource,
             },
           };
+          // A restore replaces the entry, so edits staged on the old one no longer apply.
+          const replaced = input.authoredSource !== current.doc.origin.authoredSource;
           return {
             ...committedDocument(current, doc, null),
             sourceEditable: sourceEditableFor(doc),
             conflict: false,
+            ...(replaced ? { designDraft: null, designCompare: false } : {}),
           };
         });
       },
@@ -627,6 +850,7 @@ export const createEditorBundle = (
       retrySave: () => {
         if (gated(get())) return;
         spine.retrySave();
+        if (get().designSettling) settleDesignWrite();
       },
 
       select: (instancePath) => {
@@ -876,6 +1100,200 @@ export const createEditorBundle = (
 
       setHovered: (instancePath) => set({ hoveredCandidatePath: instancePath }),
 
+      setCanvasMode: (mode) => {
+        const state = get();
+        if (state.canvasMode === mode) return;
+        if (state.canvasMode === "design" && designWaiting(state)) return;
+        if (mode === "design" && state.hostBusy) return;
+        set({
+          canvasMode: mode,
+          designDraft: mode === "design" ? state.designDraft : null,
+          designCompare: false,
+          designApply: DESIGN_IDLE,
+          hoveredCandidatePath: null,
+        });
+      },
+
+      resetDesign: () => {
+        const state = get();
+        const draft = state.designDraft;
+        if (
+          draft === null ||
+          draft.edits.length === 0 ||
+          gated(state) ||
+          !state.sourceEditable ||
+          state.conflict ||
+          state.doc === null
+        )
+          return;
+        if (state.doc.origin.authoredSource !== draft.edits.at(-1)?.after) {
+          set({
+            sourceEditError:
+              "Your edits conflict with a newer change, so they can't be reset here. Review the saved versions.",
+          });
+          return;
+        }
+        set({ designDraft: null, designCompare: false, designApply: DESIGN_IDLE });
+        commitSource(draft.baseSource);
+        settleDesignWrite();
+      },
+
+      setDesignCompare: (on) => {
+        const state = get();
+        const comparable =
+          state.designDraft !== null &&
+          state.designDraft.edits.length > 0 &&
+          state.designDraft.baseRender !== null;
+        const next = on && comparable;
+        if (state.designCompare !== next) set({ designCompare: next });
+      },
+
+      applyDesign: () => {
+        const state = get();
+        const draft = state.designDraft;
+        if (
+          draft === null ||
+          draft.edits.length === 0 ||
+          state.designApply.status === "applying" ||
+          state.hostBusy
+        )
+          return;
+        const count = draft.edits.length;
+        const versions = state.versionsCapability;
+        // Without saved versions the edits are already the draft: applying keeps them.
+        if (versions?.status !== "ready") {
+          set({
+            designDraft: null,
+            designCompare: false,
+            designApply: DESIGN_IDLE,
+            undoHistory: [
+              ...state.undoHistory,
+              { before: draft.baseSource, after: draft.edits.at(-1)?.after ?? draft.baseSource },
+            ],
+            redoHistory: [],
+          });
+          state.telemetry?.({ name: "design.apply", data: { edits: count } });
+          return;
+        }
+        if (!actions.beginLifecycle()) return;
+        set({ designApply: { status: "applying" }, designCompare: false });
+        void spine
+          .flushSaves()
+          .then(async (revision) => {
+            const settled = get();
+            // A staged write that conflicted or could not be stored leaves the draft without the
+            // edits; saving a version then would name edits it does not hold.
+            if (
+              settled.doc === null ||
+              settled.conflict ||
+              settled.storageError !== null ||
+              settled.doc?.origin.authoredSource !== draft.edits.at(-1)?.after
+            ) {
+              set({
+                designApply: {
+                  status: "failed",
+                  reason: "Your edits haven't reached the draft, so no version was saved.",
+                },
+              });
+              return;
+            }
+            const snapshot = settled.doc;
+            const saved = await versions.api.save(revision, {
+              message: designVersionMessage(count),
+            });
+            const current = get().doc;
+            // Adopt the saved revision only when nothing moved under the save.
+            if (
+              (current?.rev === revision || current?.rev === saved) &&
+              current.origin.authoredSource === snapshot.origin.authoredSource
+            ) {
+              actions.adoptLifecycleSnapshot({
+                rev: saved,
+                authoredSource: snapshot.origin.authoredSource,
+              });
+            }
+            // The applied batch becomes one step of the source history, so Undo after Apply
+            // reverts it as a whole.
+            set((latest) => ({
+              designDraft: null,
+              designApply: DESIGN_IDLE,
+              undoHistory: [
+                ...latest.undoHistory,
+                { before: draft.baseSource, after: snapshot.origin.authoredSource },
+              ],
+              redoHistory: [],
+            }));
+            state.telemetry?.({ name: "design.apply", data: { edits: count } });
+          })
+          .catch((cause: unknown) =>
+            set({
+              designApply: {
+                status: "failed",
+                reason:
+                  cause instanceof Error && cause.message !== ""
+                    ? cause.message
+                    : "The version could not be saved.",
+              },
+            }),
+          )
+          .finally(() => actions.endLifecycle());
+      },
+
+      addPin: (instancePath) => {
+        const state = get();
+        const { render, doc, outline } = state;
+        if (render === null || doc?.channel !== "email" || doc.fixture === null) return;
+        const entry =
+          outline?.index.get(instancePath) ??
+          render.selections.find((candidate) => candidate.instancePath === instancePath);
+        if (entry === undefined) return;
+        const origin = entry.origins[0];
+        pinSequence += 1;
+        set({
+          pins: [
+            ...state.pins,
+            {
+              id: `pin-${pinSequence}`,
+              number: state.pins.length + 1,
+              instancePath,
+              revision: render.revision,
+              fixture: doc.fixture,
+              tag: entry.tag,
+              label: selectionLabel(entry),
+              origin:
+                origin === undefined
+                  ? null
+                  : {
+                      fileName: origin.fileName,
+                      lineNumber: origin.lineNumber,
+                      columnNumber: origin.columnNumber,
+                    },
+              note: "",
+            },
+          ],
+        });
+      },
+      removePin: (id) => {
+        const state = get();
+        if (!state.pins.some((pin) => pin.id === id)) return;
+        set({
+          pins: state.pins
+            .filter((pin) => pin.id !== id)
+            .map((pin, index) => (pin.number === index + 1 ? pin : { ...pin, number: index + 1 })),
+        });
+      },
+      clearPins: () => {
+        if (get().pins.length > 0) set({ pins: [] });
+      },
+      setPinNote: (id, note) =>
+        set((current) => ({
+          pins: current.pins.map((pin) => (pin.id === id ? { ...pin, note } : pin)),
+        })),
+
+      setHostBusy: (busy) => {
+        if (get().hostBusy !== busy) set({ hostBusy: busy });
+      },
+
       setHostChecks: (nextChecks) => {
         if (Object.is(get().hostChecks, nextChecks)) return;
         set((current) => ({
@@ -936,6 +1354,13 @@ export const createEditorBundle = (
       conflict: false,
       storageError: null,
       hoveredCandidatePath: null,
+      canvasMode: "point",
+      designDraft: null,
+      designApply: DESIGN_IDLE,
+      designCompare: false,
+      designSettling: false,
+      pins: [],
+      hostBusy: false,
       actions,
     };
   });
@@ -1006,12 +1431,19 @@ export const createEditorBundle = (
     onSessionError: (reason) => store.setState({ storageError: reason, previewRefreshing: false }),
   });
 
+  store.subscribe((state, previous) => {
+    if (state.pins !== previous.pins) pinsListener?.(state.pins);
+  });
+
   return {
     host,
     store,
     spine,
     setUserSelectListener: (listener) => {
       userSelectListener = listener;
+    },
+    setPinsListener: (listener) => {
+      pinsListener = listener;
     },
   };
 };
