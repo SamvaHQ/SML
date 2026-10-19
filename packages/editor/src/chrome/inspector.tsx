@@ -267,10 +267,7 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
       {siblings.length > 1 && (
         <div data-slot="editor-element-copies" className="border-border/70 border-b py-3">
           <GroupLabel>Copies</GroupLabel>
-          <p className="text-muted-foreground mb-2 text-[11.5px]">
-            A loop or a repeated block draws this {siblings.length} times; an edit changes every
-            copy.
-          </p>
+
           <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {siblings.map((sibling, index) => (
               <li key={sibling.instancePath}>

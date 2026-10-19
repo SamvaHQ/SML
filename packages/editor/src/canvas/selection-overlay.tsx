@@ -64,6 +64,24 @@ export const SelectionOverlay = ({
   const selectedPath = selected?.instancePath ?? null;
   const hoveredPath = hovered?.instancePath ?? null;
 
+  // The email keeps laying out after it mounts (web fonts, images), which moves elements without
+  // a new render; a resize of its body measures again.
+  const [layout, setLayout] = useState(0);
+  useLayoutEffect(() => {
+    const body = anchor.current?.ownerDocument.body;
+    if (body === undefined || typeof ResizeObserver === "undefined") return;
+    const view = body.ownerDocument.defaultView;
+    const remeasure = () => setLayout((count) => count + 1);
+    const observer = new ResizeObserver(remeasure);
+    observer.observe(body);
+    void body.ownerDocument.fonts?.ready.then(remeasure);
+    view?.addEventListener("load", remeasure, true);
+    return () => {
+      observer.disconnect();
+      view?.removeEventListener("load", remeasure, true);
+    };
+  }, []);
+
   useLayoutEffect(() => {
     const root = anchor.current?.ownerDocument;
     if (root === undefined) return;
@@ -80,8 +98,8 @@ export const SelectionOverlay = ({
       }),
     );
     // A replaced render moves geometry without changing the selected paths.
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- renderRevision is the identity of the geometry being measured, not a value read in the effect body.
-  }, [renderRevision, selectedPath, hoveredPath, pins]);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- renderRevision and layout are the identity of the geometry being measured, not values read in the effect body.
+  }, [renderRevision, selectedPath, hoveredPath, pins, layout]);
 
   // The toolbar starts at the element's left edge and moves left as far as it must to stay
   // inside the frame, so a right-hand element in a narrow preview keeps every action reachable.

@@ -499,7 +499,10 @@ export function DesignProperties({
     >
       {(textLike || segments.some((segment) => segment.kind === "text")) && segments.length > 0 && (
         <Group title="Content">
-          <div data-testid="design-properties.content" className="flex flex-col gap-1.5">
+          <div
+            data-testid="design-properties.content"
+            className="flex flex-wrap items-center gap-1.5"
+          >
             {segments.map((segment, index) =>
               segment.kind === "chip" ? (
                 <Tip
@@ -522,6 +525,7 @@ export function DesignProperties({
                   value={segment.field.value}
                   disabled={!available}
                   onCommit={(value) => setLiteral(segment.field, value, "Edit text")}
+                  className="min-w-40 flex-1"
                 />
               ),
             )}
