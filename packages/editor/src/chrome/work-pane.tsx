@@ -160,7 +160,7 @@ export function EditorWorkPane({
     {
       state: { tab: active, split },
       tag: "section",
-      className: "bg-background flex min-h-0 min-w-0 flex-1 flex-col",
+      className: "bg-background @container/work-pane flex min-h-0 min-w-0 flex-1 flex-col",
       props: {
         children: (
           <Tabs.Root

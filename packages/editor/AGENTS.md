@@ -37,6 +37,11 @@ boundaries—not compiler transforms—provide render isolation.
   through `inspect`, warn that every template using the partial changes, and save through
   `updateFile`. Without it they are read-only and point at Source. Local undo history covers the
   entry only.
+- A visual edit from the inspector or the Design toolbar passes `design` to `applySourceEdit`, so
+  it is staged on `designDraft` rather than the source history. The draft the host renders holds
+  it; `applyDesign` saves the staged edits as one version through `versions`. Channel forms and
+  the Source tab never stage. Leaving Design is refused while edits are staged, and the
+  assistant's `workspace.design` is the signal a host's chat waits on.
 - Subscribe to the narrowest state slices. Use `useShallow` for object or array selectors, and read
   handler-only state through `useEditorStoreApi().getState()` at event time. The `actions` object is
   stable and can be selected as one slice.

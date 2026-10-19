@@ -44,3 +44,31 @@ export type EditorSelection =
 export const DOCUMENT_SELECTION: EditorSelection = { kind: "document" };
 /** The envelope scope — sender defaults, subject, and preheader. */
 export const ENVELOPE_SELECTION: EditorSelection = { kind: "envelope" };
+
+/**
+ * A numbered point on the email an author drops in pin mode, for the host's assistant to attach
+ * to the next message. It names one rendered instance the way a selection does, pinned to the
+ * render and fixture it was dropped on, plus what the author sees: the element's label and, when
+ * the template wrote it, where.
+ */
+export interface EditorPin {
+  /** Stable for the pin's lifetime; numbers move when an earlier pin is removed. */
+  readonly id: string;
+  /** 1-based position in the tray, which is the number drawn on the email. */
+  readonly number: number;
+  readonly instancePath: string;
+  readonly revision: RevisionToken;
+  readonly fixture: string;
+  /** The rendered tag, such as `h1` or `a`. */
+  readonly tag: string;
+  /** What the author sees on the pin's chip, such as "Button" or "td 2 of 3". */
+  readonly label: string;
+  /** Where the template wrote the element, when it did. */
+  readonly origin: {
+    readonly fileName: string;
+    readonly lineNumber: number;
+    readonly columnNumber: number;
+  } | null;
+  /** The author's note on this pin; empty until they write one. */
+  readonly note: string;
+}

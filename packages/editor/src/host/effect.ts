@@ -27,6 +27,7 @@ import type {
   RevisionToken,
   UploadedImage,
   UploadImageInput,
+  VersionSaveOptions,
 } from "./types";
 
 // The host contract for a host built on Effect. Every effect is `R = never`: the host provides its
@@ -141,7 +142,10 @@ export interface AssetApi {
 
 /** The Effect form of {@link AsyncVersionsApi}. */
 export interface VersionsApi {
-  readonly save: (revision: RevisionToken) => Effect.Effect<RevisionToken, DocumentError>;
+  readonly save: (
+    revision: RevisionToken,
+    options?: VersionSaveOptions,
+  ) => Effect.Effect<RevisionToken, DocumentError>;
   readonly savedRevision: Effect.Effect<RevisionToken | null, DocumentUnavailable>;
 }
 
@@ -278,7 +282,8 @@ export function toAsyncHost(host: EditorHost): AsyncEditorHost {
     versions:
       host.versions &&
       mapCapability<VersionsApi, AsyncVersionsApi>(host.versions, (api) => ({
-        save: (revision: RevisionToken) => Effect.runPromise(api.save(revision)),
+        save: (revision: RevisionToken, options?: VersionSaveOptions) =>
+          Effect.runPromise(api.save(revision, options)),
         savedRevision: () => Effect.runPromise(api.savedRevision),
       })),
     lifecycle:

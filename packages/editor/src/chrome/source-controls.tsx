@@ -15,8 +15,12 @@ import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { useContribution } from "./contributions";
+import { DesignProperties } from "./design-properties";
+import { ChevronRight } from "./editor-icons";
 import { formatOrigin } from "./email-outline";
+import { friendlyName } from "./friendly";
 import { GroupLabel } from "./ui";
 import { cn, focusRing } from "./ui-classes";
 
@@ -38,8 +42,13 @@ function PropertyControl({
   readonly field: SourceProperty;
   readonly source: string;
   readonly propose: (edit: SourceReplacement) => void;
-  readonly apply: (edit: SourceReplacement) => void;
+  readonly apply: (edit: SourceReplacement, label: string) => void;
 }) {
+  const label = `Edit ${propertyLabel(field.name).toLowerCase()}`;
+  const stage = () => {
+    const edit = literalReplacement(source, field, value);
+    if (edit !== null) apply(edit, label);
+  };
   const [value, setValue] = useState(field.value);
   const [expression, setExpression] = useState(
     field.kind === "literal" && field.literalType === "string"
@@ -58,6 +67,9 @@ function PropertyControl({
             className={inputClass}
             value={value}
             onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") stage();
+            }}
           />
         ) : (
           <code className="bg-muted mt-1 block rounded p-2 break-all">{field.value}</code>
@@ -69,12 +81,9 @@ function PropertyControl({
           type="button"
           className={buttonClass}
           disabled={literalReplacement(source, field, value) === null}
-          onClick={() => {
-            const edit = literalReplacement(source, field, value);
-            if (edit !== null) apply(edit);
-          }}
+          onClick={stage}
         >
-          Apply literal
+          Update
         </button>
       )}
       <details>
@@ -111,6 +120,8 @@ function PropertyControl({
 
 interface Reviewed {
   readonly edits: readonly SourceReplacement[];
+  /** What the change does, as the staged edit names it. */
+  readonly label: string;
   /** Why the change cannot be applied; the diff is still shown so the author can see it. */
   readonly refusal: string | null;
 }
@@ -159,11 +170,13 @@ function useProjectFiles(path: string | null) {
 
 /** Why the controls show nothing to edit: waiting, a file this host cannot read, or read-only. */
 function unavailableReason(input: {
+  readonly assistant: boolean;
   readonly busy: boolean;
   readonly file: string | null;
   readonly project: "entry" | "loading" | "unavailable" | "ready";
   readonly resolved: boolean;
 }): string {
+  if (input.assistant) return "Edits wait for the assistant to finish.";
   if (input.busy) return "Waiting for the latest source to render.";
   if (input.file !== null && input.project === "loading") return `Reading ${input.file}.`;
   if (input.file !== null && input.project === "unavailable")
@@ -184,7 +197,7 @@ function scopeNote(selection: EmailElementSelection, shared: boolean): string {
 
 /** Properties operate on an explicit authoring origin, never an inferred rendered value. */
 function SourceControlsSession({ selection }: { readonly selection: EmailElementSelection }) {
-  const { doc, pending, revision, editable, storeError, lifecycleBusy } = useEditorStore(
+  const { doc, pending, revision, editable, storeError, lifecycleBusy, hostBusy } = useEditorStore(
     useShallow((state) => ({
       doc: state.doc,
       pending: state.pendingAuthoredSource,
@@ -192,6 +205,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
       editable: state.sourceEditable,
       storeError: state.sourceEditError,
       lifecycleBusy: state.lifecycleBusy,
+      hostBusy: state.hostBusy,
     })),
   );
   const { applySourceEdit, openSource, requestSourceAssistance, beginLifecycle, endLifecycle } =
@@ -234,21 +248,25 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
     editable &&
     pending === null &&
     !lifecycleBusy &&
+    !hostBusy &&
     !saving &&
     revision === doc.rev &&
     target !== null &&
     source !== null;
-  const check = (edits: readonly SourceReplacement[]): Reviewed => {
+  const check = (edits: readonly SourceReplacement[], label: string): Reviewed => {
     const result = applySourceReplacements(source ?? "", edits, { profile: guard });
-    return { edits, refusal: result.ok ? null : result.reason };
+    return { edits, label, refusal: result.ok ? null : result.reason };
   };
-  /** Commit through the entry's saved source, or through the host's project files for a partial. */
-  const commit = (edits: readonly SourceReplacement[]) => {
+  /**
+   * Stage an entry edit as a Design edit, or save a partial's change through the host's project
+   * files: a partial is shared by other templates, so it is not part of this template's draft.
+   */
+  const commit = (edits: readonly SourceReplacement[], label: string) => {
     if (source === null) return;
     setLocalError(null);
     setStructureError(null);
     if (!foreign) {
-      applySourceEdit({ revision: revision ?? "", source, edits });
+      applySourceEdit({ revision: revision ?? "", source, edits, design: { label } });
       return;
     }
     const result = applySourceReplacements(source, edits, { profile: guard });
@@ -268,8 +286,8 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
         setSaving(false);
       });
   };
-  const apply = (edit: SourceReplacement) => {
-    commit([edit]);
+  const apply = (edit: SourceReplacement, label: string) => {
+    commit([edit], label);
     setProposal(null);
   };
   const shownError = localError ?? storeError;
@@ -283,45 +301,27 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
         })();
   const scoped = selection.origins.length > 1;
   return (
-    <div className="border-border-subtle border-b py-3">
-      <GroupLabel>Source properties</GroupLabel>
-      {scoped && (
-        <label className="block text-xs">
-          Edit scope
-          <select
-            aria-label="Edit scope"
-            data-testid="source.scope"
-            className={inputClass}
-            value={scope}
-            onChange={(event) => {
-              setScope(Number(event.target.value));
-              setProposal(null);
-            }}
-          >
-            {selection.origins.map((entry, index) => (
-              <option key={index} value={index}>
-                {index === 0 ? "Element" : `Call site ${index}`} · {formatOrigin(entry)}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      <p data-testid="source.scope-note" className="text-muted-foreground mt-2 text-xs">
-        {scoped && scope > 0
-          ? "Changes this call site, including every loop iteration it produces. Fixture items remain separate data."
-          : scopeNote(selection, foreign)}
-      </p>
+    <div data-slot="editor-element-controls" className="pb-3">
       {foreign && (
         <p
           data-testid="source.partial-warning"
-          className="border-border bg-muted mt-2 rounded border p-2 text-xs"
+          className="border-border bg-muted text-foreground mt-3 rounded-lg border p-2.5 text-xs"
         >
-          Edits apply to every template that uses this partial ({origin.fileName}).
+          This is written in a shared part ({origin.fileName}). Edits here save straight away and
+          change every template that uses it.
+        </p>
+      )}
+      {(selection.occurrences > 1 || (scoped && scope > 0)) && (
+        <p data-testid="source.scope-note" className="text-muted-foreground mt-3 text-xs">
+          {scoped && scope > 0
+            ? "Changes this call site, including every loop iteration it produces. Fixture items remain separate data."
+            : scopeNote(selection, foreign)}
         </p>
       )}
       {!available ? (
-        <p data-testid="source.unavailable" className="text-muted-foreground mt-2 text-xs">
+        <p data-testid="source.unavailable" className="text-muted-foreground mt-3 text-xs">
           {unavailableReason({
+            assistant: hostBusy,
             busy: pending !== null || saving || lifecycleBusy,
             file: foreign ? origin.fileName : null,
             project: project.status,
@@ -329,275 +329,335 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
           })}
         </p>
       ) : (
-        <>
-          {target.properties.length === 0 && (
-            <p className="text-muted-foreground mt-2 text-xs">
-              No unambiguous scalar properties here. Use source or the agent for this shape.
-            </p>
-          )}
-          {target.hasSpread && (
-            <p className="text-muted-foreground mt-2 text-xs">
-              Spread properties can override attributes here. Edit attributes in Source or ask the
-              agent.
-            </p>
-          )}
-          {target.properties
-            .filter((field) => !target.hasSpread || field.syntax === "child")
-            .map((field) => (
-              <PropertyControl
-                key={`${doc.rev}:${source}:${scope}:${field.name}`}
-                field={field}
-                source={source}
-                apply={apply}
-                propose={(edit) => setProposal(check([edit]))}
-              />
-            ))}
-          {classRefusal !== null && (
-            <p data-testid="source.class-refusal" className="text-muted-foreground mt-3 text-xs">
-              {classRefusal}
-            </p>
-          )}
-          {classRefusal === null && (
-            <div className="mt-3">
-              <label className="block text-xs">
-                {className === undefined ? "Style classes · literal" : "Add style classes"}
-                <input
-                  aria-label="Style classes"
-                  data-testid="source.classes"
-                  className={inputClass}
-                  value={classes}
-                  onChange={(event) => setClasses(event.target.value)}
-                />
-              </label>
-              <button
-                data-testid="source.classes-add"
-                type="button"
-                className={buttonClass}
-                disabled={classes.trim() === ""}
-                onClick={() => {
-                  const edit = classNameEdit(source, target, { kind: "add", tokens: classes });
-                  if (edit.ok) commit(edit.edits);
-                  else setLocalError(edit.reason);
-                  setClasses("");
-                }}
-              >
-                {className === undefined ? "Apply styles" : "Add classes"}
-              </button>
-            </div>
-          )}
-          <details className="mt-3">
-            <summary data-testid="source.structure-toggle" className="cursor-pointer text-xs">
-              Structure · authored block
-            </summary>
-            <p className="text-muted-foreground my-2 text-xs">
-              This changes the whole source block at the scope above. A rendered loop instance has
-              no independent source block. Change fixture items separately; edit loop or conditional
-              logic in Source.
-            </p>
-            <textarea
-              aria-label="Insert TSX"
-              data-testid="source.insert"
-              value={insert}
-              className={inputClass}
-              onChange={(event) => setInsert(event.target.value)}
-            />
-            <button
-              data-testid={"source.review-insert"}
-              type="button"
-              className={buttonClass}
-              disabled={target.contentEnd === null}
-              onClick={() => {
-                const edits = structuralReplacements(source, target, {
-                  kind: "insert",
-                  tsx: insert,
-                });
-                setStructuralProposal(edits === null ? null : check(edits));
-              }}
-            >
-              Review insert
-            </button>{" "}
-            <button
-              data-testid={"source.review-delete"}
-              type="button"
-              className={buttonClass}
-              disabled={!target.structural}
-              onClick={() => {
-                const edits = structuralReplacements(source, target, { kind: "delete" });
-                setStructuralProposal(edits === null ? null : check(edits));
-              }}
-            >
-              Review delete
-            </button>{" "}
-            <button
-              data-testid={"source.review-duplicate"}
-              type="button"
-              className={buttonClass}
-              disabled={!target.structural}
-              onClick={() => {
-                const edits = structuralReplacements(source, target, { kind: "duplicate" });
-                setStructuralProposal(edits === null ? null : check(edits));
-              }}
-            >
-              Review duplicate
-            </button>{" "}
-            <button
-              data-testid={"source.review-move-up"}
-              type="button"
-              className={buttonClass}
-              disabled={target.previous === null}
-              onClick={() => {
-                const edits = structuralReplacements(source, target, {
-                  kind: "reorder",
-                  direction: "before",
-                });
-                setStructuralProposal(edits === null ? null : check(edits));
-              }}
-            >
-              Move earlier
-            </button>{" "}
-            <button
-              data-testid={"source.review-move-down"}
-              type="button"
-              className={buttonClass}
-              disabled={target.next === null}
-              onClick={() => {
-                const edits = structuralReplacements(source, target, {
-                  kind: "reorder",
-                  direction: "after",
-                });
-                setStructuralProposal(edits === null ? null : check(edits));
-              }}
-            >
-              Move later
-            </button>
-            {!foreign && (
-              <>
-                <label className="mt-2 block text-xs">
-                  Move into shared source container
-                  <select
-                    aria-label="Move destination"
-                    data-testid="source.destination"
-                    value={destination}
-                    className={inputClass}
-                    onChange={(event) => setDestination(event.target.value)}
-                  >
-                    <option value="">Choose destination</option>
-                    {doc.channel === "email" &&
-                      doc.render?.selections.map((entry) => (
-                        <option key={entry.instancePath} value={entry.instancePath}>
-                          {entry.tag} · {entry.instancePath} ·{" "}
-                          {entry.origins[0] === undefined
-                            ? "generated"
-                            : formatOrigin(entry.origins[0])}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <button
-                  data-testid={"source.review-move"}
-                  type="button"
-                  className={buttonClass}
-                  disabled={!target.structural || destination === ""}
-                  onClick={() => {
-                    const entry =
-                      doc.channel === "email"
-                        ? doc.render?.selections.find(
-                            (candidate) => candidate.instancePath === destination,
-                          )
-                        : undefined;
-                    const location = entry?.origins[0];
-                    const container =
-                      location === undefined
-                        ? null
-                        : inspectSourceElement(source, entryFile, location);
-                    const edits =
-                      container === null
-                        ? null
-                        : structuralReplacements(source, target, {
-                            kind: "move",
-                            destination: container,
-                          });
-                    setStructuralProposal(edits === null ? null : check(edits));
-                    setStructureError(
-                      edits === null
-                        ? "This destination cannot accept the selected block. Choose another source container or use Source."
-                        : null,
-                    );
-                  }}
-                >
-                  Review move
-                </button>
-              </>
-            )}
-            {structureError !== null && (
-              <p role="alert" className="text-status-error text-xs">
-                {structureError}
-              </p>
-            )}
-            {structuralProposal !== null && (
-              <div role="region" aria-label="Structural source diff" className="mt-2">
-                <pre className="bg-muted overflow-auto p-2 text-xs">
-                  {structuralProposal.edits
-                    .map((edit) => `- ${edit.before}\n+ ${edit.after}`)
-                    .join("\n")}
-                </pre>
-                {structuralProposal.refusal !== null && (
-                  <p data-testid="source.structure-refusal" className="text-status-error text-xs">
-                    {structuralProposal.refusal}
-                  </p>
-                )}
-                <button
-                  data-testid={"source.apply-structure"}
-                  type="button"
-                  className={buttonClass}
-                  disabled={structuralProposal.refusal !== null}
-                  onClick={() => {
-                    commit(structuralProposal.edits);
-                    setStructuralProposal(null);
-                  }}
-                >
-                  Apply structural change
-                </button>{" "}
-                <button
-                  type="button"
-                  className={buttonClass}
-                  onClick={() => setStructuralProposal(null)}
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
-          </details>
-          {proposal !== null && (
-            <div role="region" aria-label="Proposed source diff" className="mt-3 space-y-2">
-              <p className="text-xs">Review the exact source change</p>
-              <pre className="bg-muted overflow-auto p-2 text-xs">
-                {proposal.edits.map((edit) => `- ${edit.before}\n+ ${edit.after}`).join("\n")}
-              </pre>
-              {proposal.refusal !== null && (
-                <p data-testid="source.proposal-refusal" className="text-status-error text-xs">
-                  {proposal.refusal}
-                </p>
-              )}
-              <button
-                data-testid={"source.apply-reviewed"}
-                type="button"
-                className={buttonClass}
-                disabled={proposal.refusal !== null}
-                onClick={() => {
-                  commit(proposal.edits);
+        <DesignProperties
+          key={`${scope}`}
+          source={source}
+          entrySource={entrySource}
+          target={target}
+          available={available}
+          commit={commit}
+          onRefused={setLocalError}
+        />
+      )}
+      <Collapsible data-testid="source.advanced" className="border-border/70 border-b">
+        <CollapsibleTrigger
+          data-testid="source.advanced-toggle"
+          className="text-muted-foreground hover:text-foreground group/advanced flex w-full items-center gap-1.5 py-3 font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase outline-none"
+        >
+          <ChevronRight className="size-3 transition-transform group-data-[panel-open]/advanced:rotate-90" />
+          Advanced
+        </CollapsibleTrigger>
+        <CollapsibleContent keepMounted className="pb-3 data-[closed]:hidden">
+          <p className="text-muted-foreground mb-2 text-xs">
+            The element's raw props and classes. The whole template is in Source.
+          </p>
+          {scoped && (
+            <label className="block text-xs">
+              Edit scope
+              <select
+                aria-label="Edit scope"
+                data-testid="source.scope"
+                className={inputClass}
+                value={scope}
+                onChange={(event) => {
+                  setScope(Number(event.target.value));
                   setProposal(null);
                 }}
               >
-                Apply reviewed change
-              </button>{" "}
-              <button type="button" className={buttonClass} onClick={() => setProposal(null)}>
-                Cancel
-              </button>
-            </div>
+                {selection.origins.map((entry, index) => (
+                  <option key={index} value={index}>
+                    {index === 0 ? "Element" : `Call site ${index}`} · {formatOrigin(entry)}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
-        </>
-      )}
+          {!available ? null : (
+            <>
+              {target.properties.length === 0 && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  No unambiguous scalar properties here. Use source or the agent for this shape.
+                </p>
+              )}
+              {target.hasSpread && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Spread properties can override attributes here. Edit attributes in Source or ask
+                  the agent.
+                </p>
+              )}
+              {target.properties
+                .filter((field) => !target.hasSpread || field.syntax === "child")
+                .map((field) => (
+                  <PropertyControl
+                    key={`${doc.rev}:${source}:${scope}:${field.name}`}
+                    field={field}
+                    source={source}
+                    apply={apply}
+                    propose={(edit) =>
+                      setProposal(
+                        check([edit], `Edit ${propertyLabel(field.name).toLowerCase()} expression`),
+                      )
+                    }
+                  />
+                ))}
+              {classRefusal !== null && (
+                <p
+                  data-testid="source.class-refusal"
+                  className="text-muted-foreground mt-3 text-xs"
+                >
+                  {classRefusal}
+                </p>
+              )}
+              {classRefusal === null && (
+                <div className="mt-3">
+                  <label className="block text-xs">
+                    {className === undefined ? "Style classes · literal" : "Add style classes"}
+                    <input
+                      aria-label="Style classes"
+                      data-testid="source.classes"
+                      className={inputClass}
+                      value={classes}
+                      onChange={(event) => setClasses(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    data-testid="source.classes-add"
+                    type="button"
+                    className={buttonClass}
+                    disabled={classes.trim() === ""}
+                    onClick={() => {
+                      const edit = classNameEdit(source, target, { kind: "add", tokens: classes });
+                      if (edit.ok) commit(edit.edits, "Add style classes");
+                      else setLocalError(edit.reason);
+                      setClasses("");
+                    }}
+                  >
+                    {className === undefined ? "Add styles" : "Add classes"}
+                  </button>
+                </div>
+              )}
+              <details className="mt-3">
+                <summary data-testid="source.structure-toggle" className="cursor-pointer text-xs">
+                  Structure · authored block
+                </summary>
+                <p className="text-muted-foreground my-2 text-xs">
+                  This changes the whole source block at the scope above. A rendered loop instance
+                  has no independent source block. Change fixture items separately; edit loop or
+                  conditional logic in Source.
+                </p>
+                <textarea
+                  aria-label="Insert TSX"
+                  data-testid="source.insert"
+                  value={insert}
+                  className={inputClass}
+                  onChange={(event) => setInsert(event.target.value)}
+                />
+                <button
+                  data-testid={"source.review-insert"}
+                  type="button"
+                  className={buttonClass}
+                  disabled={target.contentEnd === null}
+                  onClick={() => {
+                    const edits = structuralReplacements(source, target, {
+                      kind: "insert",
+                      tsx: insert,
+                    });
+                    setStructuralProposal(edits === null ? null : check(edits, "Insert content"));
+                  }}
+                >
+                  Review insert
+                </button>{" "}
+                <button
+                  data-testid={"source.review-delete"}
+                  type="button"
+                  className={buttonClass}
+                  disabled={!target.structural}
+                  onClick={() => {
+                    const edits = structuralReplacements(source, target, { kind: "delete" });
+                    setStructuralProposal(edits === null ? null : check(edits, "Delete block"));
+                  }}
+                >
+                  Review delete
+                </button>{" "}
+                <button
+                  data-testid={"source.review-duplicate"}
+                  type="button"
+                  className={buttonClass}
+                  disabled={!target.structural}
+                  onClick={() => {
+                    const edits = structuralReplacements(source, target, { kind: "duplicate" });
+                    setStructuralProposal(edits === null ? null : check(edits, "Duplicate block"));
+                  }}
+                >
+                  Review duplicate
+                </button>{" "}
+                <button
+                  data-testid={"source.review-move-up"}
+                  type="button"
+                  className={buttonClass}
+                  disabled={target.previous === null}
+                  onClick={() => {
+                    const edits = structuralReplacements(source, target, {
+                      kind: "reorder",
+                      direction: "before",
+                    });
+                    setStructuralProposal(
+                      edits === null ? null : check(edits, "Move block earlier"),
+                    );
+                  }}
+                >
+                  Move earlier
+                </button>{" "}
+                <button
+                  data-testid={"source.review-move-down"}
+                  type="button"
+                  className={buttonClass}
+                  disabled={target.next === null}
+                  onClick={() => {
+                    const edits = structuralReplacements(source, target, {
+                      kind: "reorder",
+                      direction: "after",
+                    });
+                    setStructuralProposal(edits === null ? null : check(edits, "Move block later"));
+                  }}
+                >
+                  Move later
+                </button>
+                {!foreign && (
+                  <>
+                    <label className="mt-2 block text-xs">
+                      Move into shared source container
+                      <select
+                        aria-label="Move destination"
+                        data-testid="source.destination"
+                        value={destination}
+                        className={inputClass}
+                        onChange={(event) => setDestination(event.target.value)}
+                      >
+                        <option value="">Choose destination</option>
+                        {doc.channel === "email" &&
+                          doc.render?.selections
+                            .filter((entry) => entry.authored && entry.tag !== "html")
+                            .map((entry) => (
+                              <option key={entry.instancePath} value={entry.instancePath}>
+                                {friendlyName(entry, entrySource)}
+                                {entry.origins[0] === undefined
+                                  ? ""
+                                  : ` · line ${entry.origins[0].lineNumber}`}
+                              </option>
+                            ))}
+                      </select>
+                    </label>
+                    <button
+                      data-testid={"source.review-move"}
+                      type="button"
+                      className={buttonClass}
+                      disabled={!target.structural || destination === ""}
+                      onClick={() => {
+                        const entry =
+                          doc.channel === "email"
+                            ? doc.render?.selections.find(
+                                (candidate) => candidate.instancePath === destination,
+                              )
+                            : undefined;
+                        const location = entry?.origins[0];
+                        const container =
+                          location === undefined
+                            ? null
+                            : inspectSourceElement(source, entryFile, location);
+                        const edits =
+                          container === null
+                            ? null
+                            : structuralReplacements(source, target, {
+                                kind: "move",
+                                destination: container,
+                              });
+                        setStructuralProposal(edits === null ? null : check(edits, "Move block"));
+                        setStructureError(
+                          edits === null
+                            ? "This destination cannot accept the selected block. Choose another source container or use Source."
+                            : null,
+                        );
+                      }}
+                    >
+                      Review move
+                    </button>
+                  </>
+                )}
+                {structureError !== null && (
+                  <p role="alert" className="text-status-error text-xs">
+                    {structureError}
+                  </p>
+                )}
+                {structuralProposal !== null && (
+                  <div role="region" aria-label="Structural source diff" className="mt-2">
+                    <pre className="bg-muted overflow-auto p-2 text-xs">
+                      {structuralProposal.edits
+                        .map((edit) => `- ${edit.before}\n+ ${edit.after}`)
+                        .join("\n")}
+                    </pre>
+                    {structuralProposal.refusal !== null && (
+                      <p
+                        data-testid="source.structure-refusal"
+                        className="text-status-error text-xs"
+                      >
+                        {structuralProposal.refusal}
+                      </p>
+                    )}
+                    <button
+                      data-testid={"source.apply-structure"}
+                      type="button"
+                      className={buttonClass}
+                      disabled={structuralProposal.refusal !== null}
+                      onClick={() => {
+                        commit(structuralProposal.edits, structuralProposal.label);
+                        setStructuralProposal(null);
+                      }}
+                    >
+                      Use this change
+                    </button>{" "}
+                    <button
+                      type="button"
+                      className={buttonClass}
+                      onClick={() => setStructuralProposal(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </details>
+              {proposal !== null && (
+                <div role="region" aria-label="Proposed source diff" className="mt-3 space-y-2">
+                  <p className="text-xs">Review the exact source change</p>
+                  <pre className="bg-muted overflow-auto p-2 text-xs">
+                    {proposal.edits.map((edit) => `- ${edit.before}\n+ ${edit.after}`).join("\n")}
+                  </pre>
+                  {proposal.refusal !== null && (
+                    <p data-testid="source.proposal-refusal" className="text-status-error text-xs">
+                      {proposal.refusal}
+                    </p>
+                  )}
+                  <button
+                    data-testid={"source.apply-reviewed"}
+                    type="button"
+                    className={buttonClass}
+                    disabled={proposal.refusal !== null}
+                    onClick={() => {
+                      commit(proposal.edits, proposal.label);
+                      setProposal(null);
+                    }}
+                  >
+                    Use this change
+                  </button>{" "}
+                  <button type="button" className={buttonClass} onClick={() => setProposal(null)}>
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
       {shownError !== null && (
         <p data-testid="source.edit-error" className="text-status-error mt-2 text-xs">
           {shownError}
@@ -624,8 +684,9 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
 export function SourceHistory() {
   const { undo, redo, error, editable } = useEditorStore(
     useShallow((state) => ({
-      undo: state.undoHistory.length,
-      redo: state.redoHistory.length,
+      // Undo and redo walk the staged Design edits first, as the store's history does.
+      undo: state.undoHistory.length + (state.designDraft?.edits.length ?? 0),
+      redo: state.redoHistory.length + (state.designDraft?.undone.length ?? 0),
       error: state.sourceEditError,
       editable: state.sourceEditable,
     })),
@@ -726,12 +787,13 @@ function FixtureSourceSession() {
                         after: draft,
                       },
                     ],
+                    design: { label: "Edit fixture data" },
                   });
                   setDraft(null);
                   setReview(false);
                 }}
               >
-                Apply fixture change
+                Use this change
               </button>{" "}
               <button
                 type="button"

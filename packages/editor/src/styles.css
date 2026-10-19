@@ -97,6 +97,9 @@
   /* A compiler-generated wrapper is outlined in its own hue so it never reads as authored markup. */
   --editor-canvas-generated: oklch(0.62 0.21 305);
   --editor-canvas-document-bg: oklch(1 0 0);
+  /* The Design toolbar over the email stays dark on any email, in either theme. */
+  --editor-canvas-toolbar-bg: oklch(0.21 0.006 286);
+  --editor-canvas-toolbar-fg: oklch(0.985 0 0);
   --editor-backdrop: color-mix(in oklab, black 28%, transparent);
   --editor-shadow-control: var(--shadow-xs);
   --editor-shadow-overlay: var(--shadow-lg);

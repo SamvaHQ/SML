@@ -2,7 +2,9 @@ import { env } from "node:process";
 
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = 5232;
+// Another checkout's harness may already hold the default port; reusing it would test that
+// checkout's code, so a second worktree picks its own.
+const PORT = Number(env.EDITOR_BROWSER_PORT ?? 5232);
 const CI = env.CI !== undefined;
 
 export default defineConfig({

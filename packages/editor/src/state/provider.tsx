@@ -6,7 +6,7 @@ import { EditorIconsProvider } from "../chrome/icon-context";
 import { DEFAULT_EDITOR_ICONS, type EditorIcons } from "../chrome/icon-set";
 import { EditorBundleContext } from "./context";
 import { createEditorBundle, type UserSelection } from "./store";
-import type { CheckItem } from "./types";
+import type { CheckItem, EditorPin } from "./types";
 
 /** Stable empty checks default so an omitted prop doesn't churn the synced state. */
 const NO_CHECKS: ReadonlyArray<CheckItem> = [];
@@ -22,6 +22,11 @@ export interface EditorProviderProps {
    * selection was made in. A selection the editor rebinds to a newer render is not reported again.
    */
   readonly onSelectElement?: ((selection: UserSelection) => void) | undefined;
+  /**
+   * Called with every pin on the email, in tray order, whenever a pin is dropped, removed, noted or
+   * cleared. A host attaches them to the next message of its chat and clears them once it is sent.
+   */
+  readonly onPinsChange?: ((pins: ReadonlyArray<EditorPin>) => void) | undefined;
   /**
    * Pure, synchronous preparation before any attached parser sees the HTML.
    * Preview applies its forced color scheme first; canvas passes the host HTML.
@@ -44,6 +49,7 @@ export function EditorProvider({
   checks = NO_CHECKS,
   icons,
   onSelectElement,
+  onPinsChange,
   preparePreviewDocument,
   children,
 }: EditorProviderProps) {
@@ -69,6 +75,11 @@ export function EditorProvider({
     bundle.setUserSelectListener(onSelectElement);
     return () => bundle.setUserSelectListener(undefined);
   }, [bundle, onSelectElement]);
+
+  useLayoutEffect(() => {
+    bundle.setPinsListener(onPinsChange);
+    return () => bundle.setPinsListener(undefined);
+  }, [bundle, onPinsChange]);
 
   const iconSet = useMemo(
     () => (icons === undefined ? DEFAULT_EDITOR_ICONS : { ...DEFAULT_EDITOR_ICONS, ...icons }),

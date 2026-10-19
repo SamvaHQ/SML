@@ -65,8 +65,9 @@ test("local host preserves source intent through visual edits, undo, fixtures an
   await frame.getByText(COPY.heading).click();
   const show = page.getByTestId("shell.show-right");
   if (await show.isVisible()) await show.click();
-  await page.getByTestId("source.property.children.literal").fill("Changed heading");
-  await page.getByTestId("source.property.children.apply").click();
+  // The heading's text is a Design property; the edit is staged on the draft, which is saved.
+  await page.getByTestId("design-properties.text.children").fill("Changed heading");
+  await page.getByTestId("design-properties.text.children").press("Enter");
   await expect(frame.getByText(COPY.changedHeading)).toBeVisible();
   await expect
     .poll(() => readFile(join(root, "templates/visual-proof.tsx"), "utf8"))
@@ -86,6 +87,7 @@ test("local host preserves source intent through visual edits, undo, fixtures an
   await page.getByTestId("preview-bar.fixture").selectOption("first");
   await expect(frame.getByText(COPY.ada, { exact: true })).toBeVisible();
   await clickRendered(page, frame.getByText(COPY.movable));
+  await page.getByTestId("source.advanced-toggle").click();
   await page.getByTestId("source.structure-toggle").click();
   await page.getByTestId("source.insert").fill("<span>Added text</span>");
   await page.getByTestId("source.review-insert").click();
@@ -94,6 +96,7 @@ test("local host preserves source intent through visual edits, undo, fixtures an
   await page.getByTestId("source.undo").click();
   await expect(frame.getByText(COPY.added, { exact: true })).toHaveCount(0);
   await clickRendered(page, frame.getByText(COPY.movable));
+  await page.getByTestId("source.advanced-toggle").click();
   await page.getByTestId("source.structure-toggle").click();
   await page.getByTestId("source.review-delete").click();
   await page.getByTestId("source.apply-structure").click();
@@ -101,6 +104,7 @@ test("local host preserves source intent through visual edits, undo, fixtures an
   await page.getByTestId("source.undo").click();
   await expect(frame.getByText(COPY.movable, { exact: true })).toBeVisible();
   await clickRendered(page, frame.getByText(COPY.movable));
+  await page.getByTestId("source.advanced-toggle").click();
   await page.getByTestId("source.structure-toggle").click();
   const destination = await frame
     .getByText(COPY.destination, { exact: true })
@@ -121,11 +125,11 @@ test("local host preserves source intent through visual edits, undo, fixtures an
   await page.setViewportSize({ width: 390, height: 844 });
   await clickRendered(page, frame.getByText(COPY.changedHeading));
   if (await show.isVisible()) await show.click();
-  await expect(page.getByTestId("source.property.children.literal")).toBeVisible();
+  await expect(page.getByTestId("design-properties.text.children")).toBeVisible();
   await expect
     .poll(async () => (await page.getByTestId("inspector").boundingBox())?.width ?? 0)
     .toBeGreaterThan(260);
-  await page.getByTestId("source.property.children.literal").scrollIntoViewIfNeeded();
+  await page.getByTestId("design-properties.text.children").scrollIntoViewIfNeeded();
   await page.screenshot({ path: info.outputPath("source-properties-mobile.png"), fullPage: true });
 });
 

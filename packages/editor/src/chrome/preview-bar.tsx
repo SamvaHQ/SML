@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import { EditorCanvasModeSwitch } from "./design-controls";
 import { Mobile, Monitor, MoreHorizontal, OpenExternal, Refresh } from "./editor-icons";
 import { usePart, type PartProps } from "./part";
 import { usePreviewChrome } from "./preview-context";
@@ -172,6 +173,7 @@ export function EditorPreviewBar({
               />
               <FixtureSelect testId="preview-bar.fixture" />
             </div>
+            <EditorCanvasModeSwitch />
             <Tip label={size.help}>
               <span
                 tabIndex={0}

@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -20,15 +21,21 @@ import {
   zoomOutFrom,
   type ZoomGesture,
 } from "../canvas/zoom";
-import { useEditorStore } from "../state/context";
+import { useEditorStore, useEditorStoreApi } from "../state/context";
 import { CheckActions } from "./check-actions";
 import { CheckDetails } from "./check-details";
 import { useContributions } from "./contributions";
+import { EditorDesignDock, EditorPinTray } from "./design-controls";
+import { DesignToolbar } from "./design-toolbar";
 import { outlineAncestry, selectionLabel } from "./email-outline";
 import { EnvelopeCard } from "./envelope-card";
+import { nearestAuthored } from "./friendly";
+import { Inspector } from "./inspector";
 import { NodeContextMenu, type AncestorEntry } from "./node-context-menu";
 import { usePart, type PartProps } from "./part";
 import { EditorPreviewBar, PreviewNotice } from "./preview-bar";
+import { ReadonlyInspector } from "./readonly-inspector";
+import { cn } from "./ui-classes";
 import { useEditorPortalContainer } from "./use-editor-portal";
 import { EditorZoomControl } from "./zoom-control";
 
@@ -59,18 +66,34 @@ export function CanvasPane({
   /** The pane is on screen; a hidden pane leaves zoom chords to the page. */
   readonly active?: boolean | undefined;
 }) {
-  const { doc, render, outline, selection, previewDevice, canvasZoom, previewEpoch } =
-    useEditorStore(
-      useShallow((state) => ({
-        doc: state.doc,
-        render: state.render,
-        outline: state.outline,
-        selection: state.selection,
-        previewDevice: state.previewDevice,
-        canvasZoom: state.canvasZoom,
-        previewEpoch: state.previewEpoch,
-      })),
-    );
+  const {
+    doc,
+    render,
+    outline,
+    selection,
+    previewDevice,
+    canvasZoom,
+    previewEpoch,
+    canvasMode,
+    beforeEdits,
+    pins,
+    sourceEditable,
+  } = useEditorStore(
+    useShallow((state) => ({
+      doc: state.doc,
+      render: state.render,
+      outline: state.outline,
+      selection: state.selection,
+      previewDevice: state.previewDevice,
+      canvasZoom: state.canvasZoom,
+      previewEpoch: state.previewEpoch,
+      canvasMode: state.canvasMode,
+      beforeEdits: state.designCompare ? (state.designDraft?.baseRender ?? null) : null,
+      pins: state.pins,
+      sourceEditable: state.sourceEditable,
+    })),
+  );
+  const store = useEditorStoreApi();
   const { select, selectDocument, setHovered, setCanvasZoom } = useEditorStore(
     (state) => state.actions,
   );
@@ -93,6 +116,34 @@ export function CanvasPane({
 
   const selected =
     selection.kind === "element" ? (outline?.index.get(selection.instancePath) ?? null) : null;
+  const designing = canvasMode === "design";
+  // A click drops a pin in pin mode and selects otherwise. The mode is read when the click lands,
+  // so the frame's listeners never re-attach as it changes.
+  const onFrameSelect = useCallback(
+    (instancePath: string | null) => {
+      const { canvasMode: mode, actions, outline: current } = store.getState();
+      // Design and pins name what the author wrote: a click on a compiler's table or cell lands
+      // on the authored block around it.
+      const target =
+        mode === "point" || instancePath === null || current === null
+          ? instancePath
+          : (nearestAuthored(current, instancePath)?.instancePath ?? instancePath);
+      if (mode !== "pin") actions.select(target);
+      else if (target !== null) actions.addPin(target);
+    },
+    [store],
+  );
+  const fixture = doc?.channel === "email" ? doc.fixture : null;
+  const renderRevision = render?.revision ?? null;
+  // An instance path names a position, so after the email changes it can name another element.
+  // A pin is drawn only on the render it was dropped on; the tray keeps listing it.
+  const overlayPins = useMemo(
+    () =>
+      pins
+        .filter((pin) => pin.fixture === fixture && pin.revision === renderRevision)
+        .map((pin) => ({ number: pin.number, instancePath: pin.instancePath })),
+    [pins, fixture, renderRevision],
+  );
 
   const deviceWidth = previewDevice === "mobile" ? MOBILE_WIDTH : DESKTOP_WIDTH;
   useLayoutEffect(() => {
@@ -164,7 +215,12 @@ export function CanvasPane({
       readonly clientX: number;
       readonly clientY: number;
     }) => {
-      if (pointing || outline === null || input.instancePath === null) {
+      if (
+        pointing ||
+        store.getState().canvasMode === "pin" ||
+        outline === null ||
+        input.instancePath === null
+      ) {
         setContextOpen(false);
         return;
       }
@@ -194,24 +250,31 @@ export function CanvasPane({
       });
       queueMicrotask(() => setContextOpen(true));
     },
-    [outline, pointing, select],
+    [outline, pointing, select, store],
   );
 
+  // Compare shows the preview from before the staged edits, untouched by selection or pins.
   const frame =
-    render === null ? null : (
+    beforeEdits !== null ? (
+      <EmailFrame html={beforeEdits.html} width={deviceWidth} epoch={previewEpoch} />
+    ) : render === null ? null : (
       <EmailFrame
         html={render.html}
         width={deviceWidth}
         epoch={previewEpoch}
-        onSelect={select}
+        onSelect={onFrameSelect}
         onHover={setHovered}
         onZoomGesture={active ? onZoomGesture : undefined}
         onContextMenu={pointing ? undefined : openContextMenu}
         overlay={
           <SelectionOverlay
             renderRevision={render.revision}
-            selected={selected}
+            selected={canvasMode === "pin" ? null : selected}
             hovered={hovered}
+            toolbar={
+              designing && selected !== null ? <DesignToolbar selection={selected} /> : undefined
+            }
+            pins={overlayPins}
           />
         }
       />
@@ -225,9 +288,13 @@ export function CanvasPane({
           <PreviewNotice />
         </>
       )}
-      <div className="samva-editor-workspace relative flex min-h-0 min-w-0 flex-1 flex-col">
-        {canvasOverlays.length > 0 && (
-          /*
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <div
+          data-canvas-mode={canvasMode}
+          className="samva-editor-workspace relative flex min-h-0 min-w-0 flex-1 flex-col"
+        >
+          {canvasOverlays.length > 0 && (
+            /*
           The slot is placement only, never chrome. A host status is a live
           component — it renders nothing most of the time and something during
           a wait — so a truthy element says nothing about whether there is
@@ -236,58 +303,114 @@ export function CanvasPane({
           Pointer events pass through: a wait names itself without taking the
           canvas away from the hands that are already working in it.
         */
-          <div
-            data-samva-canvas-status
-            className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"
-          >
-            {canvasOverlays.map((contribution) => (
-              <Fragment key={contribution.id}>{contribution.render()}</Fragment>
-            ))}
-          </div>
-        )}
-        <div
-          ref={workspaceRef}
-          data-samva-canvas-viewport
-          // Fit zoom reads this element's clientWidth; a stable gutter keeps that width
-          // from moving when the zoomed email starts or stops overflowing.
-          className="samva-editor-scroll relative flex-1 [scrollbar-gutter:stable] overflow-auto px-10 pt-10 pb-24 [overflow-anchor:none]"
-          onClick={selectDocument}
-        >
-          {doc === null ? (
-            <div className="text-muted-foreground grid h-full place-items-center text-[12.5px]">
-              Loading document…
-            </div>
-          ) : (
             <div
-              className="mx-auto"
-              data-canvas-zoom={canvasZoom === "fit" ? "fit" : String(canvasZoom)}
-              style={{ width: deviceWidth, zoom: scale }}
-              // Stop the workspace's deselect handler so clicks inside the column keep
-              // their resolved selection (the envelope card and frame report their own
-              // target); only the bare backdrop drops to document scope.
-              onClick={(event) => event.stopPropagation()}
+              data-samva-canvas-status
+              className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"
             >
-              <EnvelopeCard />
-              {frame === null ? (
-                <UnbuiltCanvas />
-              ) : pointing ? (
-                frame
-              ) : (
-                <NodeContextMenu
-                  ancestors={contextAncestors}
-                  onSelect={select}
-                  portalContainer={portalContainer}
-                  anchor={contextAnchor ?? undefined}
-                  open={contextOpen}
-                  onOpenChange={(open) => setContextOpen(open && contextAncestors.length > 0)}
-                >
-                  {frame}
-                </NodeContextMenu>
+              {canvasOverlays.map((contribution) => (
+                <Fragment key={contribution.id}>{contribution.render()}</Fragment>
+              ))}
+            </div>
+          )}
+          <div
+            ref={workspaceRef}
+            data-samva-canvas-viewport
+            // Fit zoom reads this element's clientWidth; a stable gutter keeps that width
+            // from moving when the zoomed email starts or stops overflowing.
+            className={cn(
+              "samva-editor-scroll relative flex-1 [scrollbar-gutter:stable] overflow-auto px-10 pt-10 pb-24 [overflow-anchor:none]",
+              // Room to scroll the end of the email above the pin tray.
+              (pins.length > 0 || canvasMode === "pin") && "pb-64",
+            )}
+            onClick={selectDocument}
+          >
+            {doc === null ? (
+              <div className="text-muted-foreground grid h-full place-items-center text-[12.5px]">
+                Loading document…
+              </div>
+            ) : (
+              <div
+                className="mx-auto"
+                data-canvas-zoom={canvasZoom === "fit" ? "fit" : String(canvasZoom)}
+                style={{ width: deviceWidth, zoom: scale }}
+                // Stop the workspace's deselect handler so clicks inside the column keep
+                // their resolved selection (the envelope card and frame report their own
+                // target); only the bare backdrop drops to document scope.
+                onClick={(event) => event.stopPropagation()}
+              >
+                <EnvelopeCard />
+                {frame === null ? (
+                  <UnbuiltCanvas />
+                ) : pointing ? (
+                  frame
+                ) : (
+                  <NodeContextMenu
+                    ancestors={contextAncestors}
+                    onSelect={select}
+                    portalContainer={portalContainer}
+                    anchor={contextAnchor ?? undefined}
+                    open={contextOpen}
+                    onOpenChange={(open) => setContextOpen(open && contextAncestors.length > 0)}
+                  >
+                    {frame}
+                  </NodeContextMenu>
+                )}
+              </div>
+            )}
+          </div>
+          {beforeEdits !== null && (
+            <div
+              data-testid="canvas.compare-badge"
+              className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"
+            >
+              <span className="bg-popover text-popover-foreground ring-foreground/10 rounded-lg px-3 py-1 text-xs font-medium shadow-md ring-1">
+                Before your edits
+              </span>
+            </div>
+          )}
+          {doc !== null && (pins.length > 0 || canvasMode === "pin") && (
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-x-0 z-20 flex flex-col items-center gap-2 px-3",
+                // Above the Design bar, which is one row tall at any width.
+                designing ? "bottom-16" : "bottom-15",
               )}
+            >
+              <EditorPinTray />
+            </div>
+          )}
+          {doc !== null && !designing && <EditorZoomControl percent={percent} />}
+          {doc !== null && designing && (
+            // In Design the zoom and the staged edits share one bar under the email, in the
+            // layout rather than over it, so neither covers the email.
+            <div
+              data-slot="editor-design-bar"
+              className="border-border bg-background @container/design-bar flex h-11 shrink-0 items-center justify-between gap-2 border-t px-2"
+            >
+              {/* A narrow bar keeps Apply and the edit controls; zoom stays in pinch and ⌘/Ctrl. */}
+              <EditorZoomControl
+                percent={percent}
+                className="static translate-x-0 rounded-none bg-transparent p-0 shadow-none ring-0 @max-[34rem]/design-bar:hidden"
+              />
+              <EditorDesignDock />
             </div>
           )}
         </div>
-        {doc !== null && <EditorZoomControl percent={percent} />}
+        {pointing && designing && (
+          // Beside a docked chat the work pane has no inspector of its own, so Design brings the
+          // selected element's properties next to the email while there is room for both.
+          <div
+            data-slot="editor-design-properties"
+            data-testid="canvas.design-properties"
+            className="border-border hidden w-[300px] shrink-0 border-l @min-[44rem]/work-pane:flex"
+          >
+            {sourceEditable ? (
+              <Inspector embedded checks={false} />
+            ) : (
+              <ReadonlyInspector embedded />
+            )}
+          </div>
+        )}
       </div>
     </>
   );

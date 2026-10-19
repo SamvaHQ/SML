@@ -18,6 +18,7 @@ import { compileTemplate } from "@samva/markup/compiler";
 import { renderIrPreview } from "@samva/markup/render";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { Effect, Stream } from "effect";
+import { useEffect } from "react";
 
 import { SourceControls } from "../src/chrome/source-controls";
 import { useEditorStore } from "../src/state/context";
@@ -202,6 +203,13 @@ function Probe({ tag, file }: { readonly tag: string; readonly file: string }) {
   );
 }
 
+/** Stands in for a shell whose host reports an assistant turn at work. */
+function AssistantTurn() {
+  const { setHostBusy } = useEditorStore((store) => store.actions);
+  useEffect(() => setHostBusy(true), [setHostBusy]);
+  return null;
+}
+
 const mount = async (
   files: Readonly<Record<string, string>>,
   probe: { tag: string; file: string },
@@ -307,7 +315,7 @@ describe("source controls on the static profile", () => {
       true,
     );
     expect((await view.findByTestId("source.partial-warning")).textContent).toContain(
-      "every template that uses this partial",
+      "every template that uses it",
     );
     fireEvent.change(await view.findByTestId("source.property.children.literal"), {
       target: { value: "Tracking" },
@@ -317,6 +325,24 @@ describe("source controls on the static profile", () => {
     expect(editor.fileWrites[0]?.path).toBe(CARD);
     expect(editor.fileWrites[0]?.content).toBe(CARD_SOURCE.replace(">Card heading<", ">Tracking<"));
     expect(editor.saves).toHaveLength(0);
+  });
+
+  it("holds a partial's edits while an assistant turn is at work", async () => {
+    const editor = await harness(
+      { [ENTRY]: PARTIAL_ENTRY, [CARD]: CARD_SOURCE },
+      { lifecycle: true },
+    );
+    const view = render(
+      <EditorProvider host={editor.host}>
+        <AssistantTurn />
+        <Probe tag="h2" file={CARD} />
+      </EditorProvider>,
+    );
+    expect((await view.findByTestId("source.unavailable")).textContent).toContain(
+      "wait for the assistant",
+    );
+    expect(view.queryByTestId("source.property.children.apply")).toBeNull();
+    expect(editor.fileWrites).toHaveLength(0);
   });
 
   it("is read-only for a partial when the host cannot write project files", async () => {

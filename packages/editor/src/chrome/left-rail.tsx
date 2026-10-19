@@ -1,57 +1,83 @@
 import { ScrollArea } from "@base-ui/react/scroll-area";
-import { createElement } from "react";
+import { createElement, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
 import { Button } from "../ui/button";
 import { ChevronRight, SidebarLeftHide } from "./editor-icons";
-import { selectionLabel, type EmailOutlineNode } from "./email-outline";
-import { iconForTag } from "./icons";
+import { selectionTextExcerpt } from "./email-outline";
+import { authoredTree, friendlyName, type AuthoredNode } from "./friendly";
+import { iconForLayer } from "./icons";
 import { Tip } from "./ui";
 import { cn } from "./ui-classes";
 
 // ---------------------------------------------------------------------------
-// Layers — the render's element tree, selectable. Every row names one rendered
-// instance: its tag, whether the renderer generated it, and which iteration of a
-// repeated authoring it is. Selection is read-only; the authoring is edited in
-// the source.
+// Layers — the blocks and elements the author wrote, by the names they wrote them with
+// (`Section`, `Button`) or a plain word (`Heading`, `Text`, `Image`), with a short excerpt.
+// The tables, rows and cells the compiler renders them into are left out; the compiler marks
+// which rendered element each authored element is. Selecting a row selects that element.
 // ---------------------------------------------------------------------------
 
-function TreeRow({ node, depth }: { node: EmailOutlineNode; depth: number }) {
-  const { selectedPath, expandedLayers } = useEditorStore(
+/**
+ * A short sample of the element's text. Clients that need a second copy of a control (Outlook's
+ * button) render the same words twice, so a repeat is dropped.
+ */
+const layerExcerpt = (selection: AuthoredNode["selection"], html: string): string | undefined => {
+  const text = selectionTextExcerpt(selection, html)
+    ?.replace(/\u200b|\u00ad|\u034f/g, "")
+    .trim();
+  if (text === undefined || text === "") return undefined;
+  const half = text.length / 2;
+  const first = text.slice(0, Math.floor(half)).trim();
+  return first !== "" && text.slice(Math.ceil(half)).trim().startsWith(first.slice(0, 12))
+    ? first
+    : text;
+};
+
+function TreeRow({ node, depth }: { node: AuthoredNode; depth: number }) {
+  const { selectedPath, collapsedLayers, authoredSource, html } = useEditorStore(
     useShallow((state) => ({
       selectedPath: state.selection.kind === "element" ? state.selection.instancePath : null,
-      expandedLayers: state.expandedLayers,
+      collapsedLayers: state.collapsedLayers,
+      authoredSource: state.doc?.origin.authoredSource ?? "",
+      html: state.render?.html ?? "",
     })),
   );
   const { select, toggleLayerExpand, setHovered } = useEditorStore((state) => state.actions);
   const hasChildren = node.children.length > 0;
-  const open = expandedLayers.has(node.instancePath);
+  const open = !collapsedLayers.has(node.instancePath);
   const selected = selectedPath === node.instancePath;
   const { selection } = node;
+  const name = friendlyName(selection, authoredSource);
+  // A loop's copies are one layer: it names how many there are, and selects the first.
+  const repeat = node.copies > 1 ? `×${node.copies}` : undefined;
+  const excerpt = hasChildren && open ? undefined : layerExcerpt(selection, html);
 
   return (
     <li>
       <div
         className="group relative"
-        style={{ paddingLeft: depth * 10 }}
+        style={{ paddingLeft: depth * 12 }}
         onMouseEnter={() => setHovered(node.instancePath)}
         onMouseLeave={() => setHovered(null)}
       >
         <div
+          data-slot="editor-layer"
+          data-selected={selected || undefined}
           className={cn(
-            "flex h-[30px] w-full items-center gap-1.5 rounded-[7px] pr-2 pl-1.5 text-left transition-colors",
-            selected ? "bg-sel-soft text-accent-email" : "text-foreground hover:bg-muted",
+            "flex h-[30px] w-full items-center gap-1.5 rounded-md pr-2 pl-1 text-left transition-colors",
+            selected ? "bg-muted text-foreground" : "text-foreground hover:bg-muted/60",
           )}
         >
           {hasChildren ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon-xs"
               aria-expanded={open}
               data-testid="left-rail.layer.toggle"
-              aria-label={`${open ? "Collapse" : "Expand"} ${selectionLabel(selection)}`}
+              aria-label={`${open ? "Collapse" : "Expand"} ${name}`}
               className={cn(
-                "grid size-3.5 shrink-0 place-items-center text-muted-foreground transition-transform",
+                "text-muted-foreground size-5 shrink-0 transition-transform hover:bg-transparent",
                 open && "rotate-90",
               )}
               onClick={(event) => {
@@ -59,31 +85,38 @@ function TreeRow({ node, depth }: { node: EmailOutlineNode; depth: number }) {
                 toggleLayerExpand(node.instancePath);
               }}
             >
-              <ChevronRight className="size-[11px]" />
-            </button>
+              <ChevronRight className="size-3" />
+            </Button>
           ) : (
-            <span aria-hidden className="size-3.5 shrink-0" />
+            <span aria-hidden className="size-5 shrink-0" />
           )}
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             data-layer-instance-path={node.instancePath}
+            data-layer-name={name}
             data-testid={`layers.node.${node.instancePath}`}
-            type="button"
             onClick={() => select(node.instancePath)}
-            className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+            className="h-full min-w-0 flex-1 justify-start gap-2 rounded-md px-1 text-left font-normal hover:bg-transparent dark:hover:bg-transparent"
           >
-            {createElement(iconForTag(selection.tag), {
+            {createElement(iconForLayer(name, selection.tag), {
               className: cn(
                 "size-[15px] shrink-0",
-                selected ? "text-accent-email" : "text-muted-foreground",
+                selected ? "text-foreground" : "text-muted-foreground",
               ),
             })}
-            <span className="min-w-0 flex-1 truncate text-[12.5px]">
-              {selectionLabel(selection)}
-            </span>
-            {!selection.authored && (
-              <span className="text-placeholder shrink-0 text-[10px]">generated</span>
+            <span className="shrink-0 text-[12.5px] font-medium">{name}</span>
+            {excerpt !== undefined && (
+              <span className="text-muted-foreground min-w-0 flex-1 truncate text-[12px]">
+                {excerpt}
+              </span>
             )}
-          </button>
+            {repeat !== undefined && (
+              <span className="text-muted-foreground ml-auto shrink-0 text-[11px] tabular-nums">
+                {repeat}
+              </span>
+            )}
+          </Button>
         </div>
       </div>
       {hasChildren && open && (
@@ -99,6 +132,7 @@ function TreeRow({ node, depth }: { node: EmailOutlineNode; depth: number }) {
 
 export function LayersPane() {
   const outline = useEditorStore((state) => state.outline);
+  const roots = useMemo(() => (outline === null ? [] : authoredTree(outline)), [outline]);
   if (outline === null) {
     return (
       <div className="text-placeholder px-3 py-8 text-center text-xs">
@@ -106,9 +140,11 @@ export function LayersPane() {
       </div>
     );
   }
+  // The Email itself is the document scope; its blocks are the first level.
+  const top = roots.length === 1 && roots[0]?.selection.tag === "html" ? roots[0].children : roots;
   return (
     <ul className="m-0 list-none p-0">
-      {outline.roots.map((root) => (
+      {top.map((root) => (
         <TreeRow key={root.instancePath} node={root} depth={0} />
       ))}
     </ul>
