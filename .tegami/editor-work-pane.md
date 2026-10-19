@@ -19,11 +19,12 @@ where the editor's own controls take 44px touch targets.
 
 ## A preview bar and real zoom
 
-Above the email, the preview bar holds the version picker (search the saved versions; restoring
-an older one asks first), the desktop and phone widths, the fixture picker (moved from the
-toolbar), the size of the email, open in a new tab, and refresh, with a thin progress line while
-a new preview is on its way. The canvas zooms from 50% to 200% or fits its pane, from the
-floating control, a trackpad pinch, or ⌘/Ctrl with +, − and 0, without zooming the page.
+Above the email, the preview bar holds the version picker (search the saved versions; restoring an
+older one asks first), the desktop and phone widths, the fixture picker (moved from the toolbar for
+email; SMS and WhatsApp keep it there), the size of the email, open in a new tab, and refresh, with
+a thin progress line while a new preview is on its way. The canvas zooms from 50% to 200% or fits
+its pane, from the floating control, a trackpad pinch, or ⌘/Ctrl with +, − and 0, without zooming
+the page.
 
 Hosts can report the size of the email as sent on `EmailRender.sentBytes`; the size readout and
 the Gmail clipping check use it, and otherwise say they measure the preview. `EditorShell` takes
