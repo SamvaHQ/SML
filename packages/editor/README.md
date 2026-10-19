@@ -132,7 +132,6 @@ import {
   EditorTopBar,
   EditorWorkspace,
 } from "@samva/editor/shell";
-import { Button } from "@samva/ui/button";
 
 <EditorProvider host={host}>
   <EditorRoot contributions={contributions} className="rounded-xl border">
