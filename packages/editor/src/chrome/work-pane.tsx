@@ -52,7 +52,7 @@ const TAB_META: Record<
   checks: { label: "Checks", hint: "Clients, size and links", Icon: CheckList },
 };
 
-const TAB_CLASS = cn(tabOptionClass, "h-7 px-2 text-[12.5px]");
+const TAB_CLASS = cn(tabOptionClass, "h-7 shrink-0 px-2 text-[12.5px]");
 
 /** A count beside the Checks tab while anything needs attention. */
 function ChecksBadge() {
@@ -159,7 +159,9 @@ export function WorkPane({ split }: { readonly split: boolean }) {
                     value={tab}
                     data-testid={`work-pane.tab.${tab}`}
                     data-editor-control=""
-                    className={cn(TAB_CLASS, "pr-7")}
+                    // At phone width the close control takes a full touch target beside
+                    // the tab rather than sitting over its label.
+                    className={cn(TAB_CLASS, "pr-7 @max-[720px]/samva-editor:pr-2")}
                   >
                     <Icon className="size-3.5" />
                     {label}
@@ -173,7 +175,7 @@ export function WorkPane({ split }: { readonly split: boolean }) {
                     data-editor-control=""
                     onClick={() => closeWorkTab(tab)}
                     className={cn(
-                      "text-muted-foreground hover:bg-muted hover:text-foreground absolute right-1 grid size-5 place-items-center rounded-sm outline-none",
+                      "text-muted-foreground hover:bg-muted hover:text-foreground absolute right-1 grid size-5 place-items-center rounded-sm outline-none @max-[720px]/samva-editor:static",
                       focusRing,
                       revealOnRowHover,
                     )}

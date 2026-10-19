@@ -131,6 +131,12 @@ describe("preview bar", () => {
     expect(view.getByTestId("preview-bar.size").textContent).toMatch(/^600 px · \d+ KB preview$/);
   });
 
+  it("shows only the width while there is no preview to weigh", async () => {
+    const view = await mount();
+    await act(() => emitChange(view.editor, { origin: "agent", broken: "not-built" }));
+    await waitFor(() => expect(view.getByTestId("preview-bar.size").textContent).toBe("600 px"));
+  });
+
   it("reads the size of the email as sent when the host reports it", async () => {
     const { editor, host } = await withSentBytes(20 * 1024);
     const view = await mount({ editor, host });

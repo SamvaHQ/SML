@@ -78,13 +78,16 @@ function FixtureSelect() {
  * reports it; without one, the readout says it measures the preview, which can be larger.
  */
 function useSizeReadout(): { readonly text: string; readonly help: string } {
-  const { sizeKb, sizeSource, deviceWidth } = useEditorStore(
+  const { sizeKb, sizeSource, deviceWidth, rendered } = useEditorStore(
     useShallow((state) => ({
       sizeKb: state.sizeKb,
       sizeSource: state.sizeSource,
       deviceWidth: DEVICE_WIDTH[state.previewDevice],
+      rendered: state.render !== null,
     })),
   );
+  // Without a preview there is nothing to weigh; a 0 KB readout would read as an empty email.
+  if (!rendered) return { text: `${deviceWidth} px`, help: "Width shown" };
   return sizeSource === "sent"
     ? {
         text: `${deviceWidth} px · ${sizeKb} KB`,

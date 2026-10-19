@@ -91,7 +91,7 @@ export function EnvelopeCard() {
             selectEnvelope();
           }}
           className={cn(
-            "mb-4 flex h-11 w-full items-center gap-3 rounded-xl border bg-background px-3 text-left shadow-[var(--shadow-xs)] transition-[border-color,box-shadow] hover:border-sel-mid",
+            "mb-4 flex h-11 w-full items-center gap-3 rounded-xl border border-border bg-background px-3 text-left shadow-[var(--shadow-xs)] transition-[border-color,box-shadow] hover:border-sel-mid",
             selected && "border-accent-email shadow-[0_0_0_1px_var(--accent-email)]",
           )}
         >
