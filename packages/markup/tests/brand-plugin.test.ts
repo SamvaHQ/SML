@@ -55,7 +55,7 @@ describe("a brand plugin", () => {
     expect(errors(compiled)).toEqual([]);
     const { html } = renderIr(compiled.ir!, {}, { brandPlugin: ACME });
     expect(html).toContain('data-acme-footer=""');
-    expect(html).toContain('<tr data-acme-unsubscribe="">');
+    expect(html).toContain('<span data-acme-unsubscribe="">');
     expect(html).toContain('href="{{acme.unsubscribe}}" data-acme-no-track');
     expect(html).not.toContain("samva");
     expect(renderedFooterMarkers(html, ACME)).toEqual({ footer: true, unsubscribeLink: true });

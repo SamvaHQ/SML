@@ -101,8 +101,16 @@ const classes = (...names: readonly (string | undefined)[]): string | undefined 
   return joined === "" ? undefined : joined;
 };
 
-const row = (children: EmailChild, props: Readonly<Record<string, unknown>> = {}): EmailNode =>
-  jsx("tr", { ...props, children: jsx("td", { style: { padding: "0 0 8px 0" }, children }) });
+const line = (children: readonly EmailChild[], last: boolean): EmailNode =>
+  jsx("p", { style: { margin: last ? "0" : "0 0 8px 0" }, children });
+
+/** The alignment a footer `className` asks for; the footer centers when it names none. */
+const footerAlignment = (className: string | undefined): "left" | "center" | "right" =>
+  (/(?:^|\s)text-(left|center|right)(?:\s|$)/.exec(className ?? "")?.[1] as
+    | "left"
+    | "center"
+    | "right"
+    | undefined) ?? "center";
 
 /** Bind `BrandLogo` and `BrandFooter` to one brand, marked as the plugin names. */
 export const brandComponents = (
@@ -140,37 +148,32 @@ export const brandComponents = (
     });
   };
 
+  // One line of who sent it, where to find them and how to stop, then the postal address:
+  // `Acme · X · LinkedIn · Unsubscribe`. The unsubscribe link and its separator sit in their
+  // own marked span, so a send without an unsubscribe group drops exactly that.
   const BrandFooter = ({ unsubscribeLabel = "Unsubscribe", className }: BrandFooterProps) => {
-    const rows: EmailNode[] = [];
+    const items: EmailChild[] = [];
+    const separator = () => (items.length === 0 ? [] : [" · "]);
     if (footer.companyName !== undefined && footer.companyName.trim() !== "")
-      rows.push(row(jsx("span", { className: "font-semibold", children: footer.companyName })));
-    if (footer.address !== undefined) {
-      const lines = addressLines(footer.address);
-      if (lines.length > 0)
-        rows.push(
-          row(lines.flatMap((line, index) => (index === 0 ? [line] : [jsx("br", {}), line]))),
-        );
-    }
-    const links = footer.socialLinks ?? [];
-    if (links.length > 0)
-      rows.push(
-        row(
-          links.flatMap((link, index) => [
-            ...(index === 0 ? [] : [" · "]),
-            jsx("a", {
-              href: link.url,
-              className: "text-muted-foreground underline",
-              children: link.label,
-            }),
-          ]),
-        ),
+      items.push(jsx("span", { className: "font-semibold", children: footer.companyName }));
+    for (const link of footer.socialLinks ?? [])
+      items.push(
+        ...separator(),
+        jsx("a", {
+          href: link.url,
+          className: "text-muted-foreground underline",
+          children: link.label,
+        }),
       );
-    rows.push(
-      row(unsubscribeLink(unsubscribeLabel, plugin), {
+    items.push(
+      jsx("span", {
         [plugin.unsubscribeRowAttribute]: "",
         [BRAND_FOOTER_MARKER]: true,
+        children: [...separator(), unsubscribeLink(unsubscribeLabel, plugin)],
       }),
     );
+    const address = footer.address === undefined ? [] : addressLines(footer.address);
+    const alignment = footerAlignment(className);
     return jsx("table", {
       role: "presentation",
       width: "100%",
@@ -182,16 +185,17 @@ export const brandComponents = (
       children: jsx("tbody", {
         children: jsx("tr", {
           children: jsx("td", {
-            align: "center",
-            className: classes("text-xs text-muted-foreground text-center", className),
+            align: alignment,
+            className: classes(
+              "text-xs text-muted-foreground",
+              alignment === "center" ? "text-center" : undefined,
+              className,
+            ),
             style: { padding: "32px 16px" },
-            children: jsx("table", {
-              role: "presentation",
-              border: 0,
-              cellpadding: 0,
-              cellspacing: 0,
-              children: jsx("tbody", { children: rows }),
-            }),
+            children: [
+              line(items, address.length === 0),
+              ...(address.length === 0 ? [] : [line([address.join(", ")], true)]),
+            ],
           }),
         }),
       }),
@@ -232,6 +236,8 @@ export const renderedFooterMarkers = (
   unsubscribeLink: html.includes(`href="${escapeAttribute(plugin.unsubscribeUrlPlaceholder)}"`),
 });
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /**
  * Drop the unsubscribe row from a rendered message, for a send that resolved
  * no unsubscribe group: there is no link to put there, so the row goes.
@@ -243,12 +249,23 @@ export const withoutUnsubscribeRow = (
   },
   plugin: BrandPlugin = samvaBrandPlugin,
 ): { readonly html: string | undefined; readonly text: string | undefined } => ({
+  // A `<span>` in the footer's line, or the `<tr>` row of a footer compiled before the line.
   html: rendered.html?.replace(
-    new RegExp(`<tr ${plugin.unsubscribeRowAttribute}=""[^>]*>[\\s\\S]*?</tr>`, "g"),
+    new RegExp(`<(span|tr) ${plugin.unsubscribeRowAttribute}=""[^>]*>[\\s\\S]*?</\\1>`, "g"),
     "",
   ),
+  // The link's segment of its line, with the separator before it; a line left empty goes.
   text: rendered.text
     ?.split("\n")
-    .filter((line) => !line.includes(plugin.unsubscribeUrlPlaceholder))
+    .flatMap((textLine) => {
+      if (!textLine.includes(plugin.unsubscribeUrlPlaceholder)) return [textLine];
+      const rest = textLine
+        .replace(
+          new RegExp(`(?:\\s*·\\s*)?[^·]*\\(${escapeRegExp(plugin.unsubscribeUrlPlaceholder)}\\)`),
+          "",
+        )
+        .trimEnd();
+      return rest.trim() === "" ? [] : [rest];
+    })
     .join("\n"),
 });

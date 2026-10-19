@@ -124,8 +124,8 @@ export default defineTemplate({
  */
 export const PARITY_DIGESTS = {
   subject: "57d08cb8284aa1a977674a5cbd235e563cfa08817ef31e71adf0b76301792a4d",
-  html: "4deb979650daa386b09edcd3c843b5fef12f2ffdd2acc55ad71a6cd26187744e",
-  text: "2e6adf328a9e1a8b323e8d091bfbad545161d762b8297fd4b39d544ab8a7f5ec",
+  html: "86b17de0d557a26c9a8d3f6d6ed84609caa71410c033f9f3dae2332b58cf561c",
+  text: "fedccefefa532570730ef402ba2052905e6e2017fcc8918794af21547b3439d6",
 } as const;
 
 /**
@@ -134,7 +134,7 @@ export const PARITY_DIGESTS = {
  * on one side.
  */
 export const PARITY_COMPILE_DIGEST =
-  "b1cc1fff2c70d271a89d22aa70ce7dd494d3eb5144e80c844120dfe1c8b441fe";
+  "c9004820513c575f9ebaaf45132a9431652e72bd8583fe5ab42790a53b5466f4";
 
 const hex = (buffer: ArrayBuffer): string =>
   Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, "0")).join("");
