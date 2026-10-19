@@ -68,6 +68,8 @@ export function StatusBar({
   const { errorCount, warnCount } = summarizeChecks(checks);
   const narrow = layoutMode === "narrow";
   const split = docked && layoutMode === "wide" && !chatCollapsed;
+  // Only the email workspace has a work pane, and so a Checks tab, beside a docked assistant.
+  const checksTab = docked && (doc === null || doc.channel === "email");
   const pending = checks.filter((check) =>
     check.diagnostics?.some((item) => item.compatibility?.assessment === "unverified"),
   ).length;
@@ -120,8 +122,7 @@ export function StatusBar({
               style={split ? { width: assistantWidth } : undefined}
               className={cn("flex min-w-0 shrink-0 items-center gap-3 px-2", split && "pr-3")}
             >
-              {docked ? (
-                // The work pane gives checks a tab; the standalone layout keeps them in a popover.
+              {checksTab ? (
                 <Button
                   variant="ghost"
                   size="xs"

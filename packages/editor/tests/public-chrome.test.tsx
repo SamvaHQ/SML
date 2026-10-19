@@ -189,6 +189,22 @@ describe("public editor chrome", () => {
     expect(standalone.textContent).toBe("No issues found");
     fireEvent.click(standalone);
     expect(await clear.findByTestId("statusbar.checks-popup")).toBeTruthy();
+    clear.unmount();
+
+    // A message channel has no work pane even beside a docked assistant.
+    const sms = render(
+      <EditorProvider host={markupEditor("sms", SMS_TSX).host} checks={[unverified]}>
+        <EditorShell
+          contributions={[
+            { slot: "rail.assistant", id: "assistant", render: () => <div>Assistant</div> },
+          ]}
+        />
+      </EditorProvider>,
+    );
+    await waitFor(() => expect(sms.queryByTestId("statusbar.checks-trigger")).toBeTruthy());
+    expect(await sms.findByTestId("sms-workspace.category")).toBeTruthy();
+    fireEvent.click(sms.getByTestId("statusbar.checks-trigger"));
+    expect(await sms.findByTestId("statusbar.checks-popup")).toBeTruthy();
   });
 
   it("mounts host identity and controls in the canonical toolbar", async () => {
