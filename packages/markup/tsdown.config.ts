@@ -18,6 +18,7 @@ export default defineConfig({
     render: "src/render.ts",
     edit: "src/edit.ts",
     brand: "src/brand.ts",
+    "brand-sample": "src/brand-sample.ts",
   },
   format: ["esm"],
   outDir: "dist",
