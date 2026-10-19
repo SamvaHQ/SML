@@ -372,7 +372,8 @@ export function CanvasPane({
             <div
               className={cn(
                 "pointer-events-none absolute inset-x-0 z-20 flex flex-col items-center gap-2 px-3",
-                designing ? "bottom-3" : "bottom-15",
+                // Above the Design bar, which is one row tall at any width.
+                designing ? "bottom-16" : "bottom-15",
               )}
             >
               <EditorPinTray />
@@ -384,11 +385,12 @@ export function CanvasPane({
             // layout rather than over it, so neither covers the email.
             <div
               data-slot="editor-design-bar"
-              className="border-border bg-background flex shrink-0 items-center justify-between gap-2 border-t px-2 py-1.5"
+              className="border-border bg-background @container/design-bar flex h-11 shrink-0 items-center justify-between gap-2 border-t px-2"
             >
+              {/* A narrow bar keeps Apply and the edit controls; zoom stays in pinch and ⌘/Ctrl. */}
               <EditorZoomControl
                 percent={percent}
-                className="static translate-x-0 rounded-none bg-transparent p-0 shadow-none ring-0"
+                className="static translate-x-0 rounded-none bg-transparent p-0 shadow-none ring-0 @max-[34rem]/design-bar:hidden"
               />
               <EditorDesignDock />
             </div>

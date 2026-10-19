@@ -172,3 +172,26 @@ test("sending from the chat takes the pins and clears them", async ({ page }) =>
   await expect(page.getByTestId("dev-app.composer")).toContainText("Sent with 1 pin");
   await expect(page.getByTestId("pin-tray")).toHaveAttribute("data-count", "0");
 });
+
+test("on a phone the Design bar keeps Apply on screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?demo=workspace");
+  await expect(page.locator("[data-editor-rendered]")).toHaveText("true");
+  await page.getByTestId("agent-workspace.tab.preview").click();
+  await page.getByTestId("preview-bar.design").click();
+  const apply = page.getByTestId("design-dock.apply");
+  await expect(apply).toBeVisible();
+  const box = await apply.boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+});
+
+test("pins sit above the Design bar, not over it", async ({ page }) => {
+  await open(page);
+  await page.getByTestId("preview-bar.pin").click();
+  await clickInEmail(page, ROASTED_TO_ORDER);
+  await page.getByTestId("preview-bar.pin").click();
+  await page.getByTestId("preview-bar.design").click();
+  const tray = await page.getByTestId("pin-tray").boundingBox();
+  const bar = await page.locator('[data-slot="editor-design-bar"]').boundingBox();
+  expect(tray!.y + tray!.height).toBeLessThanOrEqual(bar!.y);
+});

@@ -237,7 +237,7 @@ export function EditorDesignDock(props: PartProps<"div", DesignDockState>) {
         data-testid="design-dock.status"
         aria-live="polite"
         className={cn(
-          "px-2.5 text-xs whitespace-nowrap tabular-nums",
+          "px-2.5 text-xs whitespace-nowrap tabular-nums @max-[24rem]/design-bar:sr-only",
           pending === 0 ? "text-muted-foreground" : "text-foreground font-medium",
           failed && "text-destructive",
         )}
@@ -332,7 +332,7 @@ export function EditorDesignDock(props: PartProps<"div", DesignDockState>) {
 
   return usePart<DesignDockState>("editor-design-dock", props, {
     state: { pending, apply: apply.status, compare, confirming },
-    className: "flex min-w-0 items-center gap-2",
+    className: "ml-auto flex min-w-0 items-center gap-2",
     props: {
       children: (
         <>
