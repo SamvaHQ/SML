@@ -5,7 +5,7 @@ import { PreviewDocumentContext, type PreparedPreviewDocument } from "../canvas/
 import { EditorIconsProvider } from "../chrome/icon-context";
 import { DEFAULT_EDITOR_ICONS, type EditorIcons } from "../chrome/icon-set";
 import { EditorBundleContext } from "./context";
-import { createEditorBundle, type UserSelection } from "./store";
+import { createEditorBundle, type FocusedPane, type UserSelection } from "./store";
 import type { CheckItem, EditorPin } from "./types";
 
 /** Stable empty checks default so an omitted prop doesn't churn the synced state. */
@@ -27,6 +27,11 @@ export interface EditorProviderProps {
    * cleared. A host attaches them to the next message of its chat and clears them once it is sent.
    */
   readonly onPinsChange?: ((pins: ReadonlyArray<EditorPin>) => void) | undefined;
+  /**
+   * The pane a docked workspace too narrow for chat and preview side by side shows first. A host
+   * whose own app is the conversation, such as ChatGPT, opens on `"preview"`. Defaults to the chat.
+   */
+  readonly initialPane?: FocusedPane | undefined;
   /**
    * Pure, synchronous preparation before any attached parser sees the HTML.
    * Preview applies its forced color scheme first; canvas passes the host HTML.
@@ -50,16 +55,19 @@ export function EditorProvider({
   icons,
   onSelectElement,
   onPinsChange,
+  initialPane,
   preparePreviewDocument,
   children,
 }: EditorProviderProps) {
-  const [bundle, setBundle] = useState(() => createEditorBundle(host, { hostChecks: checks }));
+  const [bundle, setBundle] = useState(() =>
+    createEditorBundle(host, { hostChecks: checks, initialPane }),
+  );
   // React-sanctioned derived-state reset: recreate the bundle during render when
   // the host changes (e.g. the vite dev app re-authenticates). React discards
   // this render and re-runs with the fresh bundle before committing, so children
   // never commit against the old document's state under the new host.
   if (bundle.host !== host) {
-    setBundle(createEditorBundle(host, { hostChecks: checks }));
+    setBundle(createEditorBundle(host, { hostChecks: checks, initialPane }));
   }
 
   useEffect(() => {
