@@ -31,6 +31,14 @@ export { VersionPicker as EditorVersionPicker } from "./chrome/version-picker";
 export { AddViewItems as EditorAddViewItems, EditorWorkPane } from "./chrome/work-pane";
 export type { WorkPaneState } from "./chrome/work-pane";
 export { EditorZoomControl, type ZoomControlState } from "./chrome/zoom-control";
+export {
+  EditorCanvasModeSwitch,
+  EditorDesignDock,
+  EditorPinTray,
+  type CanvasModeSwitchState,
+  type DesignDockState,
+  type PinTrayState,
+} from "./chrome/design-controls";
 export type { PartProps } from "./chrome/part";
 export type { EditorContribution, EditorSlot } from "./chrome/contributions";
 export type { EditorIcon, EditorIconName, EditorIcons } from "./chrome/icon-set";
