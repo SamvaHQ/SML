@@ -7,7 +7,7 @@ import { preheaderNode } from "./components";
 import type { Stylesheet } from "./css";
 import { EmailCompileError, hasBlockingDiagnostic, type EmailDiagnostic } from "./diagnostics";
 import { serializeEmailHtml, type SerializeEmailOptions } from "./html";
-import { drainEmailDiagnostics, EmailNode } from "./jsx-runtime";
+import { collectEmailDiagnostics, EmailNode } from "./jsx-runtime";
 import { deriveEmailText } from "./text";
 
 /** Classic Outlook lays a document out correctly only under a transitional doctype. */
@@ -39,7 +39,7 @@ export const compileEmail = (
   options: SerializeEmailOptions = {},
 ): EmailCompileOutput => {
   const serialized = serializeEmailHtml(node, options);
-  const diagnostics = settle([...drainEmailDiagnostics(), ...serialized.diagnostics]);
+  const diagnostics = settle([...collectEmailDiagnostics(node), ...serialized.diagnostics]);
   return {
     html: serialized.html,
     text: deriveEmailText(node),
@@ -55,7 +55,10 @@ const withPreheader = (node: EmailNode, text: string): EmailNode => {
       for (const [index, child] of current.children.entries()) {
         const replaced = insert(child);
         if (replaced !== undefined)
-          return EmailNode.Fragment({ children: current.children.with(index, replaced) });
+          return EmailNode.Fragment({
+            ...current,
+            children: current.children.with(index, replaced),
+          });
       }
       return undefined;
     }
@@ -97,7 +100,10 @@ const withHeadCss = (node: EmailNode, css: string, fontFaceCss: string): EmailNo
       for (const [index, child] of current.children.entries()) {
         const replaced = insert(child);
         if (replaced !== undefined)
-          return EmailNode.Fragment({ children: current.children.with(index, replaced) });
+          return EmailNode.Fragment({
+            ...current,
+            children: current.children.with(index, replaced),
+          });
       }
       return undefined;
     }
@@ -146,9 +152,6 @@ export const renderEmailContent = (
   render: () => EmailContent,
   options: SerializeEmailOptions = {},
 ): RenderedEmail => {
-  // Primitives report into a module-level sink; start each render from empty so
-  // a previous render in the same isolate cannot contribute findings.
-  drainEmailDiagnostics();
   const content = render();
   const invalid: EmailDiagnostic[] = [];
   const fail = (code: string, message: string) =>

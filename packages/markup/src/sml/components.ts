@@ -12,7 +12,7 @@ import {
   Spacer,
 } from "../email/components";
 import { equalColumnWidth } from "../email/components";
-import { drainEmailDiagnostics, type EmailChild } from "../email/jsx-runtime";
+import { collectEmailDiagnostics, type EmailChild, type EmailNode } from "../email/jsx-runtime";
 import { PRIMITIVE_CLASSES } from "../email/primitive-css";
 import { isObject } from "../internal/guards";
 import type { IrEach, IrNode, IrValue } from "../ir";
@@ -367,12 +367,13 @@ export const runBuiltinComponent = (call: ComponentCall): IrNode[] => {
     );
     return [];
   }
-  drainEmailDiagnostics();
   const output = (fn as (props: Record<string, unknown>) => unknown)(props);
   const location = lowerer.findings.locate(ctx.module.parsed, node);
-  for (const diagnostic of drainEmailDiagnostics())
-    lowerer.findings.items.push({ ...diagnostic, origins: [location] });
-  if (output !== null && (!isObject(output) || typeof output.type !== "string")) return [];
+  const isNode = isObject(output) && typeof output.type === "string";
+  if (isNode)
+    for (const diagnostic of collectEmailDiagnostics(output as EmailNode))
+      lowerer.findings.items.push({ ...diagnostic, origins: [location] });
+  if (output !== null && !isNode) return [];
   return wrap([
     ...emailNodeToIr(
       output as Parameters<typeof emailNodeToIr>[0],

@@ -1,4 +1,4 @@
-/* oxlint-disable samva/no-try-catch-or-throw, samva/no-hand-rolled-object-guard, samva/no-unsafe-type-assertion -- The helpers observe IrRenderError diagnostics, and adversarial cases deliberately feed malformed IR. */
+/* oxlint-disable samva/no-try-catch-or-throw, samva/no-hand-rolled-object-guard, samva/no-unsafe-type-assertion -- The helpers observe RenderError diagnostics, and adversarial cases deliberately feed malformed IR. */
 import { describe, expect, it } from "@effect/vitest";
 
 import type { BrandPlugin } from "../src/email/brand-plugin";
@@ -16,7 +16,7 @@ import type {
   IrValue,
   TemplateIr,
 } from "../src/ir";
-import { IrRenderError, renderIr, renderIrSms } from "../src/render-ir";
+import { RenderError, renderIr, renderIrSms } from "../src/render-ir";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ const codes = (run: () => unknown): string[] => {
   try {
     run();
   } catch (error) {
-    if (error instanceof IrRenderError) return error.diagnostics.map((item) => item.code);
+    if (error instanceof RenderError) return error.diagnostics.map((item) => item.code);
     throw error;
   }
   return [];
@@ -932,9 +932,9 @@ describe("adversarial: attribute and text breakout", () => {
     try {
       html(el("div", { onclick: "x", foo: "y" }, el("script")));
     } catch (error) {
-      expect(error).toBeInstanceOf(IrRenderError);
-      expect((error as IrRenderError).name).toBe("IrRenderError");
-      expect((error as IrRenderError).diagnostics.map((item) => item.code).sort()).toEqual([
+      expect(error).toBeInstanceOf(RenderError);
+      expect((error as RenderError)._tag).toBe("RenderError");
+      expect((error as RenderError).diagnostics.map((item) => item.code).sort()).toEqual([
         "event-handler",
         "unsupported-attribute",
         "unsupported-element",
@@ -1340,9 +1340,9 @@ describe("each with where, chunk and count", () => {
 
   it("rejects a chunk that is not a positive integer and a count of a non-array", () => {
     const bad = ul({ each: list, as: "x", chunk: 0, children: [] });
-    expect(() => html(bad, input)).toThrow(IrRenderError);
+    expect(() => html(bad, input)).toThrow(RenderError);
     expect(() =>
       html(ul({ count: { bind: "s" }, as: "x", where: { present: "$x" } }), { s: "text" }),
-    ).toThrow(IrRenderError);
+    ).toThrow(RenderError);
   });
 });

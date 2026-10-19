@@ -1,6 +1,8 @@
 /* oxlint-disable eslint/no-control-regex -- URL, header and attribute validation intentionally rejects control characters. */
 /* oxlint-disable samva/no-hand-rolled-object-guard, samva/no-unsafe-type-assertion -- The renderer walks untrusted JSON IR and input; the guards here are the validation, and the narrowing casts follow a key-presence check. */
-/* oxlint-disable samva/no-try-catch-or-throw, samva/no-error-constructor -- The send-time renderer is a synchronous security boundary: unsafe IR or data rejects the whole render with one IrRenderError. */
+/* oxlint-disable samva/no-try-catch-or-throw, samva/no-error-constructor -- The send-time renderer is a synchronous security boundary: unsafe IR or data rejects the whole render with one RenderError. */
+import { TaggedError } from "better-result";
+
 import { reservedBrandAttributes, type BrandPlugin } from "./email/brand-plugin";
 import { emailElement, EMAIL_GLOBAL_ATTRIBUTES, type EmailAttributeSpec } from "./email/elements";
 import type { EmailElementSpec, EmailLayout } from "./email/elements";
@@ -39,19 +41,20 @@ export interface IrRenderDiagnostic {
   readonly message: string;
 }
 
-export class IrRenderError extends Error {
+export class RenderError extends TaggedError("RenderError")<{
   readonly diagnostics: readonly IrRenderDiagnostic[];
-  constructor(diagnostics: readonly IrRenderDiagnostic[]) {
-    super(
-      `Template render rejected: ${diagnostics.map((item) => `${item.code}: ${item.message}`).join("; ")}`,
-    );
-    this.name = "IrRenderError";
-    this.diagnostics = diagnostics;
+  readonly message: string;
+}> {
+  constructor(args: { readonly diagnostics: readonly IrRenderDiagnostic[] }) {
+    super({
+      diagnostics: args.diagnostics,
+      message: `Template render rejected: ${args.diagnostics.map((item) => `${item.code}: ${item.message}`).join("; ")}`,
+    });
   }
 }
 
 const fail = (code: string, message: string): never => {
-  throw new IrRenderError([{ code, message }]);
+  throw new RenderError({ diagnostics: [{ code, message }] });
 };
 
 // ── Limits ────────────────────────────────────────────────────────────────────
@@ -1115,7 +1118,7 @@ const createContext = (
 };
 
 const settle = (ctx: Ctx): void => {
-  if (ctx.diagnostics.length > 0) throw new IrRenderError(ctx.diagnostics);
+  if (ctx.diagnostics.length > 0) throw new RenderError({ diagnostics: ctx.diagnostics });
 };
 
 /** Render the email channel of a compiled template against one validated input. */
