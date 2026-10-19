@@ -6,13 +6,12 @@ import type {
   ProjectCommit,
   ProjectLifecycleState,
 } from "@samva/editor/host";
-import { toAsyncHost } from "@samva/editor/host/effect";
-import type { MockHostControls } from "@samva/editor/mock";
 import { type EditorContribution, EditorShell } from "@samva/editor/shell";
-import { Effect } from "effect";
 import { useState } from "react";
 
 import { useEditorStoreApi } from "../src/state/context";
+import type { CompiledHostControls } from "./compiled-host";
+import { DemoChat } from "./demo-chat";
 
 // `?demo=workspace` runs the editor the way Samva's dashboard does: a docked assistant beside
 // the tabbed work pane, a review surface, saved versions to restore, a host-reported sent size,
@@ -27,11 +26,14 @@ const DEMO_VERSIONS: ReadonlyArray<{ readonly message: string; readonly ago: num
   { message: "First draft", ago: 26 * 60 * MINUTE },
 ];
 
-/** The sent email links its images instead of inlining them, so it weighs less than the preview. */
+/**
+ * The compiled host reports the delivered HTML's size; a render without one falls back to a
+ * share of the preview, since the sent email links its images instead of inlining them.
+ */
 const SENT_SHARE = 0.42;
 
 const withSentSize = <T extends EditorDocument | DocumentChange>(value: T): T =>
-  value.channel === "email" && value.render !== null
+  value.channel === "email" && value.render !== null && value.render.sentBytes === undefined
     ? {
         ...value,
         render: {
@@ -42,11 +44,11 @@ const withSentSize = <T extends EditorDocument | DocumentChange>(value: T): T =>
     : value;
 
 /**
- * The mock host with what the dashboard adds: versions (saved head + history), a lifecycle with
- * a few saved versions to restore, and renders that carry the sent size.
+ * The compiled host with what the dashboard adds: versions (saved head + history), a lifecycle
+ * with a few saved versions to restore, and renders that carry the sent size.
  */
-export const createWorkspaceHost = (controls: MockHostControls): AsyncEditableEditorHost => {
-  const mock = toAsyncHost(controls.host);
+export const createWorkspaceHost = (controls: CompiledHostControls): AsyncEditableEditorHost => {
+  const mock = controls.host;
   let rev = "rev_1";
   let source = "";
   const now = Date.now();
@@ -117,12 +119,18 @@ export const createWorkspaceHost = (controls: MockHostControls): AsyncEditableEd
 
 const BUSY_FOR_MS = 2_500;
 
+const DEV_BUTTON = "border-border hover:bg-muted rounded-md border px-2 py-1 text-[12px]";
+
+/** The harness's own controls; shown only with `dev=1` so screenshots show a plain chat. */
+const developerControlsRequested =
+  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("dev") === "1";
+
 /** The shell as the dashboard mounts it, with the harness's assistant and review surface. */
 export function WorkspaceDemoShell({
   controls,
   frameStart,
 }: {
-  readonly controls: MockHostControls;
+  readonly controls: CompiledHostControls;
   readonly frameStart: EditorContribution;
 }) {
   const store = useEditorStoreApi();
@@ -133,14 +141,11 @@ export function WorkspaceDemoShell({
   const simulateTurn = () => {
     setBusy(true);
     setTimeout(() => {
-      // oxlint-disable-next-line eslint/no-restricted-properties -- the harness drives its mock host from a click
-      void Effect.runPromise(controls.emit({ origin: "agent" })).then(() => setBusy(holdBusy));
+      void controls.emit({ origin: "agent" }).then(() => setBusy(holdBusy));
     }, BUSY_FOR_MS);
   };
 
-  const emit = (input: Parameters<MockHostControls["emit"]>[0]) =>
-    // oxlint-disable-next-line eslint/no-restricted-properties -- the harness drives its mock host from a click
-    void Effect.runPromise(controls.emit(input));
+  const emit = (input: Parameters<CompiledHostControls["emit"]>[0]) => void controls.emit(input);
 
   const openInNewTab = () => {
     const render = store.getState().render;
@@ -158,65 +163,66 @@ export function WorkspaceDemoShell({
         {
           slot: "rail.assistant",
           id: "demo-assistant",
-          header: <span className="text-muted-foreground text-[11px]">Demo</span>,
-          render: ({ workspace, openReview }) => (
-            <div
-              data-testid="dev-app.demo-assistant"
-              className="flex flex-col gap-3 p-4 text-[13px]"
-            >
-              <p>A host-owned chat docked beside the work pane.</p>
-              <p className="text-muted-foreground">
-                {workspace.checks.errors} errors · {workspace.checks.warnings} warnings ·{" "}
-                {workspace.layers.length} layers · {workspace.layout} layout
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  data-testid="dev-app.simulate-turn"
-                  onClick={simulateTurn}
-                  className="border-border hover:bg-muted rounded-md border px-2.5 py-1.5"
-                >
-                  Simulate a turn
-                </button>
-                <button
-                  type="button"
-                  data-testid="dev-app.stale-preview"
-                  onClick={() =>
-                    emit({
-                      origin: "agent",
-                      staleReason: "Unexpected token in src/Welcome.tsx:17:5",
-                    })
-                  }
-                  className="border-border hover:bg-muted rounded-md border px-2.5 py-1.5"
-                >
-                  Break the latest edit
-                </button>
-                <button
-                  type="button"
-                  data-testid="dev-app.unbuilt-preview"
-                  onClick={() => emit({ origin: "agent", broken: "not-built" })}
-                  className="border-border hover:bg-muted rounded-md border px-2.5 py-1.5"
-                >
-                  Clear the preview
-                </button>
-                <button
-                  type="button"
-                  data-testid="dev-app.restore-preview"
-                  onClick={() => emit({ origin: "agent", broken: false })}
-                  className="border-border hover:bg-muted rounded-md border px-2.5 py-1.5"
-                >
-                  Restore the preview
-                </button>
-                <button
-                  type="button"
-                  data-testid="dev-app.open-review"
-                  onClick={() => openReview?.()}
-                  className="border-border hover:bg-muted rounded-md border px-2.5 py-1.5"
-                >
-                  Open review
-                </button>
-              </div>
-            </div>
+          render: ({ openReview }) => (
+            <DemoChat
+              developer={
+                developerControlsRequested ? (
+                  <div
+                    data-testid="dev-app.developer"
+                    className="border-border bg-surface-inset flex flex-col gap-1.5 rounded-lg border p-2"
+                  >
+                    <span className="text-muted-foreground text-[11px] font-medium">Developer</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        data-testid="dev-app.simulate-turn"
+                        onClick={simulateTurn}
+                        className={DEV_BUTTON}
+                      >
+                        Simulate a turn
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="dev-app.stale-preview"
+                        onClick={() =>
+                          emit({
+                            origin: "agent",
+                            staleReason: "Unexpected token in src/Welcome.tsx:17:5",
+                          })
+                        }
+                        className={DEV_BUTTON}
+                      >
+                        Break the latest edit
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="dev-app.unbuilt-preview"
+                        onClick={() => emit({ origin: "agent", broken: "not-built" })}
+                        className={DEV_BUTTON}
+                      >
+                        Clear the preview
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="dev-app.restore-preview"
+                        onClick={() => emit({ origin: "agent", broken: false })}
+                        className={DEV_BUTTON}
+                      >
+                        Restore the preview
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="dev-app.open-review"
+                        onClick={() => openReview?.()}
+                        className={DEV_BUTTON}
+                      >
+                        Open review
+                      </button>
+                    </div>
+                  </div>
+                ) : null
+              }
+            />
           ),
         },
         {
