@@ -1,6 +1,6 @@
 {
   "name": "@samva/vite",
-  "version": "0.15.1",
+  "version": "0.16.0",
   "description": "Local editor, dev server and build for Samva email, SMS and WhatsApp templates",
   "keywords": [
     "email",

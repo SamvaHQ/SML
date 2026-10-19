@@ -1,17 +1,21 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## Fit zoom holds steady when the email nearly fills the canvas\n\nThe canvas reserves its scrollbar gutter, so Fit zoom no longer flips between two sizes when the\nzoomed email is close to the canvas height.\n"
-    filename: editor-fit-zoom-stable.md
+  - content: "---\npackages:\n  npm:@samva/markup:\n    type: minor\n---\n\n## The brand footer is one line\n\n`BrandFooter` renders the company name, social links and the unsubscribe link on one line,\nseparated by `·`, with the postal address on the line below. It follows a `text-left` or\n`text-right` `className` instead of always centering. Sends without an unsubscribe group drop only\nthe unsubscribe link and its separator, and still strip the row of footers compiled before this\nrelease.\n\nThis is an intended change to published output: the email parity digests\n(`packages/markup/tests/support/email-parity.ts`) move with the new footer markup, and Samva's hosted\nruntime must take the same values when it repins to this release.\n"
+    filename: brand-footer-one-line.md
+    v: 0.0.0
+  - content: "---\npackages:\n  npm:@samva/markup:\n    type: minor\n---\n\n## Render a brand sample in the browser\n\n`@samva/markup/brand-sample` exports `renderBrandSample` without caniemail, whose glob dependency\nreads Node's `process` when it loads. Import it to preview a brand in a browser; `./compiler`\nstill exports `renderBrandSample` for Node, Bun and Workers.\n"
+    filename: brand-sample-entry.md
     v: 0.0.0
 core:packages:
-  - id: npm:@samva/markup
+  - id: npm:@samva/editor
     updated: true
   - id: npm:@samva/vite
     updated: true
   - changelogIds:
-      - editor-fit-zoom-stable.md
-    id: npm:@samva/editor
+      - brand-footer-one-line.md
+      - brand-sample-entry.md
+    id: npm:@samva/markup
     updated: true
 npm:packages:
-  - id: npm:@samva/markup
-  - id: npm:@samva/vite
   - id: npm:@samva/editor
+  - id: npm:@samva/vite
+  - id: npm:@samva/markup
