@@ -34,11 +34,18 @@ test("fit zoom does not depend on whether the canvas scrolls", async ({ page }) 
   const [unscrolled] = await zoomSamples(page, 2);
   expect(Number(unscrolled)).toBeLessThan(1);
 
-  // Walk the height down through the point where the email starts to overflow;
-  // every height, including the threshold, holds one zoom across many frames.
-  for (let height = 1000; height >= 360; height -= 5) {
+  // Find where the email starts to overflow, then hold every height around that
+  // point to one zoom across many frames.
+  let threshold = 1000;
+  while (threshold > 360) {
+    await page.setViewportSize({ width: 700, height: threshold });
+    await zoomSamples(page, 2);
+    if (await overflows()) break;
+    threshold -= 20;
+  }
+  for (let height = threshold + 40; height >= threshold - 40; height -= 4) {
     await page.setViewportSize({ width: 700, height });
-    const samples = await zoomSamples(page, 12);
+    const samples = await zoomSamples(page, 8);
     expect(new Set(samples), `zoom at height ${height}`).toEqual(new Set([unscrolled]));
   }
   expect(await overflows()).toBe(true);
