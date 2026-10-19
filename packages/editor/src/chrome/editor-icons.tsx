@@ -67,3 +67,6 @@ export const Undo = icon("undo");
 export const AlignCenter = icon("alignCenter");
 export const AlignLeft = icon("alignLeft");
 export const AlignRight = icon("alignRight");
+export const Rule = icon("rule");
+export const Spacer = icon("spacer");
+export const LinkChain = icon("link");

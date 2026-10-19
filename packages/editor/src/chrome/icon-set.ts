@@ -7,6 +7,7 @@ import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
 import ArrowShrink01Icon from "@hugeicons/core-free-icons/ArrowShrink01Icon";
 import ArrowUp01Icon from "@hugeicons/core-free-icons/ArrowUp01Icon";
 import ArrowUp02Icon from "@hugeicons/core-free-icons/ArrowUp02Icon";
+import ArrowUpDownIcon from "@hugeicons/core-free-icons/ArrowUpDownIcon";
 import BubbleChatIcon from "@hugeicons/core-free-icons/BubbleChatIcon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import CheckListIcon from "@hugeicons/core-free-icons/CheckListIcon";
@@ -25,6 +26,7 @@ import Layers01Icon from "@hugeicons/core-free-icons/Layers01Icon";
 import Layout2ColumnIcon from "@hugeicons/core-free-icons/Layout2ColumnIcon";
 import Layout3RowIcon from "@hugeicons/core-free-icons/Layout3RowIcon";
 import LeftToRightListBulletIcon from "@hugeicons/core-free-icons/LeftToRightListBulletIcon";
+import Link01Icon from "@hugeicons/core-free-icons/Link01Icon";
 import LinkSquare02Icon from "@hugeicons/core-free-icons/LinkSquare02Icon";
 import Mail01Icon from "@hugeicons/core-free-icons/Mail01Icon";
 import Message01Icon from "@hugeicons/core-free-icons/Message01Icon";
@@ -46,6 +48,7 @@ import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import SeparatorHorizontalIcon from "@hugeicons/core-free-icons/SeparatorHorizontalIcon";
 import SlidersHorizontalIcon from "@hugeicons/core-free-icons/SlidersHorizontalIcon";
 import SmartPhone01Icon from "@hugeicons/core-free-icons/SmartPhone01Icon";
+import SolidLine01Icon from "@hugeicons/core-free-icons/SolidLine01Icon";
 import SourceCodeIcon from "@hugeicons/core-free-icons/SourceCodeIcon";
 import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
 import Sun03Icon from "@hugeicons/core-free-icons/Sun03Icon";
@@ -108,6 +111,7 @@ export const DEFAULT_EDITOR_ICONS = {
   heading1: hugeicon(Heading01Icon),
   image: hugeicon(Image01Icon),
   layers: hugeicon(Layers01Icon),
+  link: hugeicon(Link01Icon),
   message: hugeicon(Message01Icon),
   mobile: hugeicon(SmartPhone01Icon),
   minus: hugeicon(MinusSignIcon),
@@ -123,12 +127,14 @@ export const DEFAULT_EDITOR_ICONS = {
   redo: hugeicon(Redo02Icon),
   refresh: hugeicon(RefreshIcon),
   reset: hugeicon(RotateLeft01Icon),
+  rule: hugeicon(SolidLine01Icon),
   search: hugeicon(Search01Icon),
   sidebarLeft: hugeicon(PanelLeftIcon),
   sidebarLeftHide: hugeicon(PanelLeftCloseIcon),
   sidebarRight: hugeicon(PanelRightIcon),
   sidebarRightHide: hugeicon(PanelRightCloseIcon),
   sliders: hugeicon(SlidersHorizontalIcon),
+  spacer: hugeicon(ArrowUpDownIcon),
   sparkle: hugeicon(SparklesIcon),
   sun: hugeicon(Sun03Icon),
   textColumns: hugeicon(Layout2ColumnIcon),

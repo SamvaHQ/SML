@@ -7,7 +7,7 @@ import { Button } from "../ui/button";
 import { ChevronRight, SidebarLeftHide } from "./editor-icons";
 import { selectionTextExcerpt } from "./email-outline";
 import { authoredTree, friendlyName, type AuthoredNode } from "./friendly";
-import { iconForTag } from "./icons";
+import { iconForLayer } from "./icons";
 import { Tip } from "./ui";
 import { cn } from "./ui-classes";
 
@@ -99,7 +99,7 @@ function TreeRow({ node, depth }: { node: AuthoredNode; depth: number }) {
             onClick={() => select(node.instancePath)}
             className="h-full min-w-0 flex-1 justify-start gap-2 rounded-md px-1 text-left font-normal hover:bg-transparent dark:hover:bg-transparent"
           >
-            {createElement(iconForTag(selection.tag), {
+            {createElement(iconForLayer(name, selection.tag), {
               className: cn(
                 "size-[15px] shrink-0",
                 selected ? "text-foreground" : "text-muted-foreground",
