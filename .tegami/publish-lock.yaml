@@ -1,17 +1,17 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## The status bar says what is left to check\n\nThe status bar's checks summary reads \"24 checks to review\" when client verification remains and\n\"No issues found\" when nothing does, instead of \"No known risks · 24 need verification\". In an email\nworkspace with a docked assistant, clicking it opens the Checks tab; other layouts keep the popover.\n"
-    filename: editor-status-summary.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## A host can open a narrow workspace on the preview\n\n`EditorProvider` takes `initialPane`. Below 1280px a docked workspace shows one pane at a time and\nstarts on the chat; a host whose own app is the conversation, such as ChatGPT, passes\n`initialPane=\"preview\"` so the email is on screen first. The Chat | Preview switch works as before.\n"
+    filename: editor-initial-pane.md
     v: 0.0.0
 core:packages:
   - id: npm:@samva/vite
     updated: true
-  - id: npm:@samva/markup
-    updated: true
   - changelogIds:
-      - editor-status-summary.md
+      - editor-initial-pane.md
     id: npm:@samva/editor
+    updated: true
+  - id: npm:@samva/markup
     updated: true
 npm:packages:
   - id: npm:@samva/vite
-  - id: npm:@samva/markup
   - id: npm:@samva/editor
+  - id: npm:@samva/markup
