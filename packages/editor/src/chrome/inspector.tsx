@@ -1,5 +1,4 @@
 import { ScrollArea } from "@base-ui/react/scroll-area";
-import { Tooltip } from "@base-ui/react/tooltip";
 import type { EditorDocument } from "@samva/editor/host";
 import {
   emailDefinitionInstances,
@@ -11,13 +10,14 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
 import { DEVICE_WIDTH } from "../state/store";
+import { Button } from "../ui/button";
 import { ChecksPanel } from "./checks-panel";
 import { SidebarRightHide } from "./editor-icons";
 import { formatOrigin, selectionLabel } from "./email-outline";
 import { SourceControls, FixtureSourceControls } from "./source-controls";
-import { GroupLabel, MonoCtl, VarChip } from "./ui";
-import { cn, focusRing, tooltipPopupClass } from "./ui-classes";
-import { useEditorPortalContainer } from "./use-editor-portal";
+import { GroupLabel, Value, VarChip } from "./ui";
+import { Tip } from "./ui";
+import { cn, focusRing } from "./ui-classes";
 
 /** Stable empty lists, so a selector that falls back never mints a fresh snapshot. */
 const NO_FIXTURES: ReadonlyArray<string> = [];
@@ -88,18 +88,18 @@ function DocumentInspector({ checks }: { readonly checks: boolean }) {
       <div className="border-border-subtle border-b py-3">
         <GroupLabel>Document</GroupLabel>
         <Row label="Width">
-          <MonoCtl>
+          <Value>
             {deviceWidth} <span className="text-placeholder text-[10.5px]">px</span>
-          </MonoCtl>
+          </Value>
         </Row>
         {entryFile !== null && (
           <Row label="Entry">
-            <MonoCtl>{entryFile}</MonoCtl>
+            <Value>{entryFile}</Value>
           </Row>
         )}
         {fixture !== null && (
           <Row label="Fixture" title={`${fixtures.length} declared`}>
-            <MonoCtl>{fixture}</MonoCtl>
+            <Value>{fixture}</Value>
           </Row>
         )}
       </div>
@@ -229,10 +229,10 @@ function EnvelopeInspector() {
       <div className="border-border-subtle border-b py-3">
         <GroupLabel>Rendered</GroupLabel>
         <Row label="Subject">
-          <MonoCtl>{render?.subject ?? "No subject"}</MonoCtl>
+          <Value>{render?.subject ?? "No subject"}</Value>
         </Row>
         <Row label="Preview">
-          <MonoCtl>{render?.preheader ?? "No preview text"}</MonoCtl>
+          <Value>{render?.preheader ?? "No preview text"}</Value>
         </Row>
       </div>
       {metadataEditable ? (
@@ -264,7 +264,7 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
       <div className="border-border-subtle border-b py-3">
         <GroupLabel>Element</GroupLabel>
         <Row label="Tag">
-          <MonoCtl testId="inspector.element.tag">{selection.tag}</MonoCtl>
+          <Value testId="inspector.element.tag">{selection.tag}</Value>
         </Row>
         <Row
           label="Source"
@@ -274,12 +274,12 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
               : "A compiler primitive produced this element; the authoring below is the call that asked for it."
           }
         >
-          <MonoCtl testId="inspector.element.provenance">
+          <Value testId="inspector.element.provenance">
             {selection.authored ? "Authored" : "Generated"}
-          </MonoCtl>
+          </Value>
         </Row>
         <Row label="Instance">
-          <MonoCtl testId="inspector.element.instance">{selection.instancePath}</MonoCtl>
+          <Value testId="inspector.element.instance">{selection.instancePath}</Value>
         </Row>
       </div>
 
@@ -293,7 +293,7 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
         ) : (
           <>
             <Row label="Written at">
-              <MonoCtl testId="inspector.authoring.origin">{formatOrigin(authoring)}</MonoCtl>
+              <Value testId="inspector.authoring.origin">{formatOrigin(authoring)}</Value>
             </Row>
             <p
               data-testid="inspector.authoring.occurrence"
@@ -375,7 +375,6 @@ export function Inspector({
   /** Show the checks in document scope. Off where the layout gives checks a tab of their own. */
   readonly checks?: boolean | undefined;
 } = {}) {
-  const portalContainer = useEditorPortalContainer();
   const { outline, selection, rightCollapsed, rightWidth, layoutMode } = useEditorStore(
     useShallow((state) => ({
       outline: state.outline,
@@ -467,28 +466,18 @@ export function Inspector({
               </span>
             )}
             {!embedded && (
-              <Tooltip.Root>
-                <Tooltip.Trigger
-                  render={
-                    <button
-                      type="button"
-                      aria-label="Collapse inspector"
-                      data-testid="inspector.collapse"
-                      onClick={toggleRight}
-                      className="text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 rounded-md p-1.5"
-                    />
-                  }
+              <Tip label="Collapse inspector" side="bottom">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Collapse inspector"
+                  data-testid="inspector.collapse"
+                  onClick={toggleRight}
+                  className="text-muted-foreground ml-auto"
                 >
-                  <SidebarRightHide className="size-[15px]" />
-                </Tooltip.Trigger>
-                <Tooltip.Portal container={portalContainer}>
-                  <Tooltip.Positioner side="bottom" sideOffset={5} className="z-[200]">
-                    <Tooltip.Popup role="tooltip" className={tooltipPopupClass}>
-                      Collapse inspector
-                    </Tooltip.Popup>
-                  </Tooltip.Positioner>
-                </Tooltip.Portal>
-              </Tooltip.Root>
+                  <SidebarRightHide />
+                </Button>
+              </Tip>
             )}
           </div>
         </div>

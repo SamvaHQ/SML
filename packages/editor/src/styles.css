@@ -75,30 +75,7 @@
   --editor-shadow-control: var(--shadow-xs);
   --editor-shadow-overlay: var(--shadow-lg);
   --editor-shadow-floating: var(--shadow-floating);
-  /*
-   * Control materials, read by the chrome's utilities. Raised is the primary action, a lit
-   * capsule that presses 1px down. Chip is a switcher's selected option, lifted off its trough.
-   * Pressed is a toggle holding its on state in a shallow recess. Well is a recessed text
-   * receptacle. A host restyles one by setting its variables on `.samva-editor-shell`; a value
-   * derived from another (the raised hover) follows the override on the same element.
-   */
-  --editor-raised-bg: var(--primary);
-  --editor-raised-bg-hover: color-mix(in oklab, var(--editor-raised-bg), white 8%);
-  --editor-raised-fg: var(--primary-foreground);
-  --editor-raised-shadow:
-    0 1px 2px 0 oklch(0 0 0 / 0.2),
-    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
-    inset 0 3px 5px 0 oklch(1 0 0 / 0.16), inset 0 0 0 1px oklch(1 0 0 / 0.12),
-    inset 0 -6px 10px 0 oklch(0 0 0 / 0.2);
-  --editor-raised-shadow-pressed:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
-    inset 0 2px 4px 0 oklch(0 0 0 / 0.35);
-  --editor-chip-bg: var(--background);
-  --editor-chip-fg: var(--foreground);
-  --editor-chip-border: var(--border);
-  --editor-chip-shadow: var(--shadow-md);
-  --editor-pressed-bg: color-mix(in oklab, var(--accent), black 3%);
-  --editor-pressed-shadow: inset 0 1px 3px 0 oklch(0 0 0 / 0.12);
+  /* The source panel's recessed receptacle. A host restyles it on `.samva-editor-shell`. */
   --editor-well-bg: color-mix(in oklab, var(--surface-inset) 55%, transparent);
   --editor-well-border: var(--input);
   --editor-well-shadow: inset 0 1px 2px 0 oklch(0 0 0 / 0.05);
@@ -114,20 +91,7 @@
   container-name: samva-editor;
 }
 
-/* In dark mode the raised fill is light, so its glow and shade swap ends. */
 .dark .samva-editor-shell {
-  --editor-raised-bg-hover: color-mix(in oklab, var(--editor-raised-bg), black 8%);
-  --editor-raised-shadow:
-    0 1px 2px 0 oklch(0 0 0 / 0.35), 0 0 0 1px oklch(0 0 0 / 0.4),
-    inset 0 3px 5px 0 oklch(0 0 0 / 0.1), inset 0 0 0 1px oklch(1 0 0 / 0.25),
-    inset 0 -6px 10px 0 oklch(1 0 0 / 0.22);
-  --editor-raised-shadow-pressed:
-    0 0 0 1px oklch(0 0 0 / 0.4), inset 0 2px 4px 0 oklch(0 0 0 / 0.25);
-  --editor-pressed-bg: color-mix(in oklab, var(--accent), white 12%);
-  --editor-pressed-shadow: inset 0 1px 3px 0 oklch(0 0 0 / 0.45);
-  /* The design system's dark chip: a translucent input fill on an input hairline, no lift. */
-  --editor-chip-bg: color-mix(in oklab, var(--input) 30%, transparent);
-  --editor-chip-border: var(--input);
   --editor-well-bg: color-mix(in oklab, var(--input) 20%, transparent);
   --editor-well-shadow: inset 0 1px 2px 0 oklch(0 0 0 / 0.35);
   color-scheme: dark;
@@ -232,12 +196,22 @@
   }
 
   /*
-   * A phone-width editor gives its own controls a 44px touch target. The chrome marks them with
+   * A phone-width editor gives its own controls a 44px touch target without drawing them larger:
+   * an invisible hit area centred on the control. The chrome marks them with
    * `data-editor-control`; host contributions keep their own sizing.
    */
   .samva-editor-shell [data-editor-control] {
-    min-height: 44px;
-    min-width: 44px;
+    position: relative;
+  }
+
+  .samva-editor-shell [data-editor-control]::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
   }
 }
 

@@ -42,7 +42,13 @@ const restoreBody = () => {
  * Keyboard: arrow keys step (Shift for a larger step), Home and End jump to the limits.
  * Dragging the chat divider below `CHAT_COLLAPSE_BELOW` collapses the chat and keeps its width.
  */
-export function ResizeHandle({ side }: { side: ResizeSide }) {
+export function ResizeHandle({
+  side,
+  className,
+}: {
+  readonly side: ResizeSide;
+  readonly className?: string | undefined;
+}) {
   const storeApi = useEditorStoreApi();
   const width = useEditorStore((state) =>
     side === "assistant"
@@ -119,6 +125,8 @@ export function ResizeHandle({ side }: { side: ResizeSide }) {
 
   return (
     <div
+      data-slot="editor-divider"
+      data-side={side}
       data-editor-resize={side}
       data-dragging={isDragging ? "" : undefined}
       role="separator"
@@ -142,7 +150,11 @@ export function ResizeHandle({ side }: { side: ResizeSide }) {
         "data-[dragging]:before:w-0.5 data-[dragging]:before:bg-accent-email",
         "focus-visible:before:w-0.5 focus-visible:before:bg-accent-email",
         focusRing,
+        className,
       )}
     />
   );
 }
+
+/** The divider between the chat and the work pane, as a part a host can place itself. */
+export { ResizeHandle as EditorDivider };

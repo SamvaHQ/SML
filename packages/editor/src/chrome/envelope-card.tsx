@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
+import { Badge } from "../ui/badge";
 import { ChevronDown, ChevronUp } from "./editor-icons";
 import { cn } from "./ui-classes";
 
@@ -15,12 +16,9 @@ const fromLabel = (from: { email: string; name?: string | undefined } | undefine
 
 function DefaultTag() {
   return (
-    <span
-      title="Overridable per send"
-      className="border-border-subtle text-placeholder shrink-0 rounded-full border px-2 py-px text-[10px]"
-    >
+    <Badge variant="outline" title="Overridable per send" className="text-muted-foreground">
       default
-    </span>
+    </Badge>
   );
 }
 
@@ -91,11 +89,11 @@ export function EnvelopeCard() {
             selectEnvelope();
           }}
           className={cn(
-            "mb-4 flex h-11 w-full items-center gap-3 rounded-xl border border-border bg-background px-3 text-left shadow-[var(--shadow-xs)] transition-[border-color,box-shadow] hover:border-sel-mid",
+            "bg-card mb-4 flex h-11 w-full items-center gap-3 rounded-xl border border-border px-3 text-left shadow-xs transition-[border-color,box-shadow] hover:border-sel-mid",
             selected && "border-accent-email shadow-[0_0_0_1px_var(--accent-email)]",
           )}
         >
-          <span className="text-muted-foreground text-[10px] font-semibold tracking-[0.08em] uppercase">
+          <span className="text-muted-foreground font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase">
             Envelope
           </span>
           <span className="text-foreground min-w-0 flex-1 truncate text-[12px]">
@@ -110,14 +108,15 @@ export function EnvelopeCard() {
             event.stopPropagation();
             selectEnvelope();
           }}
+          data-slot="editor-envelope"
           className={cn(
-            "mb-6 cursor-pointer overflow-hidden rounded-2xl border transition-shadow",
+            "bg-card text-card-foreground mb-6 cursor-pointer overflow-hidden rounded-xl border shadow-xs transition-shadow",
             selected
               ? "border-accent-email shadow-[0_0_0_1px_var(--accent-email)]"
-              : "border-border/80 hover:border-sel-mid",
+              : "border-border hover:border-sel-mid",
           )}
         >
-          <div className="border-border-subtle bg-surface-inset/80 flex items-center justify-between border-b px-3 py-1.5">
+          <div className="flex items-center justify-between px-4 pt-2.5 pb-1">
             <button
               type="button"
               aria-label="Select envelope"
@@ -126,32 +125,26 @@ export function EnvelopeCard() {
                 event.stopPropagation();
                 selectEnvelope();
               }}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground rounded px-1 py-0.5 text-[10px] font-semibold tracking-[0.08em] uppercase"
+              className="text-muted-foreground hover:text-foreground -mx-1 rounded px-1 font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase"
             >
               Envelope
             </button>
-            <div className="flex items-center gap-2">
-              <span className="text-placeholder text-[10px]">
-                defaults muted · subject &amp; preview rendered
-              </span>
-              {compact && (
-                <Collapsible.Trigger
-                  aria-label="Collapse envelope"
-                  data-testid="envelope.collapse"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                  }}
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground rounded p-1"
-                >
-                  <ChevronUp className="size-3.5" />
-                </Collapsible.Trigger>
-              )}
-            </div>
+            {compact && (
+              <Collapsible.Trigger
+                aria-label="Collapse envelope"
+                data-testid="envelope.collapse"
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+                className="text-muted-foreground hover:bg-muted hover:text-foreground rounded p-1"
+              >
+                <ChevronUp className="size-3.5" />
+              </Collapsible.Trigger>
+            )}
           </div>
-
-          <div className="border-border-subtle bg-surface-inset/40 border-b">
-            <div className="flex items-center gap-3 px-4 py-2 text-[12.5px]">
-              <span className="text-placeholder w-16 shrink-0 text-[11px] font-medium tracking-wide uppercase">
+          <div className="divide-border divide-y text-[13px]">
+            <div className="flex items-center gap-3 px-4 py-2">
+              <span className="text-muted-foreground w-16 shrink-0 font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase">
                 From
               </span>
               <span className="text-muted-foreground min-w-0 flex-1 truncate">
@@ -159,11 +152,8 @@ export function EnvelopeCard() {
               </span>
               <DefaultTag />
             </div>
-            <div
-              data-testid="envelope.reply-to-row"
-              className="flex items-center gap-3 px-4 py-2 text-[12.5px]"
-            >
-              <span className="text-placeholder w-16 shrink-0 text-[11px] font-medium tracking-wide uppercase">
+            <div data-testid="envelope.reply-to-row" className="flex items-center gap-3 px-4 py-2">
+              <span className="text-muted-foreground w-16 shrink-0 font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase">
                 Reply-To
               </span>
               <span className="text-muted-foreground min-w-0 flex-1 truncate">
@@ -171,11 +161,8 @@ export function EnvelopeCard() {
               </span>
               <DefaultTag />
             </div>
-          </div>
-
-          <div className="bg-background">
-            <div className="border-border-subtle flex items-center gap-3 border-b px-4 py-2.5 text-[12.5px]">
-              <span className="text-muted-foreground w-16 shrink-0 text-[11px] font-medium tracking-wide uppercase">
+            <div className="flex items-center gap-3 px-4 py-2">
+              <span className="text-muted-foreground w-16 shrink-0 font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase">
                 Subject
               </span>
               <EnvelopeValue
@@ -184,8 +171,8 @@ export function EnvelopeCard() {
                 testId="envelope.subject-value"
               />
             </div>
-            <div className="flex items-center gap-3 px-4 py-2.5 text-[12.5px]">
-              <span className="text-muted-foreground w-16 shrink-0 text-[11px] font-medium tracking-wide uppercase">
+            <div className="flex items-center gap-3 px-4 py-2">
+              <span className="text-muted-foreground w-16 shrink-0 font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase">
                 Preview
               </span>
               <EnvelopeValue

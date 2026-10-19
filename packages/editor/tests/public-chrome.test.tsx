@@ -472,7 +472,8 @@ describe("public editor chrome", () => {
 
     const drawn = await view.findAllByTestId("test.host-preview-icon");
     expect(drawn.length).toBeGreaterThan(0);
-    expect(drawn[0]?.getAttribute("class")).toContain("size-[15px]");
+    // The host's glyph stands where the default did: inside the top bar's Preview action.
+    expect((await view.findByTestId("topbar.preview")).contains(drawn[0] ?? null)).toBe(true);
   });
 
   it("reports Preview to the host's telemetry instead of a shell callback", async () => {

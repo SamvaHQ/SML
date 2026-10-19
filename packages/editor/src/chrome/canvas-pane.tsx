@@ -1,4 +1,12 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { DESKTOP_WIDTH, MOBILE_WIDTH } from "../canvas/device";
@@ -19,9 +27,9 @@ import { useContributions } from "./contributions";
 import { outlineAncestry, selectionLabel } from "./email-outline";
 import { EnvelopeCard } from "./envelope-card";
 import { NodeContextMenu, type AncestorEntry } from "./node-context-menu";
-import { PreviewBar, PreviewNotice } from "./preview-bar";
+import { EditorPreviewBar, PreviewNotice } from "./preview-bar";
 import { useEditorPortalContainer } from "./use-editor-portal";
-import { ZoomControl } from "./zoom-control";
+import { EditorZoomControl } from "./zoom-control";
 
 /**
  * The center workspace: the preview bar, then the host's rendered email on the recessed grid
@@ -33,7 +41,10 @@ import { ZoomControl } from "./zoom-control";
 export function CanvasPane({
   pointing = false,
   active = true,
+  viewMenu,
 }: {
+  /** Extra rows for the preview bar's menu. */
+  readonly viewMenu?: ReactNode | undefined;
   readonly pointing?: boolean | undefined;
   /** The pane is on screen; a hidden pane leaves zoom chords to the page. */
   readonly active?: boolean | undefined;
@@ -197,10 +208,10 @@ export function CanvasPane({
     );
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div data-slot="editor-canvas" className="flex min-h-0 min-w-0 flex-1 flex-col">
       {doc !== null && doc.channel === "email" && (
         <>
-          <PreviewBar />
+          <EditorPreviewBar viewMenu={viewMenu} />
           <PreviewNotice />
         </>
       )}
@@ -266,7 +277,7 @@ export function CanvasPane({
             </div>
           )}
         </div>
-        {doc !== null && <ZoomControl percent={percent} />}
+        {doc !== null && <EditorZoomControl percent={percent} />}
       </div>
     </div>
   );
@@ -306,3 +317,6 @@ function UnbuiltCanvas() {
     </div>
   );
 }
+
+/** The email canvas with its preview bar and zoom control, as a part. */
+export { CanvasPane as EditorCanvas };

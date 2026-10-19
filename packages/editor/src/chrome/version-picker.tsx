@@ -1,23 +1,23 @@
-import { AlertDialog } from "@base-ui/react/alert-dialog";
-import { Popover } from "@base-ui/react/popover";
 import type { ProjectCommit, ProjectLifecycleState } from "@samva/editor/host";
 import { Predicate } from "effect";
 import { useRef, useState } from "react";
 
+import { cn } from "../lib/utils";
 import { useEditorStore } from "../state/context";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
+import { Button } from "../ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Check, ChevronDown, Clock, Search } from "./editor-icons";
 import { Tip } from "./ui";
-import {
-  chromePrimary,
-  cn,
-  focusRing,
-  menuItemClass,
-  popoverPopupClass,
-  revealOnRowHover,
-  softRaised,
-  toolbarButton,
-} from "./ui-classes";
-import { useEditorPortalContainer } from "./use-editor-portal";
+import { revealOnRowHover } from "./ui-classes";
 
 type VersionsLoad =
   | { readonly status: "loading" }
@@ -46,10 +46,8 @@ const formatDate = (date: Date): string =>
     minute: "2-digit",
   });
 
-const rowButtonClass = cn(
-  menuItemClass,
-  "w-full cursor-pointer text-left hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground",
-);
+const rowButtonClass =
+  "hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground relative flex w-full cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-none select-none";
 
 const MutedRow = ({
   children,
@@ -115,7 +113,6 @@ function VersionRow({
  * the saved versions behind it, and restores an older one only after the author confirms.
  */
 export function VersionPicker() {
-  const portalContainer = useEditorPortalContainer();
   const lifecycleCapability = useEditorStore((state) => state.lifecycleCapability);
   const loadedDocument = useEditorStore((state) => state.doc !== null);
   const { beginLifecycle, endLifecycle, flushSaves, adoptLifecycleSnapshot } = useEditorStore(
@@ -206,14 +203,21 @@ export function VersionPicker() {
 
   return (
     <>
-      <Popover.Root open={open} onOpenChange={changeOpen}>
+      <Popover open={open} onOpenChange={changeOpen}>
         <Tip label="Versions">
-          <Popover.Trigger
-            aria-label="Versions"
-            data-testid="preview-bar.versions"
-            data-editor-control=""
-            disabled={restoring}
-            className={cn(toolbarButton, "gap-1 rounded-md px-2")}
+          <PopoverTrigger
+            data-slot="editor-version-picker"
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Versions"
+                data-testid="preview-bar.versions"
+                data-editor-control=""
+                disabled={restoring}
+                className="text-muted-foreground shrink-0 gap-1 px-2"
+              />
+            }
           >
             {restoring ? (
               "Restoring…"
@@ -221,148 +225,134 @@ export function VersionPicker() {
               <>
                 <span className="inline-flex items-center gap-1 @max-[28rem]/preview-bar:hidden">
                   Latest
-                  <ChevronDown className="size-3.5" />
+                  <ChevronDown />
                 </span>
                 <Clock className="hidden size-3.5 @max-[28rem]/preview-bar:inline-flex" />
               </>
             )}
-          </Popover.Trigger>
+          </PopoverTrigger>
         </Tip>
-        <Popover.Portal container={portalContainer}>
-          <Popover.Positioner side="bottom" align="start" sideOffset={6} className="z-[120]">
-            <Popover.Popup
-              data-testid="preview-bar.versions-popup"
-              className={cn(popoverPopupClass, "w-72 p-1")}
-            >
-              <label className="border-border flex items-center gap-2 border-b px-1.5 pb-1.5">
-                <Search className="text-muted-foreground size-3.5 shrink-0" />
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(event) => setQuery(event.currentTarget.value)}
-                  placeholder="Search versions"
-                  aria-label="Search versions"
-                  data-testid="preview-bar.versions-search"
+        <PopoverContent
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          data-testid="preview-bar.versions-popup"
+          className="w-72 gap-0 p-1"
+        >
+          <label className="border-border flex items-center gap-2 border-b px-2 pb-1.5">
+            <Search className="text-muted-foreground size-3.5 shrink-0" />
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+              placeholder="Search versions"
+              aria-label="Search versions"
+              data-testid="preview-bar.versions-search"
+              data-editor-control=""
+              className="placeholder:text-muted-foreground h-7 w-full min-w-0 bg-transparent text-sm outline-none"
+            />
+          </label>
+          <div className="samva-editor-scroll max-h-72 overflow-y-auto pt-1">
+            {load.status === "loading" ? <MutedRow>Loading versions…</MutedRow> : null}
+            {load.status === "failed" ? (
+              <div className="flex flex-col items-start gap-2 px-1.5 py-2">
+                <p role="alert" className="text-destructive text-sm">
+                  {load.message}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="preview-bar.versions-retry"
                   data-editor-control=""
-                  className="placeholder:text-muted-foreground h-6 w-full min-w-0 bg-transparent text-[13px] outline-none"
-                />
-              </label>
-              <div className="samva-editor-scroll max-h-72 overflow-y-auto pt-1">
-                {load.status === "loading" ? <MutedRow>Loading versions…</MutedRow> : null}
-                {load.status === "failed" ? (
-                  <div className="flex flex-col items-start gap-2 px-1.5 py-2">
-                    <p role="alert" className="text-destructive text-[12.5px]">
-                      {load.message}
-                    </p>
-                    <button
-                      type="button"
-                      data-testid="preview-bar.versions-retry"
-                      data-editor-control=""
-                      onClick={loadVersions}
-                      className={cn(
-                        softRaised,
-                        "h-7 rounded-md px-2.5 text-xs font-medium",
-                        focusRing,
-                      )}
-                    >
-                      Try again
-                    </button>
-                  </div>
-                ) : null}
-                {snapshot !== null && commits !== undefined ? (
-                  <>
-                    {showLatest ? (
-                      <VersionRow
-                        testId="preview-bar.version-latest"
-                        title="Latest"
-                        detail={dirty ? "Unsaved changes" : "Saved"}
-                        marked
-                        hint={false}
-                        onSelect={() => setOpen(false)}
-                      />
-                    ) : null}
-                    {commits.map((commit) => {
-                      const isBase = commit.commit === snapshot.baseCommit;
-                      const detail = [
-                        isBase ? "Current" : null,
-                        formatDate(commit.committedAt),
-                        commit.isPublished ? "Published" : null,
-                      ]
-                        .filter((part) => part !== null)
-                        .join(" · ");
-                      return (
-                        <VersionRow
-                          key={commit.commit}
-                          testId={`preview-bar.version.${commit.commit}`}
-                          title={commit.message}
-                          detail={detail}
-                          marked={false}
-                          hint={!(isBase && !snapshot.dirty)}
-                          onSelect={() => select(commit)}
-                        />
-                      );
-                    })}
-                    {!showLatest && commits.length === 0 ? (
-                      <MutedRow testId="preview-bar.versions-empty">No versions match</MutedRow>
-                    ) : null}
-                  </>
-                ) : null}
+                  onClick={loadVersions}
+                >
+                  Try again
+                </Button>
               </div>
-            </Popover.Popup>
-          </Popover.Positioner>
-        </Popover.Portal>
-      </Popover.Root>
-      <AlertDialog.Root
+            ) : null}
+            {snapshot !== null && commits !== undefined ? (
+              <>
+                {showLatest ? (
+                  <VersionRow
+                    testId="preview-bar.version-latest"
+                    title="Latest"
+                    detail={dirty ? "Unsaved changes" : "Saved"}
+                    marked
+                    hint={false}
+                    onSelect={() => setOpen(false)}
+                  />
+                ) : null}
+                {commits.map((commit) => {
+                  const isBase = commit.commit === snapshot.baseCommit;
+                  const detail = [
+                    isBase ? "Current" : null,
+                    formatDate(commit.committedAt),
+                    commit.isPublished ? "Published" : null,
+                  ]
+                    .filter((part) => part !== null)
+                    .join(" · ");
+                  return (
+                    <VersionRow
+                      key={commit.commit}
+                      testId={`preview-bar.version.${commit.commit}`}
+                      title={commit.message}
+                      detail={detail}
+                      marked={false}
+                      hint={!(isBase && !snapshot.dirty)}
+                      onSelect={() => select(commit)}
+                    />
+                  );
+                })}
+                {!showLatest && commits.length === 0 ? (
+                  <MutedRow testId="preview-bar.versions-empty">No versions match</MutedRow>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        </PopoverContent>
+      </Popover>
+      <AlertDialog
         open={pending !== null}
         onOpenChange={(next) => {
           if (!next && !restoring) setPending(null);
         }}
       >
-        <AlertDialog.Portal container={portalContainer}>
-          <AlertDialog.Backdrop className="fixed inset-0 z-[110] bg-[var(--editor-backdrop,rgb(0_0_0/0.28))]" />
-          <AlertDialog.Popup
-            data-testid="preview-bar.restore-dialog"
-            className="border-border bg-popover text-popover-foreground fixed top-1/2 left-1/2 z-[111] w-[min(420px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border p-5 shadow-[var(--shadow-floating)]"
-          >
-            <AlertDialog.Title className="text-[15px] font-semibold">
-              Restore this version?
-            </AlertDialog.Title>
-            <AlertDialog.Description className="text-muted-foreground mt-2 text-[13px]">
+        <AlertDialogContent data-testid="preview-bar.restore-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore this version?</AlertDialogTitle>
+            <AlertDialogDescription>
               {`“${pending?.message ?? ""}” replaces the draft. Newer versions stay in the list, so you can restore them again.`}
-            </AlertDialog.Description>
+            </AlertDialogDescription>
             {pending?.blocked ? (
-              <p className="text-muted-foreground mt-2 text-[13px]">
+              <AlertDialogDescription>
                 Save a version first, so your unsaved changes stay in the list.
-              </p>
+              </AlertDialogDescription>
             ) : null}
             {restoreError !== null ? (
-              <p role="alert" className="text-destructive mt-2 text-[13px]">
+              <p role="alert" className="text-destructive text-sm">
                 {restoreError}
               </p>
             ) : null}
-            <div className="mt-4 flex justify-end gap-2">
-              <AlertDialog.Close
-                data-testid="preview-bar.restore-cancel"
-                data-editor-control=""
-                disabled={restoring}
-                className={cn(softRaised, "h-8 rounded-md px-3 text-[13px] font-medium", focusRing)}
-              >
-                Cancel
-              </AlertDialog.Close>
-              <button
-                type="button"
-                data-testid="preview-bar.restore-confirm"
-                data-editor-control=""
-                disabled={restoring || pending?.blocked === true}
-                onClick={restore}
-                className={cn(chromePrimary, "h-8 px-3 text-[13px]")}
-              >
-                {restoring ? "Restoring…" : "Restore"}
-              </button>
-            </div>
-          </AlertDialog.Popup>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              data-testid="preview-bar.restore-cancel"
+              data-editor-control=""
+              disabled={restoring}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              data-testid="preview-bar.restore-confirm"
+              data-editor-control=""
+              disabled={restoring || pending?.blocked === true}
+              onClick={restore}
+            >
+              {restoring ? "Restoring…" : "Restore"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

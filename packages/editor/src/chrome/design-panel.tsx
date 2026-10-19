@@ -12,13 +12,18 @@ import { ReadonlyInspector } from "./readonly-inspector";
 export function DesignPanel() {
   const sourceEditable = useEditorStore((state) => state.sourceEditable);
   return (
-    <div data-testid="design-panel" className="@container/design flex min-h-0 min-w-0 flex-1">
+    <div
+      data-slot="editor-design-panel"
+      data-testid="design-panel"
+      className="@container/design flex min-h-0 min-w-0 flex-1"
+    >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col @min-[36rem]/design:flex-row">
         <section
           aria-label="Layers"
+          data-slot="editor-layers"
           className="border-border flex max-h-[40%] min-h-0 shrink-0 flex-col border-b @min-[36rem]/design:max-h-none @min-[36rem]/design:w-60 @min-[36rem]/design:border-r @min-[36rem]/design:border-b-0"
         >
-          <h2 className="text-muted-foreground px-3 pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.06em] uppercase">
+          <h2 className="text-muted-foreground px-3 pt-3 pb-1 font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase">
             Layers
           </h2>
           <ScrollArea.Root data-samva-scroll-area="layers" className="relative min-h-0 flex-1">

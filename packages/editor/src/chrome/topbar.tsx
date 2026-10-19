@@ -1,13 +1,33 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 
+import { cn } from "../lib/utils";
 import { useEditorStore } from "../state/context";
+import type { EditorLayoutMode } from "../state/store";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { Separator } from "../ui/separator";
 import { BrandChip, type EditorBrandSource } from "./brand-chip";
-import { ChevronLeft, Download, Eye } from "./editor-icons";
+import { useContribution } from "./contributions";
+import { ChevronLeft, Download, Eye, MoreHorizontal } from "./editor-icons";
 import { downloadEmailHtml } from "./export-html";
+import { EditorPaneSwitch } from "./pane-switch";
+import { usePart, type PartProps } from "./part";
 import { FixtureSelect } from "./preview-bar";
-import { IconBtn } from "./ui";
-import { chromePrimary, cn, focusRing } from "./ui-classes";
+import { Tip } from "./ui";
+
+/** The state an `EditorTopBar` exposes. */
+export interface TopBarState extends Record<string, unknown> {
+  /** The layout the editor frame's width resolved to. */
+  readonly layout: EditorLayoutMode;
+}
 
 export interface TopBarActions {
   readonly leading?: ReactNode | undefined;
@@ -48,7 +68,11 @@ export function TopBar({
   renameEnabled = true,
   brand,
   onUseDefaultBrand,
-}: TopBarActions) {
+  part,
+}: TopBarActions & {
+  /** The part's own props: `className`, `render` and attributes from the host. */
+  readonly part?: PartProps<"header", TopBarState> | undefined;
+}) {
   const {
     doc,
     render,
@@ -105,233 +129,259 @@ export function TopBar({
     onExport?.();
   };
 
-  return (
-    <header
-      className={cn(
-        "z-30 flex min-w-0 flex-col border-b border-border bg-background/92 px-3 backdrop-blur-md",
-        compact ? "h-[92px]" : "h-12",
-      )}
-    >
-      <div className="flex h-12 min-w-0 shrink-0 items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1">
-          {leading !== undefined && <div className="mr-1 shrink-0">{leading}</div>}
-          {onBack !== undefined && (
-            <>
-              <IconBtn
-                title="Back to templates"
-                className="gap-1.5"
-                onClick={onBack}
-                testId="topbar.back"
-              >
-                <ChevronLeft className="size-[15px]" />
-                Templates
-              </IconBtn>
-              <div className="bg-border mx-1 h-[18px] w-px" />
-            </>
-          )}
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              ref={nameRef}
-              data-testid="topbar.name"
-              contentEditable={editable && renameEnabled}
-              suppressContentEditableWarning
-              spellCheck={false}
-              title={
-                editable && renameEnabled
-                  ? "Click to rename"
-                  : (readonlyReason ?? "This template name is fixed.")
-              }
-              className={cn(
-                "min-w-[128px] max-w-[280px] truncate rounded-md border border-transparent px-[7px] py-[3px] text-[13.5px] font-medium outline-none",
-                "hover:bg-muted focus-visible:bg-background",
-                focusRing,
+  const docked = useContribution("rail.assistant") !== undefined;
+  const narrow = layoutMode === "narrow";
+  // Undo, Redo, Preview and Export fold into one menu once the bar cannot hold them as buttons.
+  const folded = compact;
+  const publish =
+    editable && lifecycleCapability !== undefined ? (
+      <Tip
+        label={
+          lifecycleCapability.status === "locked"
+            ? lifecycleCapability.upsell.reason
+            : "Publish and view history"
+        }
+      >
+        <Button size="sm" onClick={onLifecycle} data-testid="topbar.publish" data-editor-control="">
+          Publish
+        </Button>
+      </Tip>
+    ) : null;
+
+  return usePart<TopBarState>(
+    "editor-top-bar",
+    { ...part },
+    {
+      state: { layout: layoutMode },
+      tag: "header",
+      className:
+        "border-border bg-background z-30 flex h-12 min-w-0 shrink-0 items-center gap-2 border-b px-3",
+      props: {
+        children: (
+          <>
+            <div
+              data-slot="editor-top-bar-title"
+              className="flex min-w-0 flex-1 items-center gap-1.5"
+            >
+              {leading !== undefined && <div className="shrink-0">{leading}</div>}
+              {onBack !== undefined && (
+                <>
+                  <Tip label="Back to templates">
+                    <Button
+                      variant="ghost"
+                      size={narrow ? "icon-sm" : "sm"}
+                      onClick={onBack}
+                      aria-label="Back to templates"
+                      data-testid="topbar.back"
+                      data-editor-control=""
+                      className="text-muted-foreground"
+                    >
+                      <ChevronLeft />
+                      {narrow ? null : "Templates"}
+                    </Button>
+                  </Tip>
+                  <Separator orientation="vertical" className="mx-0.5 h-4!" />
+                </>
               )}
-              onFocus={() => {
-                if (editable && renameEnabled) setRenameActive(true);
-              }}
-              onBlur={(event) => {
-                if (!editable || !renameEnabled) return;
-                setRenameActive(false);
-                rename(event.currentTarget.textContent ?? "");
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  event.currentTarget.blur();
-                }
-                if (event.key === "Escape") {
-                  event.currentTarget.textContent = name;
-                  event.currentTarget.blur();
-                }
-              }}
-            >
-              {name}
-            </span>
-            {metadataError !== null && (
-              <span role="alert" className="text-status-error truncate text-[11.5px]">
-                {metadataError}
-              </span>
-            )}
-            {channelSwitcher === undefined ? (
-              <span className="border-border-subtle bg-surface-inset text-muted-foreground inline-flex items-center rounded-md border px-2 py-0.5 text-[10.5px] font-medium tracking-[0.04em] uppercase">
-                {doc?.channel ?? "Template"}
-              </span>
-            ) : (
-              <div
-                className={cn(
-                  "min-w-0 shrink-0",
-                  compact && "[&_[data-channel-button]]:px-1.5 [&_[data-channel-label]]:hidden",
-                )}
-              >
-                {channelSwitcher}
-              </div>
-            )}
-            {!editable && doc !== null && (
               <span
-                title={readonlyReason ?? "This template is read-only."}
-                data-testid="topbar.readonly-badge"
-                className="border-border-subtle bg-surface-inset text-muted-foreground inline-flex items-center rounded-md border px-2 py-0.5 text-[10.5px] font-medium"
+                ref={nameRef}
+                data-testid="topbar.name"
+                data-slot="editor-top-bar-name"
+                contentEditable={editable && renameEnabled}
+                suppressContentEditableWarning
+                spellCheck={false}
+                title={
+                  editable && renameEnabled
+                    ? "Click to rename"
+                    : (readonlyReason ?? "This template name is fixed.")
+                }
+                className={cn(
+                  "min-w-0 truncate rounded-md px-1.5 py-1 text-sm font-medium whitespace-nowrap outline-none",
+                  narrow ? "max-w-full" : "max-w-72 min-w-24",
+                  "hover:bg-muted focus-visible:ring-ring/50 focus-visible:bg-background focus-visible:ring-3",
+                )}
+                onFocus={() => {
+                  if (editable && renameEnabled) setRenameActive(true);
+                }}
+                onBlur={(event) => {
+                  if (!editable || !renameEnabled) return;
+                  setRenameActive(false);
+                  rename(event.currentTarget.textContent ?? "");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                  }
+                  if (event.key === "Escape") {
+                    event.currentTarget.textContent = name;
+                    event.currentTarget.blur();
+                  }
+                }}
               >
-                Read-only
+                {name}
               </span>
-            )}
-            {brand !== undefined && doc?.channel === "email" && (
-              <BrandChip source={brand} onUseDefault={onUseDefaultBrand} />
-            )}
-          </div>
-        </div>
+              {metadataError !== null && (
+                <span role="alert" className="text-destructive truncate text-xs">
+                  {metadataError}
+                </span>
+              )}
+              {narrow ? null : channelSwitcher === undefined ? (
+                <Badge variant="outline" className="text-muted-foreground font-mono uppercase">
+                  {doc?.channel ?? "Template"}
+                </Badge>
+              ) : (
+                <div
+                  className={cn(
+                    "min-w-0 shrink-0",
+                    compact && "[&_[data-channel-button]]:px-1.5 [&_[data-channel-label]]:hidden",
+                  )}
+                >
+                  {channelSwitcher}
+                </div>
+              )}
+              {!editable && doc !== null && (
+                <Badge
+                  variant="secondary"
+                  title={readonlyReason ?? "This template is read-only."}
+                  data-testid="topbar.readonly-badge"
+                >
+                  Read-only
+                </Badge>
+              )}
+              {brand !== undefined && doc?.channel === "email" && !narrow && (
+                <BrandChip source={brand} onUseDefault={onUseDefaultBrand} />
+              )}
+            </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-1">
-          {!compact && onUndo !== undefined && (
-            <IconBtn
-              title="Undo"
-              testId="topbar.undo"
-              onClick={onUndo}
-              disabled={!canUndo}
-              className="h-[30px] px-2.5"
-            >
-              Undo
-            </IconBtn>
-          )}
-          {!compact && onRedo !== undefined && (
-            <IconBtn
-              title="Redo"
-              testId="topbar.redo"
-              onClick={onRedo}
-              disabled={!canRedo}
-              className="h-[30px] px-2.5"
-            >
-              Redo
-            </IconBtn>
-          )}
-          {!compact && messageChannel && <FixtureSelect testId="topbar.fixture" />}
-          {!compact && <div className="bg-border mx-1 h-[18px] w-px" />}
-          {!compact && (
-            <IconBtn
-              title="Preview template"
-              testId="topbar.preview"
-              onClick={onPreview}
-              className="h-[30px] px-2.5"
-            >
-              <Eye className="size-[15px]" />
-              {standard ? null : "Preview"}
-            </IconBtn>
-          )}
-          {exportEnabled === true && !compact && (
-            <IconBtn
-              title={canExport ? "Export rendered HTML" : "Export waits for the latest render"}
-              testId="topbar.export"
-              onClick={handleExport}
-              disabled={!canExport}
-              className="h-[30px] px-2.5"
-            >
-              <Download className="size-[15px]" />
-              {standard ? null : "Export HTML"}
-            </IconBtn>
-          )}
-          {!compact && extraActions}
-          {!compact && editable && lifecycleCapability !== undefined && (
-            <button
-              type="button"
-              onClick={onLifecycle}
-              data-testid="topbar.publish"
-              title={
-                lifecycleCapability.status === "locked"
-                  ? lifecycleCapability.upsell.reason
-                  : "Publish and view history"
-              }
-              className={cn(chromePrimary, "ml-0.5 h-[30px] px-3")}
-            >
-              Publish
-            </button>
-          )}
-        </div>
-      </div>
+            {docked && layoutMode !== "wide" && doc?.channel === "email" && (
+              <EditorPaneSwitch
+                compact={narrow}
+                className={narrow ? "shrink-0" : "w-56 shrink-0"}
+              />
+            )}
 
-      {compact && (
-        <div className="samva-editor-scroll border-border-subtle flex h-11 min-w-0 items-center gap-1 overflow-x-auto border-t">
-          {extraActions}
-          {onUndo !== undefined && (
-            <IconBtn
-              title="Undo"
-              testId="topbar.undo"
-              onClick={onUndo}
-              disabled={!canUndo}
-              className="h-10 shrink-0 px-2"
+            <div
+              data-slot="editor-top-bar-actions"
+              className={cn("flex shrink-0 items-center justify-end gap-1", !folded && "flex-1")}
             >
-              Undo
-            </IconBtn>
-          )}
-          {onRedo !== undefined && (
-            <IconBtn
-              title="Redo"
-              testId="topbar.redo"
-              onClick={onRedo}
-              disabled={!canRedo}
-              className="h-10 shrink-0 px-2"
-            >
-              Redo
-            </IconBtn>
-          )}
-          {messageChannel && <FixtureSelect testId="topbar.fixture" />}
-          <IconBtn
-            title="Preview template"
-            testId="topbar.preview"
-            onClick={onPreview}
-            className="h-10 shrink-0 px-2"
-          >
-            <Eye className="size-[15px]" />
-            Preview
-          </IconBtn>
-          {exportEnabled === true && (
-            <IconBtn
-              title={canExport ? "Export rendered HTML" : "Export waits for the latest render"}
-              testId="topbar.export"
-              onClick={handleExport}
-              disabled={!canExport}
-              className="h-10 shrink-0 px-2"
-            >
-              <Download className="size-[15px]" />
-              Export
-            </IconBtn>
-          )}
-          {editable && lifecycleCapability !== undefined && (
-            <button
-              type="button"
-              onClick={onLifecycle}
-              data-testid="topbar.publish"
-              title={
-                lifecycleCapability.status === "locked"
-                  ? lifecycleCapability.upsell.reason
-                  : "Publish and view history"
+              {!folded && onUndo !== undefined && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="topbar.undo"
+                  onClick={onUndo}
+                  disabled={!canUndo}
+                >
+                  Undo
+                </Button>
+              )}
+              {!folded && onRedo !== undefined && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="topbar.redo"
+                  onClick={onRedo}
+                  disabled={!canRedo}
+                >
+                  Redo
+                </Button>
+              )}
+              {!folded && messageChannel && <FixtureSelect testId="topbar.fixture" />}
+              {!folded && <Separator orientation="vertical" className="mx-1 h-4!" />}
+              {
+                <Tip label="Preview template">
+                  <Button
+                    variant="ghost"
+                    size={standard || folded ? "icon-sm" : "sm"}
+                    aria-label="Preview template"
+                    data-testid="topbar.preview"
+                    onClick={onPreview}
+                  >
+                    <Eye />
+                    {standard || folded ? null : "Preview"}
+                  </Button>
+                </Tip>
               }
-              className={cn(chromePrimary, "h-10 shrink-0 px-2.5")}
-            >
-              Publish
-            </button>
-          )}
-        </div>
-      )}
-    </header>
+              {!folded && exportEnabled === true && (
+                <Tip
+                  label={canExport ? "Export rendered HTML" : "Export waits for the latest render"}
+                >
+                  <Button
+                    variant="ghost"
+                    size={standard ? "icon-sm" : "sm"}
+                    aria-label="Export HTML"
+                    data-testid="topbar.export"
+                    onClick={handleExport}
+                    disabled={!canExport}
+                  >
+                    <Download />
+                    {standard ? null : "Export HTML"}
+                  </Button>
+                </Tip>
+              )}
+              {!narrow && extraActions}
+              {folded && messageChannel && <FixtureSelect testId="topbar.fixture" />}
+              {folded && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="More actions"
+                        data-testid="topbar.more"
+                        data-editor-control=""
+                      />
+                    }
+                  >
+                    <MoreHorizontal />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {onUndo !== undefined && (
+                      <DropdownMenuItem
+                        data-testid="topbar.undo"
+                        disabled={!canUndo}
+                        onClick={onUndo}
+                      >
+                        Undo
+                      </DropdownMenuItem>
+                    )}
+                    {onRedo !== undefined && (
+                      <DropdownMenuItem
+                        data-testid="topbar.redo"
+                        disabled={!canRedo}
+                        onClick={onRedo}
+                      >
+                        Redo
+                      </DropdownMenuItem>
+                    )}
+                    {narrow && <DropdownMenuSeparator />}
+                    {narrow && (
+                      <DropdownMenuItem data-testid="topbar.preview" onClick={onPreview}>
+                        <Eye />
+                        Preview template
+                      </DropdownMenuItem>
+                    )}
+                    {exportEnabled === true && (
+                      <DropdownMenuItem
+                        data-testid="topbar.export"
+                        disabled={!canExport}
+                        onClick={handleExport}
+                      >
+                        <Download />
+                        Export HTML
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {narrow && extraActions}
+              {publish}
+            </div>
+          </>
+        ),
+      },
+    },
   );
 }

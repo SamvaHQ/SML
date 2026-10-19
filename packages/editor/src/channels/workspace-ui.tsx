@@ -5,12 +5,12 @@ import { smsSegmentInfo } from "@samva/markup/render";
 import type { ReactNode } from "react";
 import { useId } from "react";
 
-import { cn, tabOptionClass } from "../chrome/ui-classes";
+import { cn, segmentedGroupClass, segmentedItemClass } from "../chrome/ui-classes";
 import { workspaceTabId } from "./workspace-tabs";
 
 export type WorkspaceView = "visual" | "source";
 
-const TAB_CLASS = cn(tabOptionClass, "h-7 px-2.5 text-[12px] capitalize");
+const TAB_CLASS = cn(segmentedItemClass, "px-3 text-[13px] capitalize");
 
 /**
  * The Visual/Source switch above every channel workspace. Rendered as the tabs
@@ -43,33 +43,42 @@ export function WorkspaceTabs({
   const ownPanelId = `${base}-view-panel`;
   return (
     <>
-      <ToggleGroup
-        role="tablist"
-        aria-label="Workspace view"
-        value={[value]}
-        onValueChange={(values) => {
-          const next = values[0];
-          if (next === "visual" || next === "source") onChange(next);
-        }}
-        className="border-border bg-background flex h-10 shrink-0 items-center gap-1 border-b px-3"
+      <div
+        data-slot="editor-workspace-view"
+        className="border-border bg-background flex h-11 shrink-0 items-center border-b px-3"
       >
-        {(["visual", "source"] as const).map((view) => (
-          <Toggle
-            key={view}
-            id={workspaceTabId(base, view)}
-            type="button"
-            role="tab"
-            aria-selected={value === view}
-            aria-controls={panelId ?? ownPanelId}
-            aria-pressed={undefined}
-            value={view}
-            data-testid={`workspace.tab.${view}`}
-            className={TAB_CLASS}
-          >
-            {view}
-          </Toggle>
-        ))}
-      </ToggleGroup>
+        <ToggleGroup
+          role="tablist"
+          aria-label="Workspace view"
+          value={[value]}
+          onValueChange={(values) => {
+            const next = values[0];
+            if (next === "visual" || next === "source") onChange(next);
+          }}
+          className={cn(segmentedGroupClass, "flex h-8 items-center")}
+        >
+          {(["visual", "source"] as const).map((view) => (
+            <Toggle
+              key={view}
+              id={workspaceTabId(base, view)}
+              type="button"
+              role="tab"
+              aria-selected={value === view}
+              aria-controls={panelId ?? ownPanelId}
+              aria-pressed={undefined}
+              value={view}
+              data-testid={`workspace.tab.${view}`}
+              data-editor-control=""
+              className={cn(
+                TAB_CLASS,
+                "aria-selected:bg-background aria-selected:text-foreground aria-selected:shadow-sm dark:aria-selected:border-input dark:aria-selected:bg-input/30",
+              )}
+            >
+              {view}
+            </Toggle>
+          ))}
+        </ToggleGroup>
+      </div>
       {panelId === undefined && (
         <div
           role="tabpanel"

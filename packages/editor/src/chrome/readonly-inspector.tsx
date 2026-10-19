@@ -1,11 +1,10 @@
-import { Tooltip } from "@base-ui/react/tooltip";
 import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
+import { Button } from "../ui/button";
 import { AttentionSummary } from "./compatibility-report";
 import { SidebarRightHide } from "./editor-icons";
-import { tooltipPopupClass } from "./ui-classes";
-import { useEditorPortalContainer } from "./use-editor-portal";
+import { Tip } from "./ui";
 
 /** Read-only source ownership and diagnostics, without mutation controls. */
 export function ReadonlyInspector({
@@ -13,7 +12,6 @@ export function ReadonlyInspector({
 }: {
   readonly embedded?: boolean | undefined;
 } = {}) {
-  const portalContainer = useEditorPortalContainer();
   const { checks, doc, readonlyReason, rightCollapsed, rightWidth } = useEditorStore(
     useShallow((state) => ({
       checks: state.checks,
@@ -38,27 +36,18 @@ export function ReadonlyInspector({
       <div className="border-border-subtle flex h-11 items-center border-b px-3">
         <span className="text-[12.5px] font-medium">Template details</span>
         {!embedded && (
-          <Tooltip.Root>
-            <Tooltip.Trigger
-              render={
-                <button
-                  type="button"
-                  aria-label="Collapse inspector"
-                  onClick={toggleRight}
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto rounded-md p-1.5"
-                />
-              }
+          <Tip label="Collapse inspector" side="bottom">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Collapse inspector"
+
+              onClick={toggleRight}
+              className="text-muted-foreground ml-auto"
             >
-              <SidebarRightHide className="size-[15px]" />
-            </Tooltip.Trigger>
-            <Tooltip.Portal container={portalContainer}>
-              <Tooltip.Positioner side="bottom" sideOffset={5} className="z-[200]">
-                <Tooltip.Popup role="tooltip" className={tooltipPopupClass}>
-                  Collapse inspector
-                </Tooltip.Popup>
-              </Tooltip.Positioner>
-            </Tooltip.Portal>
-          </Tooltip.Root>
+              <SidebarRightHide />
+            </Button>
+          </Tip>
         )}
       </div>
       <div className="samva-editor-scroll min-h-0 flex-1 overflow-y-auto p-4 text-[12.5px]">

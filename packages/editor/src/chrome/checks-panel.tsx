@@ -8,5 +8,9 @@ import { AttentionSummary } from "./compatibility-report";
 export function ChecksPanel() {
   const checks = useEditorStore((state) => state.checks);
   const editable = useEditorStore((state) => state.sourceEditable);
-  return <AttentionSummary checks={checks} editable={editable} />;
+  return (
+    <div data-slot="editor-checks-panel">
+      <AttentionSummary checks={checks} editable={editable} />
+    </div>
+  );
 }
