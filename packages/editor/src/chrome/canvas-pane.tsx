@@ -282,7 +282,9 @@ export function CanvasPane({
 
   const children = (
     <>
-      {doc !== null && doc.channel === "email" && (
+      {/* Drawn while the document loads too: the shell opens on email, and the canvas below
+          keeps its place when the document lands. */}
+      {(doc === null || doc.channel === "email") && (
         <>
           <EditorPreviewBar viewMenu={viewMenu} />
           <PreviewNotice />

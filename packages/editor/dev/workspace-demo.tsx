@@ -97,6 +97,7 @@ export const createWorkspaceHost = (controls: CompiledHostControls): AsyncEditab
     ...mock,
     document: {
       open: async (onChange, onError, onComplete) => {
+        await openHold();
         const opened = await mock.document.open(
           (change) => {
             rev = change.rev;
@@ -114,6 +115,15 @@ export const createWorkspaceHost = (controls: CompiledHostControls): AsyncEditab
     versions: demoVersions(),
     lifecycle: { status: "ready", api: lifecycle },
   };
+};
+
+/**
+ * `?openHold=<ms>` holds the document back that long, so the editor's chrome can be looked at
+ * (and measured) before the document lands.
+ */
+const openHold = () => {
+  const ms = Number(new URLSearchParams(window.location.search).get("openHold") ?? 0);
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 };
 
 const BUSY_FOR_MS = 2_500;
