@@ -57,7 +57,7 @@ export function StatusBar({
     })),
   );
   const docked = useContribution("rail.assistant") !== undefined;
-  const { selectDocument } = useEditorStore((state) => state.actions);
+  const { selectDocument, openWorkTab, setFocusedPane } = useEditorStore((state) => state.actions);
   const editable = useEditorStore((state) => state.sourceEditable);
   const pendingAuthoredSource = useEditorStore((state) => state.pendingAuthoredSource);
   const persistTrouble = useEditorStore(
@@ -71,8 +71,8 @@ export function StatusBar({
   const pending = checks.filter((check) =>
     check.diagnostics?.some((item) => item.compatibility?.assessment === "unverified"),
   ).length;
-  let summary = "No known risks found";
-  if (pending > 0) summary = `No known risks · ${pending} need verification`;
+  let summary = "No issues found";
+  if (pending > 0) summary = `${pending} check${pending > 1 ? "s" : ""} to review`;
   if (warnCount > 0) summary = `${warnCount} warning${warnCount > 1 ? "s" : ""}`;
   if (errorCount > 0) summary = `${errorCount} check${errorCount > 1 ? "s" : ""} failing`;
   if (checks.length === 0) summary = "No checks yet";
@@ -87,6 +87,22 @@ export function StatusBar({
       : pendingAuthoredSource !== null || saveVersionBusy === true
         ? "Saving…"
         : undefined;
+
+  const indicator = (
+    <>
+      <span
+        className={cn(
+          "size-1.5 shrink-0 rounded-full",
+          errorCount > 0
+            ? "bg-status-error"
+            : warnCount > 0
+              ? "bg-status-warning"
+              : "bg-muted-foreground",
+        )}
+      />
+      {guestHeadline === undefined && !narrow ? summary : null}
+    </>
+  );
 
   return usePart<StatusBarState>(
     "editor-status-bar",
@@ -104,42 +120,50 @@ export function StatusBar({
               style={split ? { width: assistantWidth } : undefined}
               className={cn("flex min-w-0 shrink-0 items-center gap-3 px-2", split && "pr-3")}
             >
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      data-testid="statusbar.checks-trigger"
-                      data-editor-control=""
-                      aria-label={narrow ? summary : undefined}
-                      onClick={() => selectDocument()}
-                      className="text-muted-foreground font-normal"
-                    />
-                  }
+              {docked ? (
+                // The work pane gives checks a tab; the standalone layout keeps them in a popover.
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  data-testid="statusbar.checks-trigger"
+                  data-editor-control=""
+                  aria-label={narrow ? summary : undefined}
+                  onClick={() => {
+                    openWorkTab("checks");
+                    setFocusedPane("preview");
+                  }}
+                  className="text-muted-foreground font-normal"
                 >
-                  <span
-                    className={cn(
-                      "size-1.5 shrink-0 rounded-full",
-                      errorCount > 0
-                        ? "bg-status-error"
-                        : warnCount > 0
-                          ? "bg-status-warning"
-                          : "bg-muted-foreground",
-                    )}
-                  />
-                  {guestHeadline === undefined && !narrow ? summary : null}
-                </PopoverTrigger>
-                <PopoverContent
-                  side="top"
-                  align="start"
-                  sideOffset={8}
-                  data-testid="statusbar.checks-popup"
-                  className="max-h-[min(560px,70vh)] w-[360px] overflow-y-auto p-3.5"
-                >
-                  <AttentionSummary checks={checks} editable={editable} />
-                </PopoverContent>
-              </Popover>
+                  {indicator}
+                </Button>
+              ) : (
+                <Popover open={open} onOpenChange={setOpen}>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        data-testid="statusbar.checks-trigger"
+                        data-editor-control=""
+                        aria-label={narrow ? summary : undefined}
+                        onClick={() => selectDocument()}
+                        className="text-muted-foreground font-normal"
+                      />
+                    }
+                  >
+                    {indicator}
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="top"
+                    align="start"
+                    sideOffset={8}
+                    data-testid="statusbar.checks-popup"
+                    className="max-h-[min(560px,70vh)] w-[360px] overflow-y-auto p-3.5"
+                  >
+                    <AttentionSummary checks={checks} editable={editable} />
+                  </PopoverContent>
+                </Popover>
+              )}
               {guestHeadline !== undefined ? (
                 <span data-testid="statusbar.guest" className="min-w-0 truncate">
                   {guestSaveNote ?? guestHeadline}

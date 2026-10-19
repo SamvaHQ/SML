@@ -133,6 +133,64 @@ describe("public editor chrome", () => {
     );
   });
 
+  it("names the checks left to review and opens them where the layout keeps checks", async () => {
+    stubWideShell();
+    const unverified = {
+      id: "compat:feature",
+      severity: "info" as const,
+      label: "Rendering needs verification",
+      detail: "1 finding",
+      diagnostics: [
+        {
+          code: "feature",
+          severity: "info" as const,
+          message: "Verify Outlook rendering",
+          origins: [],
+          clients: ["Outlook"],
+          compatibility: {
+            assessment: "unverified" as const,
+            title: "Rendering needs verification",
+          },
+        },
+      ],
+    };
+    const view = render(
+      <EditorProvider
+        host={await host()}
+        checks={[unverified, { ...unverified, id: "compat:other" }]}
+      >
+        <EditorShell
+          contributions={[
+            { slot: "rail.assistant", id: "assistant", render: () => <div>Assistant</div> },
+          ]}
+        />
+      </EditorProvider>,
+    );
+
+    const trigger = await view.findByTestId("statusbar.checks-trigger");
+    expect(trigger.textContent).toBe("2 checks to review");
+    expect(view.queryByTestId("work-pane.panel.checks")).toBeNull();
+    fireEvent.click(trigger);
+    expect((await view.findByTestId("work-pane.panel.checks")).textContent).toContain(
+      "2 finding groups need client verification",
+    );
+    view.unmount();
+
+    const clear = render(
+      <EditorProvider
+        host={await host()}
+        checks={[{ id: "size", severity: "info", label: "Size", detail: "12 KB" }]}
+      >
+        <EditorShell />
+      </EditorProvider>,
+    );
+    // Without a docked assistant there is no Checks tab, so the checks open in a popover.
+    const standalone = await clear.findByTestId("statusbar.checks-trigger");
+    expect(standalone.textContent).toBe("No issues found");
+    fireEvent.click(standalone);
+    expect(await clear.findByTestId("statusbar.checks-popup")).toBeTruthy();
+  });
+
   it("mounts host identity and controls in the canonical toolbar", async () => {
     stubWideShell();
     const view = render(
