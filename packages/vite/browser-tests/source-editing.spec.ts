@@ -12,6 +12,8 @@ import { SOURCE, COPY } from "./source-editing-fixture";
 
 /** Pointer coordinates include the canvas fit transform around the iframe. */
 const clickRendered = async (page: Page, target: Locator) => {
+  // Centre the element first: the canvas floats its zoom control over the bottom of the pane.
+  await target.evaluate((element) => element.scrollIntoView({ block: "center" }));
   const rect = await target.evaluate((element) => {
     const box = element.getBoundingClientRect();
     return { x: box.x, y: box.y, width: box.width, height: box.height };
@@ -74,14 +76,14 @@ test("local host preserves source intent through visual edits, undo, fixtures an
   await page.getByTestId("source.redo").click();
   await expect(frame.getByText(COPY.changedHeading)).toBeVisible();
 
-  await page.getByTestId("topbar.fixture").selectOption("second");
+  await page.getByTestId("preview-bar.fixture").selectOption("second");
   await expect(frame.getByText(COPY.grace, { exact: true })).toBeVisible();
   await page.getByTestId("inspector.document").click();
   await page.getByTestId("source.fixture-data").fill('{ name: "Lin" }');
   await page.getByTestId("source.fixture-review").click();
   await page.getByTestId("source.fixture-apply").click();
   await expect(frame.getByText(COPY.lin, { exact: true })).toBeVisible();
-  await page.getByTestId("topbar.fixture").selectOption("first");
+  await page.getByTestId("preview-bar.fixture").selectOption("first");
   await expect(frame.getByText(COPY.ada, { exact: true })).toBeVisible();
   await clickRendered(page, frame.getByText(COPY.movable));
   await page.getByTestId("source.structure-toggle").click();
