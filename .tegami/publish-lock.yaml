@@ -1,19 +1,17 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/markup:\n    type: minor\n  npm:@samva/editor:\n    type: minor\n---\n\n## WhatsApp template FLOW buttons\n\n`<WhatsApp.FlowButton flow=\"order-survey\">Take survey</WhatsApp.FlowButton>` adds a Meta FLOW\nbutton to a WhatsApp template. `flow` is the Samva flow handle (lowercase kebab-case, the file\n`flows/<handle>.json` in the template project); Samva maps it to Meta's flow id per business\naccount when it registers the template. `action` is `navigate` by default or `data_exchange`, and\n`screen` names the screen a `navigate` flow opens on (omitted, the flow's first entry screen);\n`screen` is refused with `data_exchange`. `flow`, `action` and `screen` are string literals, and a\ntemplate holds at most one flow button.\n\nThe IR button is `{ type: \"flow\", text, flow, action, screen? }`, and the rendered WhatsApp\nchannel and the editor preview carry it. The editor shows a flow button as a locked row; it is\nauthored in source.\n"
-    filename: whatsapp-flow-button.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## Fit zoom holds steady when the email nearly fills the canvas\n\nThe canvas reserves its scrollbar gutter, so Fit zoom no longer flips between two sizes when the\nzoomed email is close to the canvas height.\n"
+    filename: editor-fit-zoom-stable.md
     v: 0.0.0
 core:packages:
+  - id: npm:@samva/markup
+    updated: true
   - id: npm:@samva/vite
     updated: true
   - changelogIds:
-      - whatsapp-flow-button.md
+      - editor-fit-zoom-stable.md
     id: npm:@samva/editor
     updated: true
-  - changelogIds:
-      - whatsapp-flow-button.md
-    id: npm:@samva/markup
-    updated: true
 npm:packages:
+  - id: npm:@samva/markup
   - id: npm:@samva/vite
   - id: npm:@samva/editor
-  - id: npm:@samva/markup
