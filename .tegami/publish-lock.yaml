@@ -1,6 +1,6 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## The editor's chrome stays put while a document opens\n\nThe preview bar, the brand chip and the docked pane switch now draw from the first paint instead\nof appearing when the document arrives, so the canvas and the top bar controls no longer move\nwhen a slow host finishes opening the document. The brand chip shows a \"Brand\" placeholder while\nthe theme loads.\n"
-    filename: editor-stable-geometry.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## The status bar says what is left to check\n\nThe status bar's checks summary reads \"24 checks to review\" when client verification remains and\n\"No issues found\" when nothing does, instead of \"No known risks · 24 need verification\". In an email\nworkspace with a docked assistant, clicking it opens the Checks tab; other layouts keep the popover.\n"
+    filename: editor-status-summary.md
     v: 0.0.0
 core:packages:
   - id: npm:@samva/vite
@@ -8,7 +8,7 @@ core:packages:
   - id: npm:@samva/markup
     updated: true
   - changelogIds:
-      - editor-stable-geometry.md
+      - editor-status-summary.md
     id: npm:@samva/editor
     updated: true
 npm:packages:
