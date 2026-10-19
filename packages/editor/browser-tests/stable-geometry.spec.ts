@@ -42,7 +42,7 @@ for (const [layout, size] of [
     await page.goto(`/?demo=workspace&brand&openHold=${HOLD_MS}`);
     if (layout === "standard") await page.getByTestId("agent-workspace.tab.preview").click();
     await expect(page.getByTestId("preview-bar")).toBeVisible();
-    await expect(page.getByText("Loading document…")).toBeVisible();
+    await expect(page.locator("[data-editor-rendered]")).not.toHaveText("true");
     const loading = await geometry(page);
 
     await expect(page.locator("[data-editor-rendered]")).toHaveText("true");
