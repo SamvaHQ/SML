@@ -3,8 +3,8 @@
  * @jsxImportSource react
  */
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
-import type { EmailElementSelection } from "@samva/markup/render";
-import { INSTANCE_PATH_ATTRIBUTE } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
+import { INSTANCE_PATH_ATTRIBUTE } from "@samva/markup/edit";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 
 import { EmailFrame } from "../src/canvas/email-frame";

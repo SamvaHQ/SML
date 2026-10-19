@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "@effect/vitest";
 
-import { renderIr } from "../src/render-ir";
+import { render } from "../src/render-template";
 import { compileTemplate } from "../src/sml/compile";
 
 const skill = readFileSync(join(import.meta.dirname, "..", "skills", "sml", "SKILL.md"), "utf8");
@@ -23,9 +23,9 @@ describe("sml skill", () => {
       tailwind: { css: "", cssPath: "theme.css" },
     });
     expect(compiled.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
-    expect(compiled.ir).toBeDefined();
+    expect(compiled.template).toBeDefined();
     for (const fixture of Object.values(compiled.fixtures)) {
-      const rendered = renderIr(compiled.ir!, fixture, {});
+      const rendered = render(compiled.template!, fixture, { channel: "email" });
       expect(rendered.subject).toContain("your order shipped");
       expect(rendered.html).toContain("it shipped");
     }

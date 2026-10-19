@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
-import { INSTANCE_PATH_ATTRIBUTE } from "@samva/markup/render";
+import { INSTANCE_PATH_ATTRIBUTE } from "@samva/markup/edit";
 
 import { downloadEmailHtml, emailHtmlForExport } from "../src/chrome/export-html";
 

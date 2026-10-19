@@ -119,7 +119,7 @@ A change to the theme, a partial, or an imported stylesheet recompiles every tem
 
 `samva templates check` and `buildTemplates()` compile every template, render every declared
 fixture through each channel the template declares, and check the email output against the client
-matrix. `buildTemplates()` returns `files`, one per template entry, with `ok`, the template's IR,
+matrix. `buildTemplates()` returns `files`, one per template entry, with `ok`, the compiled template,
 input schema, each fixture's rendered output, and structured diagnostics; helper modules have no
 entry. A template requires at least one fixture.
 

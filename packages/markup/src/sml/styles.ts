@@ -1,19 +1,19 @@
+import type {
+  CompiledElement,
+  CompiledNode,
+  CompiledPredicate,
+  CompiledRaw,
+  CompiledRawPart,
+  CompiledSource,
+  CompiledStyle,
+  CompiledValue,
+} from "../compiled-template";
 // oxlint-disable samva/no-hand-rolled-object-guard -- IR nodes and Babel nodes are this package's own typed data, discriminated structurally; nothing here validates external input.
 import { applyStylesheet, DARK_CLASS_PREFIX, renderDarkRules } from "../email/cascade";
 import type { Stylesheet } from "../email/css";
 import type { TemplateDiagnostic } from "../email/diagnostics";
 import { serializeStyle } from "../email/html";
 import { EmailNode } from "../email/jsx-runtime";
-import type {
-  IrElement,
-  IrNode,
-  IrPredicate,
-  IrRaw,
-  IrRawPart,
-  IrSource,
-  IrStyle,
-  IrValue,
-} from "../ir";
 import type { JsxSourceLocation } from "../source-locations";
 import { isValueNode } from "./bindings";
 import { Tokens, rawParts } from "./tokens";
@@ -28,7 +28,7 @@ import { Tokens, rawParts } from "./tokens";
 
 type ClassTree =
   | { readonly leaf: string }
-  | { readonly pred: IrPredicate; readonly then: ClassTree; readonly else: ClassTree };
+  | { readonly pred: CompiledPredicate; readonly then: ClassTree; readonly else: ClassTree };
 
 const MAX_CLASS_VARIANTS = 8;
 
@@ -44,7 +44,7 @@ const product = (left: ClassTree, right: ClassTree): ClassTree => {
   return { pred: left.pred, then: product(left.then, right), else: product(left.else, right) };
 };
 
-const classTree = (value: IrValue): ClassTree | undefined => {
+const classTree = (value: CompiledValue): ClassTree | undefined => {
   if (typeof value === "string") return { leaf: value };
   if (typeof value !== "object" || value === null) return undefined;
   if ("if" in value) {
@@ -71,9 +71,9 @@ const leavesOf = (tree: ClassTree): readonly string[] =>
 
 const mapTree = (
   tree: ClassTree,
-  leafStyle: (index: number) => IrStyle,
+  leafStyle: (index: number) => CompiledStyle,
   counter = { next: 0 },
-): IrStyle => {
+): CompiledStyle => {
   if ("leaf" in tree) return leafStyle(counter.next++);
   const then = mapTree(tree.then, leafStyle, counter);
   const otherwise = mapTree(tree.else, leafStyle, counter);
@@ -83,7 +83,7 @@ const mapTree = (
 };
 
 /** A class tree as the IR value it was read from: a literal, or a choice between literals. */
-const treeValue = (tree: ClassTree): IrValue =>
+const treeValue = (tree: ClassTree): CompiledValue =>
   "leaf" in tree
     ? tree.leaf
     : { if: tree.pred, then: treeValue(tree.then), else: treeValue(tree.else) };
@@ -97,10 +97,10 @@ const appendClass = (classes: string, name: string | undefined): string =>
  * value gains the first pass's. `undefined` when no pass gave the element one.
  */
 const withDarkClass = (
-  value: IrValue | undefined,
+  value: CompiledValue | undefined,
   tree: ClassTree | undefined,
   perPass: readonly (string | undefined)[],
-): IrValue | undefined => {
+): CompiledValue | undefined => {
   if (perPass.every((name) => name === undefined)) return undefined;
   if (tree !== undefined && leavesOf(tree).length > 1) {
     let leaf = 0;
@@ -118,10 +118,10 @@ const withDarkClass = (
 };
 
 type Item =
-  | { readonly kind: "el"; readonly el: IrElement }
-  | { readonly kind: "raw"; readonly raw: IrRaw };
+  | { readonly kind: "el"; readonly el: CompiledElement }
+  | { readonly kind: "raw"; readonly raw: CompiledRaw };
 
-const collect = (nodes: readonly IrNode[], into: Item[]): void => {
+const collect = (nodes: readonly CompiledNode[], into: Item[]): void => {
   for (const node of nodes) {
     if (isValueNode(node)) continue;
     if ("el" in node) {
@@ -144,17 +144,17 @@ interface PassResult {
 }
 
 export interface StyleOptions {
-  readonly locate: (source: IrSource | undefined) => JsxSourceLocation | undefined;
+  readonly locate: (source: CompiledSource | undefined) => JsxSourceLocation | undefined;
   readonly report: (diagnostic: TemplateDiagnostic) => void;
 }
 
 export interface StyledTree {
-  readonly root: IrNode;
+  readonly root: CompiledNode;
   readonly headCss: string;
   readonly fontFaceCss: string;
 }
 
-const rawHtml = (tokens: Tokens, parts: readonly IrRawPart[]): string =>
+const rawHtml = (tokens: Tokens, parts: readonly CompiledRawPart[]): string =>
   parts
     .map((part) =>
       typeof part === "string" ? part : tokens.value("attr" in part ? part.attr : part.text),
@@ -162,7 +162,11 @@ const rawHtml = (tokens: Tokens, parts: readonly IrRawPart[]): string =>
     .join("");
 
 /** Resolve the sheet against a lowered tree and write each element's inline style. */
-export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptions): StyledTree => {
+export const applyStyles = (
+  root: CompiledNode,
+  sheet: Stylesheet,
+  options: StyleOptions,
+): StyledTree => {
   const items: Item[] = [];
   collect([root], items);
   const tokens = new Tokens();
@@ -191,7 +195,11 @@ export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptio
   }
   const passes = Math.max(1, ...leafCounts);
 
-  const shadow = (nodes: readonly IrNode[], pass: number, cursor: { next: number }): EmailNode[] =>
+  const shadow = (
+    nodes: readonly CompiledNode[],
+    pass: number,
+    cursor: { next: number },
+  ): EmailNode[] =>
     nodes.flatMap((node): EmailNode[] => {
       if (isValueNode(node)) return [];
       if ("el" in node) {
@@ -209,7 +217,7 @@ export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptio
         const style = node.style;
         if (Array.isArray(style)) {
           const declared: Record<string, string | number> = {};
-          for (const [property, value] of style as readonly (readonly [string, IrValue])[]) {
+          for (const [property, value] of style as readonly (readonly [string, CompiledValue])[]) {
             if (value === null || typeof value === "boolean") continue;
             declared[property] = typeof value === "number" ? value : tokens.value(value);
           }
@@ -295,8 +303,8 @@ export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptio
 
   const styleOf = (
     declarations: Readonly<Record<string, string>> | undefined,
-    element: IrElement,
-  ): IrStyle => {
+    element: CompiledElement,
+  ): CompiledStyle => {
     if (declarations === undefined) return "";
     const entries = Object.entries(declarations);
     if (entries.length === 0) return "";
@@ -315,8 +323,8 @@ export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptio
   let cursor = 0;
   let elementCursor = 0;
   let rawCursor = 0;
-  const rebuild = (nodes: readonly IrNode[]): IrNode[] =>
-    nodes.map((node): IrNode => {
+  const rebuild = (nodes: readonly CompiledNode[]): CompiledNode[] =>
+    nodes.map((node): CompiledNode => {
       if (isValueNode(node)) return node;
       if ("el" in node) {
         const index = cursor++;
@@ -324,7 +332,7 @@ export const applyStyles = (root: IrNode, sheet: Stylesheet, options: StyleOptio
         const tree = trees[index];
         const first = results[0];
         const baseStyle = first?.styles[ordinal];
-        const style: IrStyle =
+        const style: CompiledStyle =
           tree !== undefined && leavesOf(tree).length > 1
             ? mapTree(tree, (leaf) =>
                 styleOf(results[Math.min(leaf, results.length - 1)]?.styles[ordinal], node),

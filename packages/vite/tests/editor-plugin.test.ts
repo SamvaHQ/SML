@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { inspectSourceElement } from "@samva/markup/edit";
-import type { EmailElementSelection } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
 import { createServer, resolveConfig, type ViteDevServer } from "vite";
 
 import { EDITOR_SOURCE_TOO_LARGE_MESSAGE } from "../src/editor-store";

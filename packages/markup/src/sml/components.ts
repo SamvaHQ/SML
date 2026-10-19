@@ -1,3 +1,4 @@
+import type { CompiledEach, CompiledNode, CompiledValue } from "../compiled-template";
 import { brandComponents, type EmailBrand } from "../email/brand";
 import type { BrandPlugin } from "../email/brand-plugin";
 import {
@@ -12,10 +13,9 @@ import {
   Spacer,
 } from "../email/components";
 import { equalColumnWidth } from "../email/components";
-import { drainEmailDiagnostics, type EmailChild } from "../email/jsx-runtime";
+import { collectEmailDiagnostics, type EmailChild, type EmailNode } from "../email/jsx-runtime";
 import { PRIMITIVE_CLASSES } from "../email/primitive-css";
 import { isObject } from "../internal/guards";
-import type { IrEach, IrNode, IrValue } from "../ir";
 import { child, children, text, unwrap, type Node } from "./ast";
 import { bindingValue, isValueNode, type Binding } from "./bindings";
 import type { Ctx, Lowerer } from "./lower";
@@ -37,7 +37,7 @@ export interface ComponentCall {
 }
 
 /** Lowers the SMS and WhatsApp components; supplied when a channel body is being read. */
-export type ChannelLowering = (call: ComponentCall) => IrNode[] | undefined;
+export type ChannelLowering = (call: ComponentCall) => CompiledNode[] | undefined;
 
 const NUMERIC: Readonly<Record<string, readonly string[]>> = {
   Email: ["gutter"],
@@ -99,7 +99,7 @@ const bindingToProp = (
 };
 
 /** Content between the tags, the way a primitive would have received it. */
-const childrenProp = (tokens: Tokens, nodes: readonly IrNode[]): EmailChild => {
+const childrenProp = (tokens: Tokens, nodes: readonly CompiledNode[]): EmailChild => {
   const only = nodes.length === 1 ? nodes[0] : undefined;
   // A single text child arrives as a string, exactly as React hands it to a component.
   if (only !== undefined && isValueNode(only) && only !== null && typeof only !== "boolean") {
@@ -115,10 +115,10 @@ const childrenProp = (tokens: Tokens, nodes: readonly IrNode[]): EmailChild => {
 };
 
 /** The width each cell of a `<Columns each>` row takes when it states none. */
-const equalWidth = (per: number | undefined, list: IrValue): IrValue => {
+const equalWidth = (per: number | undefined, list: CompiledValue): CompiledValue => {
   if (per !== undefined) return equalColumnWidth(per);
   // floor(100 / n) is (100 - 100 % n) / n, exact for whole n, so the renderer needs no floor.
-  const count: IrValue = { length: list };
+  const count: CompiledValue = { length: list };
   return {
     concat: [
       { op: "/", args: [{ op: "-", args: [100, { op: "%", args: [100, count] }] }, count] },
@@ -136,7 +136,9 @@ const columnsEach = (
   call: ComponentCall,
   bindings: ReadonlyMap<string, Binding>,
   stack: boolean,
-): { readonly cells: IrNode; readonly wrap: (table: IrNode[]) => IrNode[] } | undefined => {
+):
+  | { readonly cells: CompiledNode; readonly wrap: (table: CompiledNode[]) => CompiledNode[] }
+  | undefined => {
   const { lowerer, ctx, node } = call;
   const listValue = bindings.get("each");
   const list = listValue === undefined ? undefined : bindingValue(listValue);
@@ -196,7 +198,7 @@ const columnsEach = (
     cells,
     wrap: (table) => {
       if (row === undefined || per === undefined) return table;
-      const chunked: IrEach = {
+      const chunked: CompiledEach = {
         each: list,
         as: row,
         chunk: per,
@@ -209,7 +211,7 @@ const columnsEach = (
 };
 
 /** Run a compiler primitive at compile time and lower what it returns. */
-export const runBuiltinComponent = (call: ComponentCall): IrNode[] => {
+export const runBuiltinComponent = (call: ComponentCall): CompiledNode[] => {
   const { lowerer, ctx, node, binding } = call;
   const specifier = binding.specifier;
   if (
@@ -274,8 +276,8 @@ export const runBuiltinComponent = (call: ComponentCall): IrNode[] => {
   const declared = lowerer.attributeBindings(ctx, call.attributes);
   if (declared === undefined) return [];
   let bindings: ReadonlyMap<string, Binding> = declared;
-  let wrap = (table: IrNode[]): IrNode[] => table;
-  let kids: IrNode[];
+  let wrap = (table: CompiledNode[]): CompiledNode[] => table;
+  let kids: CompiledNode[];
   const stackBinding = declared.get("stack");
   const stack = stackBinding === undefined ? true : bindingValue(stackBinding);
   if (exported === "Columns" && typeof stack !== "boolean") {
@@ -367,12 +369,13 @@ export const runBuiltinComponent = (call: ComponentCall): IrNode[] => {
     );
     return [];
   }
-  drainEmailDiagnostics();
   const output = (fn as (props: Record<string, unknown>) => unknown)(props);
   const location = lowerer.findings.locate(ctx.module.parsed, node);
-  for (const diagnostic of drainEmailDiagnostics())
-    lowerer.findings.items.push({ ...diagnostic, origins: [location] });
-  if (output !== null && (!isObject(output) || typeof output.type !== "string")) return [];
+  const isNode = isObject(output) && typeof output.type === "string";
+  if (isNode)
+    for (const diagnostic of collectEmailDiagnostics(output as EmailNode))
+      lowerer.findings.items.push({ ...diagnostic, origins: [location] });
+  if (output !== null && !isNode) return [];
   return wrap([
     ...emailNodeToIr(
       output as Parameters<typeof emailNodeToIr>[0],

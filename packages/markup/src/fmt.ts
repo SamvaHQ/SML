@@ -1,5 +1,5 @@
 // oxlint-disable samva/no-try-catch-or-throw, samva/no-error-constructor, samva/no-hand-rolled-object-guard, samva/no-unsafe-type-assertion -- The formatters are a synchronous boundary that reports a bad argument to the renderer as a thrown TypeError or RangeError; @samva/markup ships without a validation framework.
-import type { IrFormatter } from "./ir";
+import type { CompiledFormatter } from "./compiled-template";
 
 export const DEFAULT_LOCALE = "en-US";
 export const DEFAULT_TIME_ZONE = "UTC";
@@ -36,7 +36,7 @@ export const FORMATTER_NAMES = [
   "time",
   "plural",
   "list",
-] as const satisfies readonly IrFormatter[];
+] as const satisfies readonly CompiledFormatter[];
 
 const CACHE_LIMIT = 200;
 const cache = new Map<string, unknown>();

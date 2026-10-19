@@ -11,7 +11,7 @@ import {
   emailDefinitionInstances,
   emailSelectionSiblings,
   INSTANCE_PATH_ATTRIBUTE,
-} from "@samva/markup/render";
+} from "@samva/markup/edit";
 import { Effect } from "effect";
 
 const runMock = () => Effect.runPromise(createMockHost);

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 
 import { renderedFooterMarkers, withoutUnsubscribeRow, type EmailBrand } from "../src/email/brand";
-import { renderBrandFooter } from "../src/email/brand-footer";
 import { parseBrandSpecifier, samvaBrandPlugin, type BrandPlugin } from "../src/email/brand-plugin";
-import { renderIr } from "../src/render-ir";
+import { compileFooter } from "../src/email/footer";
+import { render } from "../src/render-template";
 import { compileTemplate } from "../src/sml/compile";
 
 const ACME: BrandPlugin = {
@@ -53,7 +53,7 @@ describe("a brand plugin", () => {
       ACME,
     );
     expect(errors(compiled)).toEqual([]);
-    const { html } = renderIr(compiled.ir!, {}, { brandPlugin: ACME });
+    const { html } = render(compiled.template!, {}, { channel: "email", brandPlugin: ACME });
     expect(html).toContain('data-acme-footer=""');
     expect(html).toContain('<span data-acme-unsubscribe="">');
     expect(html).toContain('href="{{acme.unsubscribe}}" data-acme-no-track');
@@ -87,25 +87,25 @@ describe("a brand plugin", () => {
 
   it("recognizes a footer whose placeholder the serializer escapes", async () => {
     const plugin: BrandPlugin = { ...ACME, unsubscribeUrlPlaceholder: "{{acme&unsubscribe}}" };
-    const footer = await renderBrandFooter(BRAND, { unsubscribe: true, brandPlugin: plugin });
-    expect(footer.html).toContain('href="{{acme&amp;unsubscribe}}"');
-    expect(renderedFooterMarkers(footer.html, plugin)).toEqual({
+    const { footer } = await compileFooter(BRAND, { brandPlugin: plugin });
+    expect(footer?.html).toContain('href="{{acme&amp;unsubscribe}}"');
+    expect(renderedFooterMarkers(footer!.html, plugin)).toEqual({
       footer: true,
       unsubscribeLink: true,
     });
   });
 
   it("renders the fallback footer for the send path", async () => {
-    const footer = await renderBrandFooter(BRAND, { unsubscribe: true, brandPlugin: ACME });
-    expect(footer.html).toContain('href="{{acme.unsubscribe}}" data-acme-no-track');
-    expect(footer.text).toContain("{{acme.unsubscribe}}");
+    const { footer } = await compileFooter(BRAND, { brandPlugin: ACME });
+    expect(footer?.html).toContain('href="{{acme.unsubscribe}}" data-acme-no-track');
+    expect(footer?.text).toContain("{{acme.unsubscribe}}");
   });
 
   it("parses a brand specifier, bare or with a slug", () => {
     expect(parseBrandSpecifier("samva:brand")).toEqual({ slug: undefined });
     expect(parseBrandSpecifier("samva:brand/acme")).toEqual({ slug: "acme" });
-    expect(parseBrandSpecifier("acme:brand/news", ACME)).toEqual({ slug: "news" });
-    expect(parseBrandSpecifier("acme:brand", samvaBrandPlugin)).toBeUndefined();
+    expect(parseBrandSpecifier("acme:brand/news", { brandPlugin: ACME })).toEqual({ slug: "news" });
+    expect(parseBrandSpecifier("acme:brand", { brandPlugin: samvaBrandPlugin })).toBeUndefined();
     expect(parseBrandSpecifier("samva:brand/Bad_Slug")).toBeUndefined();
   });
 });

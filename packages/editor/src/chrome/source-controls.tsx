@@ -10,7 +10,7 @@ import {
   type SourceProperty,
   type SourceReplacement,
 } from "@samva/markup/edit";
-import type { EmailElementSelection } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 

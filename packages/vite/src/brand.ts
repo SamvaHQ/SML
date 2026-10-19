@@ -41,7 +41,10 @@ export const resolveBrand = async (
   plugin: BrandPlugin | undefined,
 ): Promise<BrandResolution> => {
   if (resolver !== undefined) return resolver.resolve(files, themePath);
-  const specifier = projectBrandSpecifier(files, themePath ?? "", plugin);
+  const specifier = projectBrandSpecifier(files, {
+    themePath: themePath ?? "",
+    brandPlugin: plugin,
+  });
   return specifier === undefined
     ? { ok: true, brand: undefined, source: "none", warnings: [] }
     : {

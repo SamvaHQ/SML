@@ -139,7 +139,7 @@ interface RawIssue {
  * Findings are grouped by construct rather than repeated per client, so one
  * unsupported property is one diagnostic naming every client that drops it.
  */
-export const checkEmailCompatibility = (input: CompatibilityInput): readonly EmailDiagnostic[] => {
+export const checkHtmlCompatibility = (input: CompatibilityInput): readonly EmailDiagnostic[] => {
   const targets = input.clients ?? EMAIL_CLIENT_MATRIX;
   const context = compatibilityContext(input.html, input.css);
   const targetClients = targets.map((target) => target.id);

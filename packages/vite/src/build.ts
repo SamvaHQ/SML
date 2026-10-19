@@ -1,6 +1,6 @@
 import type { EmailDiagnostic } from "@samva/markup/diagnostics";
 import markupPackage from "@samva/markup/package.json" with { type: "json" };
-import type { RenderedIrEmail, RenderedIrWhatsApp, TemplateIr } from "@samva/markup/render";
+import type { RenderedEmail, RenderedWhatsApp, CompiledTemplate } from "@samva/markup/render";
 
 import {
   emailCompatibility,
@@ -27,9 +27,9 @@ export interface FixtureBuild {
   readonly name: string;
   readonly input: unknown;
   readonly ok: boolean;
-  readonly email?: Pick<RenderedIrEmail, "subject" | "preheader" | "html" | "text"> | undefined;
+  readonly email?: Pick<RenderedEmail, "subject" | "preheader" | "html" | "text"> | undefined;
   readonly sms?: string | undefined;
-  readonly whatsapp?: RenderedIrWhatsApp | undefined;
+  readonly whatsapp?: RenderedWhatsApp | undefined;
   readonly diagnostics: readonly EmailDiagnostic[];
 }
 
@@ -42,7 +42,7 @@ export interface TemplateBuild {
   /** Project-relative source of the entry. */
   readonly source: string;
   readonly inputSchema: Readonly<Record<string, unknown>>;
-  readonly ir: TemplateIr;
+  readonly compiled: CompiledTemplate;
   readonly fixtures: readonly FixtureBuild[];
   /** Compile findings, brand findings and asset-base findings. */
   readonly diagnostics: readonly EmailDiagnostic[];
@@ -156,8 +156,8 @@ const buildEntry = (entry: CompiledEntry, assetBase: string | undefined): BuildF
     channels: entry.channels,
     ok,
     source: entry.entryPath,
-    inputSchema: entry.ir.schema,
-    ir: entry.ir,
+    inputSchema: entry.compiled.schema,
+    compiled: entry.compiled,
     fixtures,
     diagnostics,
     compatibility,

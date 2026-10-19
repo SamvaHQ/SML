@@ -73,6 +73,10 @@
       "types": "./dist/compiler.d.ts",
       "import": "./dist/compiler.js"
     },
+    "./compatibility": {
+      "types": "./dist/compatibility.d.ts",
+      "import": "./dist/compatibility.js"
+    },
     "./diagnostics": {
       "types": "./dist/diagnostics.d.ts",
       "import": "./dist/diagnostics.js"
@@ -88,10 +92,6 @@
     "./brand": {
       "types": "./dist/brand.d.ts",
       "import": "./dist/brand.js"
-    },
-    "./brand-sample": {
-      "types": "./dist/brand-sample.d.ts",
-      "import": "./dist/brand-sample.js"
     },
     "./samva-brand": {
       "types": "./samva-brand.d.ts"

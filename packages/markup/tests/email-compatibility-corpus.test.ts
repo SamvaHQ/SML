@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "@effect/vitest";
 
 import {
-  checkEmailCompatibility,
+  checkHtmlCompatibility,
   ESSENTIAL_CONSTRUCTS,
   hasBlockingCompatibility,
 } from "../src/email/compatibility";
@@ -31,7 +31,7 @@ const renderCase = async (entry: (typeof COMPATIBILITY_CORPUS)[number]) => {
   });
   return {
     rendered,
-    findings: checkEmailCompatibility({
+    findings: checkHtmlCompatibility({
       html: rendered.html,
       positions: rendered.positions,
     }),

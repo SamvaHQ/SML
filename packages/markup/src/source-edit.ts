@@ -2,7 +2,7 @@ import { parse } from "@babel/parser";
 
 import { buildLineMap } from "./diagnostic-model";
 import { isObject } from "./internal/guards";
-import { checkStaticProfile, introducedProfileErrors } from "./sml/profile";
+import { checkTemplate, introducedErrors } from "./sml/profile";
 import type { JsxSourceLocation } from "./source-locations";
 
 /** One exact source replacement; before text guards against concurrent changes. */
@@ -317,9 +317,9 @@ export interface ApplyOptions {
 const profileRefusal = (source: string, result: string, guard: ProfileGuard): string | null => {
   const file = guard.file ?? guard.entry;
   const project = (content: string) => ({ ...guard.files, [file]: content });
-  const introduced = introducedProfileErrors(
-    checkStaticProfile(project(source), guard.entry),
-    checkStaticProfile(project(result), guard.entry),
+  const introduced = introducedErrors(
+    checkTemplate(project(source), { entry: guard.entry }),
+    checkTemplate(project(result), { entry: guard.entry }),
   );
   const first = introduced[0];
   if (first === undefined) return null;

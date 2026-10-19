@@ -1,21 +1,17 @@
 import type { AssetEntry, BrandPlugin } from "@samva/markup/brand";
-import { checkEmailCompatibility, compileTemplate } from "@samva/markup/compiler";
+import { checkCompatibility } from "@samva/markup/compatibility";
+import { compileTemplate } from "@samva/markup/compiler";
 import type { EmailDiagnostic } from "@samva/markup/diagnostics";
-import type {
-  RenderedIrEmail,
-  RenderedIrWhatsApp,
-  RenderOptions,
-  TemplateIr,
-} from "@samva/markup/render";
-import { renderIr, renderIrSms, renderIrWhatsApp } from "@samva/markup/render";
+import type { CompiledTemplate, RenderedEmail, RenderedWhatsApp } from "@samva/markup/render";
+import { render } from "@samva/markup/render";
 
 import type { ResolvedBrand } from "./brand";
 import type { ProjectFiles } from "./layout";
 
 // The local build. A template is one TSX file in a static profile, so compiling
 // it reads the project's files and never runs them: `compileTemplate` is the
-// same call the hosted build makes, and rendering is `renderIr` over the IR it
-// returns. Nothing local is evaluated, so a local render cannot drift from a
+// same call the hosted build makes, and rendering is `render` over the template
+// it returns. Nothing local is evaluated, so a local render cannot drift from a
 // published one.
 
 export type TemplateChannel = "email" | "sms" | "whatsapp";
@@ -23,8 +19,8 @@ export type TemplateChannel = "email" | "sms" | "whatsapp";
 const CHANNELS: readonly TemplateChannel[] = ["email", "sms", "whatsapp"];
 
 /** The channels a compiled template declares, in a fixed order. */
-export const channelsOf = (ir: TemplateIr): readonly TemplateChannel[] =>
-  CHANNELS.filter((channel) => ir[channel] !== undefined);
+export const channelsOf = (template: CompiledTemplate): readonly TemplateChannel[] =>
+  CHANNELS.filter((channel) => template[channel] !== undefined);
 
 export const finding = (
   code: string,
@@ -35,11 +31,11 @@ export const finding = (
 
 /** One entry that declares a template and compiled. */
 export interface CompiledEntry {
-  /** The identity the definition declares for itself (`ir.template`). */
+  /** The identity the definition declares for itself (`compiled.template`). */
   readonly id: string;
   /** Project-relative path of the authored entry. */
   readonly entryPath: string;
-  readonly ir: TemplateIr;
+  readonly compiled: CompiledTemplate;
   readonly fixtures: Readonly<Record<string, unknown>>;
   readonly assets: readonly AssetEntry[];
   /** Compile warnings. Errors leave no IR, so they are on a `FailedEntry` instead. */
@@ -107,8 +103,8 @@ const compileEntry = async (input: CompileProjectInput, entryPath: string): Prom
   if (!attempt.ok)
     return { kind: "failed", entry: { entryPath, diagnostics: [failure(attempt.cause)] } };
   const { compiled } = attempt;
-  const { ir } = compiled;
-  if (ir === undefined) {
+  const template = compiled.template;
+  if (template === undefined) {
     return isHelper(compiled.diagnostics)
       ? { kind: "helper", entryPath }
       : { kind: "failed", entry: { entryPath, diagnostics: compiled.diagnostics } };
@@ -116,13 +112,13 @@ const compileEntry = async (input: CompileProjectInput, entryPath: string): Prom
   return {
     kind: "template",
     entry: {
-      id: ir.template,
+      id: template.template,
       entryPath,
-      ir,
+      compiled: template,
       fixtures: compiled.fixtures,
       assets: compiled.assets,
       diagnostics: compiled.diagnostics,
-      channels: channelsOf(ir),
+      channels: channelsOf(template),
       brandPlugin: input.brandPlugin,
     },
   };
@@ -197,11 +193,19 @@ const renderFindings = (
   ];
 };
 
+/** What a fixture render reads besides the template and its input. */
+export interface FixtureRenderOptions {
+  /** Overrides the template's locale for formatters. */
+  readonly locale?: string | undefined;
+  /** IANA time zone for date and time formatters; defaults to UTC. */
+  readonly timeZone?: string | undefined;
+}
+
 /** One fixture rendered through the email channel of the template it belongs to. */
 export interface RenderedFixture {
   readonly templateId: string;
   readonly fixture: string;
-  readonly rendered: RenderedIrEmail | undefined;
+  readonly rendered: RenderedEmail | undefined;
   readonly diagnostics: readonly EmailDiagnostic[];
 }
 
@@ -211,8 +215,8 @@ export interface RenderedFixture {
  * one bad input does not take the rest of the catalog with it.
  */
 export const renderEmailFixtures = (
-  entry: Pick<CompiledEntry, "id" | "ir" | "fixtures" | "brandPlugin">,
-  options: RenderOptions = {},
+  entry: Pick<CompiledEntry, "id" | "compiled" | "fixtures" | "brandPlugin">,
+  options: FixtureRenderOptions = {},
 ): readonly RenderedFixture[] =>
   Object.entries(entry.fixtures).map(([fixture, input]) => {
     // oxlint-disable-next-line samva/no-try-catch-or-throw -- Plain library boundary: the renderer signals a refused render by throwing.
@@ -220,8 +224,8 @@ export const renderEmailFixtures = (
       return {
         templateId: entry.id,
         fixture,
-        rendered: renderIr(entry.ir, input, {
-          positions: true,
+        rendered: render(entry.compiled, input, {
+          channel: "email",
           ...options,
           ...(entry.brandPlugin === undefined ? {} : { brandPlugin: entry.brandPlugin }),
         }),
@@ -239,47 +243,31 @@ export const renderEmailFixtures = (
 
 /** Client-matrix findings across the fixtures that rendered. */
 export const emailCompatibility = (
-  entry: Pick<CompiledEntry, "ir" | "fixtures">,
+  entry: Pick<CompiledEntry, "compiled" | "fixtures" | "brandPlugin">,
   rendered: readonly RenderedFixture[],
-): readonly EmailDiagnostic[] => {
-  return rendered.flatMap((result) => {
-    if (result.rendered === undefined) return [];
-    return checkEmailCompatibility({
-      html: result.rendered.html,
-      fixture: result.fixture,
-      positions: (result.rendered.positions ?? []).map((position, index) => ({
-        start: position.start,
-        end: position.end,
-        tag: position.tag,
-        instancePath: String(index),
-        authored: true,
-        origins:
-          position.src === undefined
-            ? []
-            : [
-                {
-                  fileName: entry.ir.sources?.[position.src[2] ?? 0] ?? "",
-                  lineNumber: position.src[0],
-                  columnNumber: position.src[1],
-                },
-              ],
-      })),
-    });
-  });
-};
+): readonly EmailDiagnostic[] =>
+  checkCompatibility(
+    entry.compiled,
+    Object.fromEntries(
+      rendered
+        .filter((result) => result.rendered !== undefined)
+        .map((result) => [result.fixture, entry.fixtures[result.fixture]]),
+    ),
+    { brandPlugin: entry.brandPlugin },
+  );
 
 /** A channel's rendered output for one fixture, or the findings that stopped it. */
 export type RenderedChannel =
   | { readonly ok: true; readonly channel: "sms"; readonly text: string }
-  | { readonly ok: true; readonly channel: "whatsapp"; readonly message: RenderedIrWhatsApp }
+  | { readonly ok: true; readonly channel: "whatsapp"; readonly message: RenderedWhatsApp }
   | { readonly ok: false; readonly diagnostics: readonly EmailDiagnostic[] };
 
 /** Render the SMS or WhatsApp channel of one fixture. */
 export const renderChannelFixture = (
-  entry: Pick<CompiledEntry, "id" | "ir" | "fixtures" | "brandPlugin">,
+  entry: Pick<CompiledEntry, "id" | "compiled" | "fixtures" | "brandPlugin">,
   channel: "sms" | "whatsapp",
   fixture: string,
-  options: RenderOptions = {},
+  options: FixtureRenderOptions = {},
 ): RenderedChannel => {
   if (!Object.hasOwn(entry.fixtures, fixture))
     return {
@@ -296,8 +284,8 @@ export const renderChannelFixture = (
   try {
     const input = entry.fixtures[fixture];
     return channel === "sms"
-      ? { ok: true, channel, text: renderIrSms(entry.ir, input, options) }
-      : { ok: true, channel, message: renderIrWhatsApp(entry.ir, input, options) };
+      ? { ok: true, channel, text: render(entry.compiled, input, { channel, ...options }).text }
+      : { ok: true, channel, message: render(entry.compiled, input, { channel, ...options }) };
   } catch (cause) {
     return { ok: false, diagnostics: renderFindings(cause, entry.id, fixture) };
   }

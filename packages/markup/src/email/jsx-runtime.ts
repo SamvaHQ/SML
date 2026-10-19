@@ -24,8 +24,15 @@ export type EmailNode =
        * can have its own props edited there.
        */
       readonly authored: boolean;
+      /** Findings a primitive saw while building this node; see `withEmailDiagnostics`. */
+      readonly diagnostics?: readonly EmailDiagnostic[];
     }
-  | { readonly type: "Fragment"; readonly children: readonly EmailNode[] }
+  | {
+      readonly type: "Fragment";
+      readonly children: readonly EmailNode[];
+      /** Findings a primitive saw while building this node; see `withEmailDiagnostics`. */
+      readonly diagnostics?: readonly EmailDiagnostic[];
+    }
   /**
    * Compatibility markup a compiler primitive emits verbatim — conditional
    * comments and VML. Only the primitives in `./components` construct it;
@@ -85,19 +92,37 @@ const callSites: JsxSourceLocation[] = [];
 /** Call sites enclosing the element being built, innermost first. */
 export const currentEmailOrigins = (): readonly JsxSourceLocation[] => [...callSites].reverse();
 
-// Primitives report authoring problems they can see but cannot express in the
-// tree (a Button without the size its classic-Outlook fallback needs). The sink
-// is drained by `renderEmail` before and after each render, and the isolated
-// host gives every render a fresh module graph besides.
-const reported: EmailDiagnostic[] = [];
+/** A finding a primitive records before `withEmailDiagnostics` locates it. */
+export type EmailFinding = Omit<EmailDiagnostic, "origins">;
 
-/** Record a finding from inside a compiler primitive, located at the authoring call site. */
-export const reportEmailDiagnostic = (diagnostic: Omit<EmailDiagnostic, "origins">): void => {
-  reported.push({ ...diagnostic, origins: currentEmailOrigins() });
+// Primitives report authoring problems they can see but cannot express in the
+// tree (a Button without the size its classic-Outlook fallback needs). The
+// findings ride on the node the primitive returns, so they travel with the tree
+// and no render can see another's. A node without a place for them (text, raw
+// markup) is returned unchanged; every primitive that reports returns an element
+// or fragment.
+
+/** Attach findings to a primitive's output, located at the authoring call site. */
+export const withEmailDiagnostics = (
+  node: EmailNode,
+  findings: readonly EmailFinding[],
+): EmailNode => {
+  if (findings.length === 0 || (node.type !== "Element" && node.type !== "Fragment")) return node;
+  const origins = currentEmailOrigins();
+  return {
+    ...node,
+    diagnostics: [
+      ...(node.diagnostics ?? []),
+      ...findings.map((finding) => ({ ...finding, origins })),
+    ],
+  };
 };
 
-/** Take and clear the findings primitives reported during a render. */
-export const drainEmailDiagnostics = (): readonly EmailDiagnostic[] => reported.splice(0);
+/** Every finding attached to a tree, in document order. */
+export const collectEmailDiagnostics = (node: EmailNode): readonly EmailDiagnostic[] => {
+  if (node.type !== "Element" && node.type !== "Fragment") return [];
+  return [...(node.diagnostics ?? []), ...node.children.flatMap(collectEmailDiagnostics)];
+};
 
 // oxlint-disable samva/no-try-catch-or-throw, samva/no-error-constructor -- Synchronous JSX authoring failures belong to the build/render caller.
 /** Normalize actual values without interpolation or recording proxies. */

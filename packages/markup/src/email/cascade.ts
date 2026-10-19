@@ -335,7 +335,7 @@ export const applyStylesheet = (
           return result;
         }
         if (child.type === "Fragment")
-          return EmailNode.Fragment({ children: visit(child.children) });
+          return EmailNode.Fragment({ ...child, children: visit(child.children) });
         if (child.type === "Raw" && child.html.includes("var("))
           return EmailNode.Raw({ ...child, html: resolveMarkupVariables(child.html, variables) });
         return child;
@@ -526,6 +526,7 @@ export const applyStylesheet = (
         )
       : root.type === "Fragment"
         ? EmailNode.Fragment({
+            ...root,
             children: visitChildren(
               root.children,
               undefined,

@@ -3,7 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { DIAGNOSTIC_CODES } from "../src/diagnostic-codes";
 import { formatEmailDiagnostic } from "../src/email/diagnostics";
 import { compileTemplate } from "../src/sml/compile";
-import { checkStaticProfile, introducedProfileErrors } from "../src/sml/profile";
+import { checkTemplate, introducedErrors } from "../src/sml/profile";
 
 const template = (body: string, extra = ""): string => `
 import { defineTemplate } from "@samva/markup";
@@ -30,9 +30,9 @@ export default defineTemplate({
 `;
 
 const codes = (source: string, path?: string) =>
-  checkStaticProfile(source, path).map((item) => item.code);
+  checkTemplate(source, { entry: path }).map((item) => item.code);
 
-describe("checkStaticProfile", () => {
+describe("checkTemplate", () => {
   it("accepts a template that reads a bound field", () => {
     expect(codes(template('<Email><p className="text-sm">Hi {input.name}</p></Email>'))).toEqual(
       [],
@@ -56,14 +56,16 @@ describe("checkStaticProfile", () => {
       "templates/header.tsx":
         "export const Header = ({ name }: { name: string }) => <h1>{name}</h1>;",
     };
-    expect(checkStaticProfile(files, "templates/entry.tsx")).toEqual([]);
+    expect(checkTemplate(files, { entry: "templates/entry.tsx" })).toEqual([]);
     const broken = {
       ...files,
       "templates/header.tsx":
         "export const Header = ({ name }: { name: string }) => <h1>{name.toUpperCase()}</h1>;",
     };
     expect(
-      checkStaticProfile(broken, "templates/entry.tsx").some((item) => item.severity === "error"),
+      checkTemplate(broken, { entry: "templates/entry.tsx" }).some(
+        (item) => item.severity === "error",
+      ),
     ).toBe(true);
   });
 
@@ -74,7 +76,7 @@ describe("checkStaticProfile", () => {
     ["an unguarded optional", "<Email><p>{input.trackingUrl}</p></Email>"],
     ["a computed class name", "<Email><p className={`text-${input.name}`}>x</p></Email>"],
   ])("finds %s", (_label, body) => {
-    expect(checkStaticProfile(template(body)).some((item) => item.severity === "error")).toBe(true);
+    expect(checkTemplate(template(body)).some((item) => item.severity === "error")).toBe(true);
   });
 
   it("reports the same codes as the full compile for structural findings", async () => {
@@ -86,7 +88,7 @@ describe("checkStaticProfile", () => {
       tailwind: false,
     });
     const compiledErrors = compiled.diagnostics.filter((item) => item.severity === "error");
-    const checked = checkStaticProfile(source, "entry.tsx").filter(
+    const checked = checkTemplate(source, { entry: "entry.tsx" }).filter(
       (item) => item.severity === "error",
     );
     expect(checked.map((item) => [item.code, item.message])).toEqual(
@@ -95,7 +97,7 @@ describe("checkStaticProfile", () => {
   });
 
   it("reports a defineEmail entry as outside the profile", () => {
-    const diagnostics = checkStaticProfile(
+    const diagnostics = checkTemplate(
       'import { defineEmail } from "@samva/markup/template";\nexport default defineEmail({});',
     );
     const diagnostic = diagnostics.find((item) => item.code === "legacy-definition")!;
@@ -107,7 +109,7 @@ describe("checkStaticProfile", () => {
   });
 
   it("omits upgrade recipes and preserves formatting for ordinary findings", () => {
-    const diagnostic = checkStaticProfile("export default 42;", "entry.tsx")[0]!;
+    const diagnostic = checkTemplate("export default 42;", { entry: "entry.tsx" })[0]!;
     expect(diagnostic.code).toBe("no-template");
     expect(diagnostic).not.toHaveProperty("upgrade");
     expect(formatEmailDiagnostic(diagnostic)).toBe(
@@ -123,15 +125,15 @@ describe("checkStaticProfile", () => {
   });
 });
 
-describe("introducedProfileErrors", () => {
+describe("introducedErrors", () => {
   it("counts only errors the source did not already have", () => {
-    const before = checkStaticProfile(template("<Email><p>{input.nmae}</p></Email>"));
-    const same = checkStaticProfile(template("<Email><p>{input.nmae}</p><p>x</p></Email>"));
-    const worse = checkStaticProfile(
+    const before = checkTemplate(template("<Email><p>{input.nmae}</p></Email>"));
+    const same = checkTemplate(template("<Email><p>{input.nmae}</p><p>x</p></Email>"));
+    const worse = checkTemplate(
       template("<Email><p>{input.nmae}</p><p>{input.name.trim()}</p></Email>"),
     );
-    expect(introducedProfileErrors(before, same)).toEqual([]);
-    expect(introducedProfileErrors(before, worse).length).toBeGreaterThan(0);
-    expect(introducedProfileErrors(worse, before)).toEqual([]);
+    expect(introducedErrors(before, same)).toEqual([]);
+    expect(introducedErrors(before, worse).length).toBeGreaterThan(0);
+    expect(introducedErrors(worse, before)).toEqual([]);
   });
 });

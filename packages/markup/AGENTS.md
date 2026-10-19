@@ -2,8 +2,8 @@
 
 `@samva/markup` is the authoring language and compiler for Samva templates. A template is one TSX
 file in a static profile that default-exports `defineTemplate`: ordinary JSX, HTML and Tailwind that
-a compiler reads without running. The compiler produces a versioned JSON IR, and a pure renderer
-turns the IR and an input into subject, preheader, HTML and text, so nothing executes at send time.
+a compiler reads without running. The compiler produces a versioned JSON compiled template, and a
+pure renderer turns it and an input into a message, so nothing executes at send time.
 A body that would compute over its input is a diagnostic, not a second mode: compute the value in
 the caller and send it in the payload. The package is plain TypeScript with no application runtime;
 the local editor, project builds, and exports live in `@samva/vite`.
@@ -32,49 +32,51 @@ Authoring entries are what a template file imports:
   `"types": ["@samva/markup/samva-brand"]` to the project's tsconfig for `tsc`. In `theme.css`,
   `@import "samva:brand";` layers the brand theme over the default theme (`DEFAULT_THEME`); `samva:brand/<slug>` names one brand. These are
   Samva's brand plugin (`samvaBrandPlugin` from `@samva/markup/brand`), the default; a host that
-  delivers mail itself passes its own `BrandPlugin` as `brandPlugin` to `compileTemplate`,
-  `renderIr` and `renderBrandFooter` to rename the brand import, the footer markers, the
-  unsubscribe placeholder and the unsubscribe link's no-track marker.
+  delivers mail itself passes its own `BrandPlugin` as the `brandPlugin` option of `compileTemplate`,
+  `render` and `compileFooter` to rename the brand import, the footer markers, the unsubscribe
+  placeholder and the unsubscribe link's no-track marker.
 
 Tooling entries are what a host (Vite, the CLI, the editor, the API, the template agent) imports:
 
-- `@samva/markup/compiler` — `compileTemplate`, which reads a project's files and returns the IR,
-  the fixtures, the assets and the diagnostics; `checkTemplateCompatibility` checks each fixture
-  against the client matrix and locates findings at source. `checkStaticProfile(source | files,
-entry?)` is the synchronous structural check: it runs the compiler's lowering without Tailwind, a
-  brand or the files an import names, and returns only findings the source itself owns.
-  `introducedProfileErrors(before, after)` is what a visual edit is refused on. It also holds the
-  compiler's building blocks (`transformProject`, Tailwind, the cascade, CSS), the brand footer and
-  sample renders (`renderBrandFooter`, `renderBrandSample`), and `TEMPLATE_NAME_PATTERN`. It imports
-  no Vite, esbuild, or Node builtins, so it runs in Node, Bun and Workers; caniemail's glob
-  dependency reads `process` when it loads, so a browser takes `./brand-sample` instead.
+- `@samva/markup/compiler` — `compileTemplate`, which reads a project's files and returns a
+  `CompileResult`: the compiled `template`, the fixtures, the assets and the diagnostics.
+  `checkTemplate(source | files, { entry?, brandPlugin? })` is the synchronous structural check: it
+  runs the compiler's lowering without Tailwind, a brand or the files an import names, and returns
+  only findings the source itself owns. `introducedErrors(before, after)` is what a visual edit is
+  refused on. It also holds the brand compiles: `compileFooter`, the footer a send appends (with
+  its unsubscribe row, which the send drops with `withoutUnsubscribeRow`; a brand theme outside the
+  grammar comes back as diagnostics), and `previewBrand`, a sample email in an unsaved brand
+  compiled and rendered as a template that imports the brand. It imports no
+  Vite, esbuild, Node builtins or caniemail, so it runs in Node, Bun, Workers and the browser
+  (`tests/browser-entries.test.ts` loads it without `process`).
+- `@samva/markup/compatibility` — `checkCompatibility`, which checks each fixture against
+  the client matrix and locates findings at source; `checkHtmlCompatibility` for HTML a host
+  already has; `hasBlockingCompatibility` and the matrix. It is the only entry that loads
+  caniemail, whose glob dependency reads `process` when it loads.
 - `@samva/markup/diagnostics` — source spans and line maps, the `DIAGNOSTIC_CODES` registry with
-  each code's fix and upgrade recipe, and `EmailDiagnostic`/`EmailCompileError`. It does not load
-  the compiler, so a host that only reports imports it.
-- `@samva/markup/render` — `renderIr(ir, input, { locale, timeZone })`, `renderIrSms` and
-  `renderIrWhatsApp`; the IR types and `SML_IR_VERSION`; `renderIrPreview(ir, input)`, the render an
-  editor shows, with an instance path (`INSTANCE_PATH_ATTRIBUTE`) on every element and the
-  `selections` that map each one to its TSX span; `compileEmail`, the HTML serializer and text
-  derivation; the email element table; SMS segment counts. Its import closure excludes the
-  compiler's libraries (`tests/entry-closure.test.ts`): it is the send-time security boundary and
-  what the API bundles.
+  each code's fix and upgrade recipe, and `EmailDiagnostic`. It does not load the compiler, so a
+  host that only reports imports it.
+- `@samva/markup/render` — `render(template, input, { channel, locale?, timeZone?, brandPlugin? })`,
+  which returns the `channel`'s message (`RenderedEmail`, `RenderedSms` with its segment counts, or
+  `RenderedWhatsApp`) and throws only `RenderError`, including for a template compiled by another
+  `COMPILED_TEMPLATE_VERSION`; the `Compiled*` types; the email element table and `escapeText` /
+  `escapeAttribute`; `smsSegmentInfo`. Its import closure excludes the compiler's libraries
+  (`tests/entry-closure.test.ts`): it is the send-time security boundary and what the API bundles.
 - `@samva/markup/edit` — the code transforms behind visual edits (`inspectSourceElement`,
   `literalReplacement`, `expressionReplacement`, `classNameEdit`, `structuralReplacements`,
   `applySourceReplacements` with a `ProfileGuard`); form reads and exact edits for the `sms` and
   `whatsapp` channel bodies (`readSmsChannel`, `editSmsChannel`, `readWhatsAppChannel`,
   `editWhatsAppChannel`), where text between expressions is editable and every expression,
-  conditional or element is a locked segment; and JSX source locations. Browser-safe: Babel parser
-  only.
+  conditional or element is a locked segment; JSX source locations; and `previewEmail(template,
+input)`, the render an editor shows, with an instance path (`INSTANCE_PATH_ATTRIBUTE`) on every
+  element and the `selections` that map each one to its TSX span. Browser-safe: its closure holds
+  Babel's parser and css-tree only (`tests/entry-closure.test.ts`).
 - `@samva/markup/brand` — brand records and their CSS model (`parseBrandCss`, `printBrandCss`), the
   theme vocabulary (`THEME_COLOR_ROLES`, `THEME_TOKENS`, `DEFAULT_THEME`, `foregroundDefaults`), the
   footer markers a send reads (`renderedFooterMarkers`, `withoutUnsubscribeRow`), and project
   assets (`isAssetPath`, `ASSET_CONTENT_TYPES`, `assetUrl`): which imported files become
   content-addressed assets. The send path imports it, so its closure holds only the css-tree parser
   `theme.css` needs; rendering a footer compiles Tailwind and lives in `./compiler`.
-- `@samva/markup/brand-sample` — `renderBrandSample`, the brand preview a dashboard compiles in
-  the browser against an unsaved brand. Its closure holds Tailwind, Babel and css-tree but not
-  caniemail (`tests/entry-closure.test.ts`), and it loads without `process`
-  (`tests/brand-sample-entry.test.ts`).
 
 `tests/published-dependencies.test.ts` pins this list. The compiler's libraries (Babel, Tailwind,
 css-tree, caniemail) are dependencies, because a template project depends on this package alone and
@@ -129,7 +131,7 @@ Read the contract before authoring. Import only subpaths declared in `package.js
   generated `sml-dark-*` class, so `bg-card` switches by itself. A `--color-card-dark` token is just
   another color, and `dark:` only picks a different token. A block styled with palette colors
   (`bg-indigo-600`) or raw hex ignores the theme; style with the vocabulary in `THEME_COLOR_ROLES`.
-- **Reading contrast off the light render.** `checkEmailCompatibility` includes `email-contrast`,
+- **Reading contrast off the light render.** `checkHtmlCompatibility` includes `email-contrast`,
   which judges each fixture in light and dark mode (`CONTRAST_THRESHOLDS`); a color a dark block
   leaves unpaired is an error there, not a visual nit.
 - **Declaring a webfont as if every client loads it.** A project font is an ordinary `@font-face`
@@ -151,12 +153,12 @@ Read the contract before authoring. Import only subpaths declared in `package.js
   channel. Helper modules are ordinary imports, not catalog entries; a partial is a function from
   props (and `children`) to JSX that the compiler inlines. A fixture is data: literals, constants
   and imported assets.
-- **The IR is the artifact.** Rendering is a pure function of the IR and the input. The renderer
-  escapes per context, applies the serializer's URL and style rules to every bound value, and
-  rejects unsafe input rather than sanitizing it.
+- **The compiled template is the artifact.** Rendering is a pure function of the template and the
+  input. The renderer escapes per context, applies the serializer's URL and style rules to every
+  bound value, and rejects unsafe input rather than sanitizing it.
 - **Failures are typed.** Compilation reports diagnostic values with a code, a location and a fix:
-  `compileTemplate` returns them beside the IR, and an error finding leaves no IR. A declaration the compiler cannot
-  accept at all, such as an invalid name or a nonportable input schema, throws a `TypeError`.
+  `compileTemplate` returns them beside the template, and an error finding leaves no template. A
+  declaration the compiler cannot accept at all, such as an invalid name or a nonportable input schema, throws a `TypeError`.
 - **Data models are plain types.** Markup's data models are TypeScript types, not schema
   declarations, so there is no schema library to adopt to consume them. Unions discriminate on
   `type`; only error classes carry `_tag`. The input schema is the one
@@ -166,9 +168,9 @@ Read the contract before authoring. Import only subpaths declared in `package.js
 
 - `tsc --noEmit` over the template project catches unsupported elements, attributes, and props.
 - `compileTemplate` reports every static-profile, binding and fixture finding with a source
-  location, and `renderIr(compiled.ir, fixture)` proves one fixture's output without executing the
-  template.
+  location, and `render(compiled.template, fixture, { channel: "email" })` proves one fixture's
+  output without executing the template.
 - `samva templates check` (from `@samva/cli`) compiles every entry and renders every fixture,
   reporting findings with source locations.
-- `renderIrPreview(compiled.ir, fixture)` returns the same document with the source spans an editor
-  selects by.
+- `previewEmail(compiled.template, fixture)` returns the same document with the source spans an
+  editor selects by.

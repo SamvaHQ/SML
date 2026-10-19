@@ -70,12 +70,12 @@ export type WhatsAppButtonRow =
 export interface WhatsAppChannelForm {
   readonly language: AttributeState;
   readonly category: AttributeState;
-  /** Null when the template has no header. */
-  readonly header: readonly ChannelSegment[] | null;
+  /** Undefined when the template has no header. */
+  readonly header: readonly ChannelSegment[] | undefined;
   readonly headerType: AttributeState;
   readonly body: readonly ChannelSegment[];
-  /** Null when the template has no footer. */
-  readonly footer: readonly ChannelSegment[] | null;
+  /** Undefined when the template has no footer. */
+  readonly footer: readonly ChannelSegment[] | undefined;
   readonly buttons: readonly WhatsAppButtonRow[];
   readonly variables: readonly string[];
 }
@@ -577,10 +577,10 @@ const smsChannel = (source: string): SmsChannel | null => {
   return { ...channel, tree };
 };
 
-/** The form model of the template's SMS body, or null when it is not a `<Sms>` written in place. */
-export const readSmsChannel = (source: string): SmsChannelForm | null => {
+/** The form model of the template's SMS body, or undefined when it is not a `<Sms>` written in place. */
+export const readSmsChannel = (source: string): SmsChannelForm | undefined => {
   const channel = smsChannel(source);
-  if (channel === null) return null;
+  if (channel === null) return undefined;
   return {
     category: attributeState(source, channel.root, "category"),
     segments: segmentsOf(source, channel.root),
@@ -689,19 +689,19 @@ const buttonRows = (
   return rows;
 };
 
-/** The form model of the template's WhatsApp body, or null when it is not a `<WhatsApp>` written in place. */
-export const readWhatsAppChannel = (source: string): WhatsAppChannelForm | null => {
+/** The form model of the template's WhatsApp body, or undefined when it is not a `<WhatsApp>` written in place. */
+export const readWhatsAppChannel = (source: string): WhatsAppChannelForm | undefined => {
   const channel = whatsappChannel(source);
-  if (channel === null || channel.body === null) return null;
+  if (channel === null || channel.body === null) return undefined;
   const { root } = channel;
   return {
     language: attributeState(source, root, "language"),
     category: attributeState(source, root, "category"),
-    header: channel.header === null ? null : segmentsOf(source, channel.header),
+    header: channel.header === null ? undefined : segmentsOf(source, channel.header),
     headerType:
       channel.header === null ? { kind: "absent" } : attributeState(source, channel.header, "type"),
     body: segmentsOf(source, channel.body),
-    footer: channel.footer === null ? null : segmentsOf(source, channel.footer),
+    footer: channel.footer === null ? undefined : segmentsOf(source, channel.footer),
     buttons: buttonRows(source, channel).map(({ row }) => row),
     variables: variablesOf(source, root, channel.parameter),
   };

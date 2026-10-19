@@ -4,7 +4,7 @@
 Vite plugin that serves the visual editor, a config-free dev server, and programmatic entry points
 that build, render, and export a template project. A template is one TSX file in a static profile,
 and nothing here runs it: every check, render and preview is `compileTemplate` from
-`@samva/markup/compiler` followed by `renderIr`, the same two steps a hosted Samva build takes, so a
+`@samva/markup/compiler` followed by `render`, the same two steps a hosted Samva build takes, so a
 local render does not drift from a published one. Publishing and hosted synchronization are not
 here: they are ordinary Git plus `samva templates publish` from `@samva/cli` (see
 `samva templates --help`).

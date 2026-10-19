@@ -16,11 +16,7 @@ import {
 } from "@samva/editor/host/effect";
 import type { EmailDiagnostic } from "@samva/markup/diagnostics";
 import type { JsxSourceLocation } from "@samva/markup/edit";
-import {
-  emailSelections,
-  INSTANCE_PATH_ATTRIBUTE,
-  type EmittedPosition,
-} from "@samva/markup/render";
+import { emailSelections, INSTANCE_PATH_ATTRIBUTE, type EmittedPosition } from "@samva/markup/edit";
 import { Effect, PubSub, Ref, Stream } from "effect";
 
 /** The project entry the dev harness and the component tests edit. */

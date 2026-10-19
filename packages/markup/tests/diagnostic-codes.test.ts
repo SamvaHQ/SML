@@ -3,19 +3,19 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "@effect/vitest";
 
+import { COMPILED_TEMPLATE_VERSION } from "../src/compiled-template";
 import {
   DIAGNOSTIC_CODE_FAMILIES,
   DIAGNOSTIC_CODES,
   hasUpgradeRecipe,
 } from "../src/diagnostic-codes";
 import { FORMATTER_NAMES } from "../src/fmt";
-import { SML_IR_VERSION } from "../src/ir";
 import { PROFILE_FORMS, PROFILE_REJECTED } from "../src/sml/profile";
 
 const SOURCE_ROOT = join(import.meta.dirname, "..", "src");
 
 /** Brand stylesheet and render-time errors have their own code spaces, not template diagnostics. */
-const OTHER_CODE_SPACES = ["theme-css.ts", "render-ir.ts"];
+const OTHER_CODE_SPACES = ["theme-css.ts", "render-template.ts"];
 
 const sourceFiles = (directory: string): string[] =>
   readdirSync(directory).flatMap((name) => {
@@ -76,7 +76,7 @@ describe("generated contract", () => {
     diagnostics: { code: string; upgrade?: string; channelOnly?: true }[];
     profile: { forms: unknown[]; rejected: unknown[] };
     formatters: { name: string }[];
-    irVersion: number;
+    compiledTemplateVersion: number;
   };
 
   it("lists the registry, the profile table and the formatters (run codegen:contract)", () => {
@@ -107,6 +107,6 @@ describe("generated contract", () => {
     expect(contract.formatters.map((entry) => entry.name)).toEqual(
       FORMATTER_NAMES.map((name) => `fmt.${name}`),
     );
-    expect(contract.irVersion).toBe(SML_IR_VERSION);
+    expect(contract.compiledTemplateVersion).toBe(COMPILED_TEMPLATE_VERSION);
   });
 });

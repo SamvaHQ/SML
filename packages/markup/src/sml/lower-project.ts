@@ -1,3 +1,12 @@
+import {
+  COMPILED_TEMPLATE_VERSION,
+  type CompiledElement,
+  type CompiledNode,
+  type CompiledRaw,
+  type CompiledSource,
+  type CompiledValue,
+  type CompiledTemplate,
+} from "../compiled-template";
 // oxlint-disable samva/no-hand-rolled-object-guard -- IR nodes and Babel nodes are this package's own typed data, discriminated structurally; nothing here validates external input.
 import type { DiagnosticCode } from "../diagnostic-codes";
 import type { AssetEntry } from "../email/assets";
@@ -8,15 +17,6 @@ import type { TemplateDiagnostic } from "../email/diagnostics";
 import { samvaBrandPlugin } from "../email/samva-brand-plugin";
 import { mergeStylesheets } from "../email/stylesheets";
 import { inputSchema, jsonSchema } from "../input-schema";
-import {
-  SML_IR_VERSION,
-  type IrElement,
-  type IrNode,
-  type IrRaw,
-  type IrSource,
-  type IrValue,
-  type TemplateIr,
-} from "../ir";
 import { TEMPLATE_ID_PATTERN, TEMPLATE_NAME_PATTERN } from "../template";
 import { child, children, text, unwrap, type Node } from "./ast";
 import { isValueNode, type Binding } from "./bindings";
@@ -28,16 +28,16 @@ import type { Project, ProjectModule } from "./project";
 import { applyStyles } from "./styles";
 import { propertyKey, readStatic, type StaticContext } from "./values";
 
-// The lowering half of the static compile: a loaded project in, IR and findings out. It needs
-// no Tailwind and no brand, so it is what `checkStaticProfile` runs in the browser.
+// The lowering half of the static compile: a loaded project in, a compiled template and findings
+// out. It needs no Tailwind and no brand, so it is what `checkTemplate` runs in the browser.
 
-export interface CompiledTemplate {
-  /** The IR, or `undefined` when a finding blocks it. */
-  readonly ir: TemplateIr | undefined;
+export interface CompileResult {
+  /** The compiled template, or `undefined` when a finding blocks it. */
+  readonly template: CompiledTemplate | undefined;
   /** The fixtures read from the entry, with imported assets resolved to their URLs. */
   readonly fixtures: Readonly<Record<string, unknown>>;
   readonly assets: readonly AssetEntry[];
-  /** Errors block the IR; warnings ride along. */
+  /** Errors block the template; warnings ride along. */
   readonly diagnostics: readonly TemplateDiagnostic[];
 }
 
@@ -156,13 +156,13 @@ const stylesheetOrder = (project: Project): readonly string[] => {
 
 /** Rebuild a tree with `edit` applied to the first element it matches. */
 const editFirst = (
-  nodes: readonly IrNode[],
-  matches: (element: IrElement) => boolean,
-  edit: (element: IrElement) => IrElement,
-): { readonly nodes: IrNode[]; readonly done: boolean } => {
+  nodes: readonly CompiledNode[],
+  matches: (element: CompiledElement) => boolean,
+  edit: (element: CompiledElement) => CompiledElement,
+): { readonly nodes: CompiledNode[]; readonly done: boolean } => {
   let done = false;
-  const walk = (list: readonly IrNode[]): IrNode[] =>
-    list.map((node): IrNode => {
+  const walk = (list: readonly CompiledNode[]): CompiledNode[] =>
+    list.map((node): CompiledNode => {
       if (done || isValueNode(node)) return node;
       if ("el" in node) {
         if (matches(node)) {
@@ -186,8 +186,8 @@ const editFirst = (
   return { nodes: result, done };
 };
 
-const HEAD_COMMENT_OPEN: IrRaw = { raw: ["<!--[if !mso]><!-->"] };
-const HEAD_COMMENT_CLOSE: IrRaw = { raw: ["<!--<![endif]-->"] };
+const HEAD_COMMENT_OPEN: CompiledRaw = { raw: ["<!--[if !mso]><!-->"] };
+const HEAD_COMMENT_CLOSE: CompiledRaw = { raw: ["<!--<![endif]-->"] };
 
 /** What the compile needs from the project transform: the assets and the stylesheets it built. */
 export interface ResolvedInputs {
@@ -210,14 +210,17 @@ export interface LowerOptions {
 interface ExternalImage {
   readonly url: string;
   readonly host: string;
-  readonly src: IrSource | undefined;
+  readonly src: CompiledSource | undefined;
 }
 
 /** Literal absolute http(s) image sources outside the project's asset base. */
-const externalImages = (root: IrNode, assetBase: string | undefined): readonly ExternalImage[] => {
+const externalImages = (
+  root: CompiledNode,
+  assetBase: string | undefined,
+): readonly ExternalImage[] => {
   const found: ExternalImage[] = [];
   const base = assetBase === undefined ? undefined : assetBase.replace(/\/+$/, "") + "/";
-  const visit = (node: IrNode): void => {
+  const visit = (node: CompiledNode): void => {
     if (typeof node !== "object" || node === null) return;
     if ("el" in node) {
       const url = node.el === "img" ? node.attrs?.src : undefined;
@@ -240,31 +243,31 @@ const externalImages = (root: IrNode, assetBase: string | undefined): readonly E
 
 export const completed = (
   findings: Findings,
-  ir: TemplateIr | undefined,
+  template: CompiledTemplate | undefined,
   fixtures: Readonly<Record<string, unknown>> = {},
   assets: readonly AssetEntry[] = [],
-): CompiledTemplate => ({
-  ir: findings.blocking ? undefined : ir,
+): CompileResult => ({
+  template: findings.blocking ? undefined : template,
   fixtures,
   assets,
   diagnostics: findings.items,
 });
 
 /**
- * Lower a loaded project to IR: the part of the compile that reads structure and needs no Tailwind
- * or brand. `checkStaticProfile` runs it with empty stylesheets.
+ * Lower a loaded project to a compiled template: the part of the compile that reads structure and
+ * needs no Tailwind or brand. `checkTemplate` runs it with empty stylesheets.
  */
 export const lowerProject = (
   options: LowerOptions,
   project: Project,
   findings: Findings,
   inputs: ResolvedInputs,
-): CompiledTemplate => {
+): CompileResult => {
   const done = (
-    ir: TemplateIr | undefined,
+    template: CompiledTemplate | undefined,
     fixtures: Readonly<Record<string, unknown>> = {},
     assets: readonly AssetEntry[] = inputs.assets,
-  ): CompiledTemplate => completed(findings, ir, fixtures, assets);
+  ): CompileResult => completed(findings, template, fixtures, assets);
   const urlFor = inputs.urlFor;
   const staticContext: StaticContext = { project, assetUrl: urlFor };
 
@@ -468,10 +471,10 @@ export const lowerProject = (
         "The fields are id, schema, fixtures, locale, email, sms and whatsapp.",
       );
 
-  let ir: TemplateIr | undefined;
+  let template: CompiledTemplate | undefined;
   const checks: CheckFinding[] = [];
   const emailField = fields.get("email");
-  let emailIr: TemplateIr["email"];
+  let emailIr: CompiledTemplate["email"];
   if (emailField !== undefined) {
     const object = unwrap(emailField);
     const parts = new Map<string, Node>();
@@ -498,7 +501,7 @@ export const lowerProject = (
           `\`${key}\` is not an email field.`,
           "The fields are subject, preheader and body.",
         );
-    const value = (name: string): IrValue | undefined => {
+    const value = (name: string): CompiledValue | undefined => {
       const node = parts.get(name);
       if (node === undefined) return undefined;
       const opened = openFunction(node);
@@ -514,7 +517,7 @@ export const lowerProject = (
         "Add `subject: (input) => …`.",
       );
     const preheader = value("preheader");
-    let body: IrNode | undefined;
+    let body: CompiledNode | undefined;
     const bodyNode = parts.get("body");
     if (bodyNode === undefined && object.type === "ObjectExpression")
       findings.add(
@@ -550,7 +553,7 @@ export const lowerProject = (
         if (sheet !== undefined) sheets.push(sheet);
       }
       const sources = [options.entry, ...lowerer.sources];
-      const locate = (source: IrSource | undefined) => {
+      const locate = (source: CompiledSource | undefined) => {
         if (source === undefined) return undefined;
         return {
           fileName: sources[source[2] ?? 0] ?? options.entry,
@@ -564,17 +567,17 @@ export const lowerProject = (
           findings.items.push(diagnostic);
         },
       });
-      let root: IrNode = styled.root;
+      let root: CompiledNode = styled.root;
       if (styled.headCss !== "" || styled.fontFaceCss !== "") {
-        const additions: IrNode[] = [
+        const additions: CompiledNode[] = [
           ...(styled.headCss === ""
             ? []
-            : [{ el: "style", children: [styled.headCss] } satisfies IrElement]),
+            : [{ el: "style", children: [styled.headCss] } satisfies CompiledElement]),
           ...(styled.fontFaceCss === ""
             ? []
             : [
                 HEAD_COMMENT_OPEN,
-                { el: "style", children: [styled.fontFaceCss] } satisfies IrElement,
+                { el: "style", children: [styled.fontFaceCss] } satisfies CompiledElement,
                 HEAD_COMMENT_CLOSE,
               ]),
         ];
@@ -669,8 +672,8 @@ export const lowerProject = (
     templateId !== "" &&
     (emailIr !== undefined || channelIr.sms !== undefined || channelIr.whatsapp !== undefined)
   ) {
-    ir = {
-      sml: SML_IR_VERSION,
+    template = {
+      sml: COMPILED_TEMPLATE_VERSION,
       template: templateId,
       ...(locale === undefined ? {} : { locale }),
       sources,
@@ -688,5 +691,5 @@ export const lowerProject = (
       "Add `email`, `sms` or `whatsapp`.",
     );
   }
-  return done(ir, fixtures);
+  return done(template, fixtures);
 };

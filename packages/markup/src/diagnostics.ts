@@ -3,4 +3,11 @@
 // a host that only reports (an editor, a Worker's startup path) to import without the compiler.
 export * from "./diagnostic-model";
 export * from "./diagnostic-codes";
-export * from "./email/diagnostics";
+export {
+  formatEmailDiagnostic,
+  hasBlockingDiagnostic,
+  type EmailCompatibilityAssessment,
+  type EmailDiagnostic,
+  type EmailDiagnosticSeverity,
+  type TemplateDiagnostic,
+} from "./email/diagnostics";

@@ -3,10 +3,10 @@ import { EmailCompileError } from "../email/diagnostics";
 import { samvaBrandPlugin } from "../email/samva-brand-plugin";
 import { transformProject, type TransformOptions } from "../email/transform";
 import { Findings } from "./diagnostics";
-import { completed, lowerProject, type CompiledTemplate } from "./lower-project";
+import { completed, lowerProject, type CompileResult } from "./lower-project";
 import { loadProject } from "./project";
 
-// `compileTemplate` is the static compiler: a project's files in, the template's IR out, with no
+// `compileTemplate` is the static compiler: a project's files in, the compiled template out, with no
 // module evaluated on the way. It is what the CLI, the editor, the agents and the publish step
 // run, so a template means the same thing everywhere it is read.
 
@@ -23,12 +23,10 @@ export interface CompileTemplateOptions extends TransformOptions {
   readonly schema?: Readonly<Record<string, unknown>> | undefined;
 }
 
-export type { CompiledTemplate } from "./lower-project";
+export type { CompileResult } from "./lower-project";
 
-/** Compile a project's entry template to IR without evaluating any of it. */
-export const compileTemplate = async (
-  options: CompileTemplateOptions,
-): Promise<CompiledTemplate> => {
+/** Compile a project's entry template without evaluating any of it. */
+export const compileTemplate = async (options: CompileTemplateOptions): Promise<CompileResult> => {
   const findings = new Findings();
   const project = loadProject(options.files, options.entry, findings, {
     brandPlugin: options.brandPlugin ?? samvaBrandPlugin,

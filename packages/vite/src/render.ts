@@ -1,5 +1,5 @@
 import type { EmailDiagnostic } from "@samva/markup/diagnostics";
-import type { RenderedIrWhatsApp, RenderOptions } from "@samva/markup/render";
+import type { RenderedWhatsApp } from "@samva/markup/render";
 
 import { brandDiagnostics } from "./brand";
 import {
@@ -8,6 +8,7 @@ import {
   renderChannelFixture,
   renderEmailFixtures,
   type CompiledEntry,
+  type FixtureRenderOptions,
 } from "./compile";
 import { loadProject, type ProjectOptions } from "./project";
 
@@ -53,7 +54,7 @@ export type RenderChannelResult =
       readonly channel: "whatsapp";
       readonly template: string;
       readonly fixture: string;
-      readonly message: RenderedIrWhatsApp;
+      readonly message: RenderedWhatsApp;
       readonly diagnostics: readonly EmailDiagnostic[];
     }
   | { readonly ok: false; readonly diagnostics: readonly EmailDiagnostic[] };
@@ -192,7 +193,7 @@ export const renderChannel = async (input: RenderChannelInput): Promise<RenderCh
       };
 };
 
-const renderOptions = (input: RenderTemplateInput): RenderOptions => ({
+const renderOptions = (input: RenderTemplateInput): FixtureRenderOptions => ({
   ...(input.locale === undefined ? {} : { locale: input.locale }),
   ...(input.timeZone === undefined ? {} : { timeZone: input.timeZone }),
 });

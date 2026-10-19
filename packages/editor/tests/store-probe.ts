@@ -1,4 +1,4 @@
-import type { EmailElementSelection } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
 
 import { useEditorStore } from "../src/state/context";
 import type { EditorActions, EditorState } from "../src/state/store";

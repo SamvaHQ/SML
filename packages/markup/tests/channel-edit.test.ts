@@ -149,9 +149,9 @@ describe("SMS channel form", () => {
   });
 
   it("has no form for a channel that is not an in-place <Sms>", () => {
-    expect(readSmsChannel(WHATSAPP)).toBeNull();
-    expect(readSmsChannel("export default")).toBeNull();
-    expect(readSmsChannel(wrapSms("    <p>Hi</p>"))).toBeNull();
+    expect(readSmsChannel(WHATSAPP)).toBeUndefined();
+    expect(readSmsChannel("export default")).toBeUndefined();
+    expect(readSmsChannel(wrapSms("    <p>Hi</p>"))).toBeUndefined();
   });
 });
 
@@ -316,7 +316,7 @@ describe("WhatsApp channel form", () => {
   it("has no form without a body or when the channel is not written in place", () => {
     expect(
       readWhatsAppChannel(wrapWhatsApp(`    <WhatsApp language="en_US" category="utility" />`)),
-    ).toBeNull();
-    expect(readWhatsAppChannel(SMS)).toBeNull();
+    ).toBeUndefined();
+    expect(readWhatsAppChannel(SMS)).toBeUndefined();
   });
 });

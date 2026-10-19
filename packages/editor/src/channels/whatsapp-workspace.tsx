@@ -100,7 +100,7 @@ function SlotField({
 }: {
   readonly label: string;
   readonly part: WhatsAppPart;
-  readonly segments: ReadonlyArray<ChannelSegment> | null;
+  readonly segments: ReadonlyArray<ChannelSegment> | undefined;
   readonly editable: boolean;
   readonly onEdit: OnEdit;
 }) {
@@ -295,7 +295,7 @@ function WhatsAppForm({
         <OptionSelect
           value={headerType as (typeof WHATSAPP_HEADER_TYPE_OPTIONS)[number]["value"]}
           options={WHATSAPP_HEADER_TYPE_OPTIONS}
-          disabled={!editable || form.header === null || form.headerType.kind === "expression"}
+          disabled={!editable || form.header === undefined || form.headerType.kind === "expression"}
           onChange={(value) => onEdit({ kind: "headerType", value })}
         />
       </Field>
@@ -354,7 +354,7 @@ function PreviewSlot({
 }: {
   readonly label: string;
   readonly part: WhatsAppPart;
-  readonly segments: ReadonlyArray<ChannelSegment> | null;
+  readonly segments: ReadonlyArray<ChannelSegment> | undefined;
   readonly editable: boolean;
   readonly placeholder: string;
   readonly className: string;
@@ -496,7 +496,7 @@ export function WhatsAppWorkspace() {
               <div className="grid gap-4">
                 <Diagnostics diagnostics={doc?.diagnostics ?? []} />
                 <EditRefusal reason={refusal} />
-                {form === null ? (
+                {form === undefined ? (
                   <p className="text-muted-foreground text-[12.5px]">
                     The WhatsApp body is not a <code>{"<WhatsApp>"}</code> written in place with a
                     body, so it is edited in Source.
@@ -507,7 +507,7 @@ export function WhatsAppWorkspace() {
               </div>
             </aside>
             <main className="samva-editor-workspace samva-editor-scroll min-w-0 flex-1 overflow-auto p-8">
-              {form !== null && (
+              {form !== undefined && (
                 <WhatsAppPreview form={form} editable={editable} render={render} onEdit={edit} />
               )}
             </main>

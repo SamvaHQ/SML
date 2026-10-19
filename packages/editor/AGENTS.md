@@ -13,7 +13,7 @@ boundaries—not compiler transforms—provide render isolation.
 - Compute projections of the document in the transition that changes it. Store the resulting
   outline, size, and checks together with the document they came from.
 - The host owns render truth for every channel. The editor never compiles: it mounts the render
-  the host produced from the template's IR. An SMS or WhatsApp form is read from the authored TSX,
+  the host produced from the compiled template. An SMS or WhatsApp form is read from the authored TSX,
   and a form change is an exact source replacement (`@samva/markup/edit`) applied through
   `applySourceEdit` with a `coalesceKey`, so typing does not wait on the previous save.
 - An email selection is one rendered instance pinned to the revision and fixture it was taken in.
@@ -26,7 +26,7 @@ boundaries—not compiler transforms—provide render isolation.
   selection elsewhere treats it as a gesture and treats any other selection change as following
   the document.
 - A visual edit never leaves the static profile. `applySourceReplacements` runs with a
-  `ProfileGuard`, so `checkStaticProfile` compares the file before and after and refuses an edit
+  `ProfileGuard`, so `checkTemplate` compares the file before and after and refuses an edit
   that introduces an error the source did not already have; the reason reaches the author through
   `sourceEditError` or the review panel. Expression and structural changes show that refusal
   before Apply. Class names change only where they are literal (`classNameEdit`); a conditional

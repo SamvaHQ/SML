@@ -162,9 +162,13 @@ interface ResolvedTheme {
  */
 export const projectBrandSpecifier = (
   files: Readonly<Record<string, string | Uint8Array>>,
-  themePath = "theme.css",
-  brandPlugin: BrandPlugin = samvaBrandPlugin,
+  options: {
+    readonly themePath?: string | undefined;
+    readonly brandPlugin?: BrandPlugin | undefined;
+  } = {},
 ): string | undefined => {
+  const themePath = options.themePath ?? "theme.css";
+  const brandPlugin = options.brandPlugin ?? samvaBrandPlugin;
   const theme = files[themePath];
   const fromTheme =
     typeof theme === "string"
@@ -217,7 +221,7 @@ const resolveTheme = (
     });
   else if (specifiers.length === 1) {
     const specifier = specifiers[0]!;
-    const named = parseBrandSpecifier(specifier, brandPlugin)?.slug;
+    const named = parseBrandSpecifier(specifier, { brandPlugin })?.slug;
     const origins = [requests[0]!.origin];
     if (brand === undefined)
       refusals.push({

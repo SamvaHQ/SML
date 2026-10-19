@@ -2,8 +2,8 @@ import { describe, expect, it } from "@effect/vitest";
 
 import { hasUpgradeRecipe } from "../src/diagnostic-codes";
 import type { TemplateDiagnostic } from "../src/email/diagnostics";
-import { renderIr } from "../src/render-ir";
-import { checkTemplateCompatibility } from "../src/sml/compatibility";
+import { render } from "../src/render-template";
+import { checkCompatibility } from "../src/sml/compatibility";
 import { compileTemplate } from "../src/sml/compile";
 
 const THEME = "@theme { --color-brand: #123456; }";
@@ -112,10 +112,10 @@ const compile = async (sources: Sources) =>
 const errors = (diagnostics: readonly TemplateDiagnostic[]) =>
   diagnostics.filter((item) => item.severity === "error");
 
-const render = async (sources: Sources, fixture = "default") => {
+const renderFixture = async (sources: Sources, fixture = "default") => {
   const compiled = await compile(sources);
   expect(errors(compiled.diagnostics)).toEqual([]);
-  return renderIr(compiled.ir!, compiled.fixtures[fixture]);
+  return render(compiled.template!, compiled.fixtures[fixture], { channel: "email" });
 };
 
 const codes = async (sources: Sources) =>
@@ -123,7 +123,7 @@ const codes = async (sources: Sources) =>
 
 describe("the static profile accepts", () => {
   it("text and attribute bindings, template strings, conditionals and formatters", async () => {
-    const rendered = await render({
+    const rendered = await renderFixture({
       subject: "(input) => `Order ${input.order.id} for ${input.name}`",
       preheader:
         "(input) => `${input.items.length} items, ${fmt.money(input.order.total, input.currency)}`",
@@ -152,7 +152,7 @@ describe("the static profile accepts", () => {
   });
 
   it("partials with props and children, and destructured parameters", async () => {
-    const rendered = await render({
+    const rendered = await renderFixture({
       imports: 'import { Card, Row } from "./partials";',
       body: `({ name, items }) => (
         <Email>
@@ -187,14 +187,18 @@ describe("the static profile accepts", () => {
       )`,
     });
     expect(errors(compiled.diagnostics)).toEqual([]);
-    const vip = renderIr(compiled.ir!, compiled.fixtures.default);
-    const plain = renderIr(compiled.ir!, { ...(compiled.fixtures.default as object), vip: false });
+    const vip = render(compiled.template!, compiled.fixtures.default, { channel: "email" });
+    const plain = render(
+      compiled.template!,
+      { ...(compiled.fixtures.default as object), vip: false },
+      { channel: "email" },
+    );
     expect(vip.html).toContain('class="font-bold" style="font-weight:700"');
     expect(plain.html).toContain('class="font-normal" style="font-weight:400"');
   });
 
   it("lets a partial forward a class it was given", async () => {
-    const rendered = await render({
+    const rendered = await renderFixture({
       imports: 'import { Note } from "./note";',
       body: `() => (
         <Email>
@@ -211,7 +215,7 @@ describe("the static profile accepts", () => {
 
   it("stamps every element with its source", async () => {
     const compiled = await compile({ body: "() => <Email><p>Hi</p></Email>" });
-    expect(JSON.stringify(compiled.ir)).toContain('"src":[');
+    expect(JSON.stringify(compiled.template)).toContain('"src":[');
   });
 });
 
@@ -223,7 +227,7 @@ describe("the static profile rejects with a code, a location and a fix", () => {
       found,
       `${code} in ${compiled.diagnostics.map((item) => item.code).join(", ")}`,
     ).toBeDefined();
-    expect(compiled.ir).toBeUndefined();
+    expect(compiled.template).toBeUndefined();
     expect(found!.origins[0]?.fileName).toMatch(/^templates\//);
     expect(found!.origins[0]?.lineNumber).toBeGreaterThan(0);
     expect(found!.message.length).toBeGreaterThan(0);
@@ -467,7 +471,7 @@ describe("compatibility", () => {
       )`,
     });
     expect(errors(compiled.diagnostics)).toEqual([]);
-    const findings = checkTemplateCompatibility(compiled.ir!, compiled.fixtures);
+    const findings = checkCompatibility(compiled.template!, compiled.fixtures);
     const located = findings.filter((item) => item.origins.length > 0);
     expect(located.length, findings.map((item) => item.code).join(", ")).toBeGreaterThan(0);
     for (const item of located) {
@@ -491,7 +495,7 @@ describe("a project the compiler cannot read", () => {
     const compiled = await compileFiles({
       "templates/entry.tsx": "export default defineTemplate({\n  id: ,",
     });
-    expect(compiled.ir).toBeUndefined();
+    expect(compiled.template).toBeUndefined();
     expect(compiled.diagnostics[0]?.code).toBe("syntax-error");
     expect(compiled.diagnostics[0]?.origins[0]?.lineNumber).toBe(2);
   });
@@ -584,14 +588,16 @@ describe("chunked columns", () => {
   it("makes one Columns table per chunk and keeps the last partial row's cell width", async () => {
     const compiled = await compile({ body: grid("each={input.items} per={2}") });
     expect(errors(compiled.diagnostics)).toEqual([]);
-    const html = renderIr(compiled.ir!, withItems(3)).html;
+    const html = render(compiled.template!, withItems(3), { channel: "email" }).html;
     expect(html.match(/<td class="sml-stack cell"/g)).toHaveLength(3);
     expect(html.match(/width="50%"/g)).toHaveLength(3);
     // Index restarts in each row.
     expect(html).toContain("T0 0");
     expect(html).toContain("T1 1");
     expect(html).toContain("T2 0");
-    expect(renderIr(compiled.ir!, withItems(0)).html).not.toContain('class="cell');
+    expect(render(compiled.template!, withItems(0), { channel: "email" }).html).not.toContain(
+      'class="cell',
+    );
   });
 
   it("splits a single row equally, rounded down, for any count", async () => {
@@ -606,7 +612,7 @@ describe("chunked columns", () => {
       [7, 14],
     ] as const)
       expect(
-        renderIr(compiled.ir!, withItems(count)).html.match(
+        render(compiled.template!, withItems(count), { channel: "email" }).html.match(
           new RegExp(`class="sml-stack cell" valign="top" width="${width}%"`, "g"),
         ),
       ).toHaveLength(count);
@@ -622,7 +628,7 @@ describe("chunked columns", () => {
 
 describe("filter", () => {
   it("filters before .map and counts before .length", async () => {
-    const rendered = await render({
+    const rendered = await renderFixture({
       body: `(input) => (
         <Email>
           <p>{input.items.filter((item) => item.qty > 1).length} of {input.items.length} bulk</p>

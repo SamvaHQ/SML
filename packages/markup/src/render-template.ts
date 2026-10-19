@@ -1,58 +1,91 @@
 /* oxlint-disable eslint/no-control-regex -- URL, header and attribute validation intentionally rejects control characters. */
 /* oxlint-disable samva/no-hand-rolled-object-guard, samva/no-unsafe-type-assertion -- The renderer walks untrusted JSON IR and input; the guards here are the validation, and the narrowing casts follow a key-presence check. */
-/* oxlint-disable samva/no-try-catch-or-throw, samva/no-error-constructor -- The send-time renderer is a synchronous security boundary: unsafe IR or data rejects the whole render with one IrRenderError. */
+/* oxlint-disable samva/no-try-catch-or-throw, samva/no-error-constructor -- The send-time renderer is a synchronous security boundary: unsafe IR or data rejects the whole render with one RenderError. */
+import { TaggedError } from "better-result";
+
+import type {
+  Channel,
+  CompiledArithmetic,
+  CompiledComparison,
+  CompiledEach,
+  CompiledElement,
+  CompiledIf,
+  CompiledNode,
+  CompiledPredicate,
+  CompiledRaw,
+  CompiledRawPart,
+  CompiledSource,
+  CompiledStyle,
+  CompiledTemplate,
+  CompiledValue,
+  CompiledWhatsAppButtonNode,
+  RenderedEmail,
+  RenderedMessage,
+  RenderedSms,
+  RenderedWhatsApp,
+  RenderedWhatsAppButton,
+} from "./compiled-template";
+import { COMPILED_TEMPLATE_VERSION } from "./compiled-template";
 import { reservedBrandAttributes, type BrandPlugin } from "./email/brand-plugin";
 import { emailElement, EMAIL_GLOBAL_ATTRIBUTES, type EmailAttributeSpec } from "./email/elements";
 import type { EmailElementSpec, EmailLayout } from "./email/elements";
 import { samvaBrandPlugin } from "./email/samva-brand-plugin";
 import { callFormatter, createFmt, type Fmt } from "./fmt";
-import type {
-  IrArithmetic,
-  IrComparison,
-  IrEach,
-  IrElement,
-  IrIf,
-  IrNode,
-  IrPredicate,
-  IrRaw,
-  IrRawPart,
-  IrSource,
-  IrStyle,
-  IrValue,
-  IrWhatsAppButtonNode,
-  RenderedIrEmail,
-  RenderedIrWhatsApp,
-  RenderedPosition,
-  RenderedWhatsAppButton,
-  RenderOptions,
-  TemplateIr,
-} from "./ir";
+import { smsSegmentInfo } from "./sms-segments";
 
-// Rendering a template's IR is a pure function of the IR and the input. Untrusted data flows
-// through here into markup, so every value is escaped for its context, every attribute is
+// Rendering a compiled template is a pure function of the template and the input. Untrusted data
+// flows through here into markup, so every value is escaped for its context, every attribute is
 // checked against the element's spec, and anything unsafe rejects the whole render. The output
 // is byte-compatible with the JSX serializer's (`./email/html`) and text derivation
 // (`./email/text`); this module re-implements both so the JSX pipeline can be removed.
 
-export interface IrRenderDiagnostic {
+export interface RenderDiagnostic {
   readonly code: string;
   readonly message: string;
 }
 
-export class IrRenderError extends Error {
-  readonly diagnostics: readonly IrRenderDiagnostic[];
-  constructor(diagnostics: readonly IrRenderDiagnostic[]) {
-    super(
-      `Template render rejected: ${diagnostics.map((item) => `${item.code}: ${item.message}`).join("; ")}`,
-    );
-    this.name = "IrRenderError";
-    this.diagnostics = diagnostics;
+export class RenderError extends TaggedError("RenderError")<{
+  readonly diagnostics: readonly RenderDiagnostic[];
+  readonly message: string;
+}> {
+  constructor(args: { readonly diagnostics: readonly RenderDiagnostic[] }) {
+    super({
+      diagnostics: args.diagnostics,
+      message: `Template render rejected: ${args.diagnostics.map((item) => `${item.code}: ${item.message}`).join("; ")}`,
+    });
   }
 }
 
 const fail = (code: string, message: string): never => {
-  throw new IrRenderError([{ code, message }]);
+  throw new RenderError({ diagnostics: [{ code, message }] });
 };
+
+/** What every channel's render reads besides the template and the input. */
+interface RenderSettings {
+  /** Overrides the template's `locale`. */
+  readonly locale?: string | undefined;
+  /** IANA time zone; defaults to UTC. */
+  readonly timeZone?: string | undefined;
+  /**
+   * The brand plugin the template compiled against: its unsubscribe placeholder gets the
+   * no-track marker, and only the elements `BrandFooter` wrote may carry its footer markers.
+   * `samvaBrandPlugin` when omitted.
+   */
+  readonly brandPlugin?: BrandPlugin | undefined;
+}
+
+/** One rendered element's offset range in the HTML, and the source it was lowered from. */
+export interface RenderedPosition {
+  readonly start: number;
+  readonly end: number;
+  readonly tag: string;
+  readonly src?: CompiledSource;
+}
+
+/** The email render, with where each element landed in the HTML when it asked for `positions`. */
+export interface PositionedEmail extends RenderedEmail {
+  readonly positions?: readonly RenderedPosition[];
+}
 
 // ── Limits ────────────────────────────────────────────────────────────────────
 
@@ -141,7 +174,7 @@ interface CElement {
   /** Resolved attribute values the text derivation reads (`href`, `alt`, `role`, `start`). */
   readonly props: ReadonlyMap<string, unknown>;
   readonly children: readonly CNode[];
-  readonly src?: IrSource | undefined;
+  readonly src?: CompiledSource | undefined;
 }
 type CNode = CText | CRaw | CElement;
 
@@ -155,7 +188,7 @@ interface Ctx {
   readonly brandPlugin: BrandPlugin;
   /** The attributes only the elements `BrandFooter` wrote may carry. */
   readonly reservedAttributes: ReadonlySet<string>;
-  readonly diagnostics: IrRenderDiagnostic[];
+  readonly diagnostics: RenderDiagnostic[];
   iterations: number;
   fmt: Fmt | undefined;
   /** The channel's rendered preheader, consumed by the first `{preheader:true}` marker. */
@@ -220,7 +253,7 @@ const finiteNumber = (value: unknown, what: string): number =>
     ? value
     : invalid(`${what} must be a finite number.`);
 
-const arithmetic = (op: IrArithmetic, left: number, right: number): number => {
+const arithmetic = (op: CompiledArithmetic, left: number, right: number): number => {
   if ((op === "/" || op === "%") && right === 0) return invalid("Division by zero.");
   let result: number;
   switch (op) {
@@ -261,7 +294,7 @@ const applyFormat = (ctx: Ctx, name: unknown, args: readonly unknown[]): string 
 
 const nullish = (value: unknown): unknown => (value === undefined ? null : value);
 
-const compare = (op: IrComparison, left: unknown, right: unknown): boolean => {
+const compare = (op: CompiledComparison, left: unknown, right: unknown): boolean => {
   switch (op) {
     case "eq":
       return nullish(left) === nullish(right);
@@ -292,10 +325,10 @@ const checkDepth = (depth: number): void => {
 
 const evalArgs = (ctx: Ctx, scope: Scope, args: unknown, depth: number): readonly unknown[] =>
   Array.isArray(args)
-    ? (args as readonly IrValue[]).map((arg) => evalValue(ctx, scope, arg, depth + 1))
+    ? (args as readonly CompiledValue[]).map((arg) => evalValue(ctx, scope, arg, depth + 1))
     : invalid("Arguments must be an array.");
 
-const evalValue = (ctx: Ctx, scope: Scope, value: IrValue, depth: number): unknown => {
+const evalValue = (ctx: Ctx, scope: Scope, value: CompiledValue, depth: number): unknown => {
   checkDepth(depth);
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return invalid("Unknown value node.");
@@ -309,25 +342,26 @@ const evalValue = (ctx: Ctx, scope: Scope, value: IrValue, depth: number): unkno
     return applyFormat(ctx, node.format, evalArgs(ctx, scope, node.args, depth));
   }
   if (has(node, "if")) {
-    return evalPredicate(ctx, scope, node.if as IrPredicate, depth + 1)
-      ? evalValue(ctx, scope, node.then as IrValue, depth + 1)
-      : evalValue(ctx, scope, node.else as IrValue, depth + 1);
+    return evalPredicate(ctx, scope, node.if as CompiledPredicate, depth + 1)
+      ? evalValue(ctx, scope, node.then as CompiledValue, depth + 1)
+      : evalValue(ctx, scope, node.else as CompiledValue, depth + 1);
   }
   if (has(node, "op")) {
     const [left, right] = evalArgs(ctx, scope, node.args, depth);
     return arithmetic(
-      node.op as IrArithmetic,
+      node.op as CompiledArithmetic,
       finiteNumber(left, "An arithmetic operand"),
       finiteNumber(right, "An arithmetic operand"),
     );
   }
   if (has(node, "count")) {
-    const items = evalValue(ctx, scope, node.count as IrValue, depth + 1);
+    const items = evalValue(ctx, scope, node.count as CompiledValue, depth + 1);
     if (!Array.isArray(items)) return invalid("count applies to an array.");
-    return selectItems(ctx, scope, items, String(node.as), node.where as IrPredicate, depth).length;
+    return selectItems(ctx, scope, items, String(node.as), node.where as CompiledPredicate, depth)
+      .length;
   }
   if (has(node, "length")) {
-    const measured = evalValue(ctx, scope, node.length as IrValue, depth + 1);
+    const measured = evalValue(ctx, scope, node.length as CompiledValue, depth + 1);
     return typeof measured === "string" || Array.isArray(measured)
       ? measured.length
       : invalid("length applies to a string or an array.");
@@ -335,7 +369,12 @@ const evalValue = (ctx: Ctx, scope: Scope, value: IrValue, depth: number): unkno
   return invalid("Unknown value node.");
 };
 
-const evalPredicate = (ctx: Ctx, scope: Scope, predicate: IrPredicate, depth: number): boolean => {
+const evalPredicate = (
+  ctx: Ctx,
+  scope: Scope,
+  predicate: CompiledPredicate,
+  depth: number,
+): boolean => {
   checkDepth(depth);
   if (typeof predicate !== "object" || predicate === null || Array.isArray(predicate)) {
     return invalid("Unknown predicate.");
@@ -343,24 +382,24 @@ const evalPredicate = (ctx: Ctx, scope: Scope, predicate: IrPredicate, depth: nu
   const node: Readonly<Record<string, unknown>> = predicate;
   if (has(node, "present")) return Boolean(resolvePath(ctx, scope, node.present));
   if (has(node, "truthy")) {
-    return Boolean(evalValue(ctx, scope, node.truthy as IrValue, depth + 1));
+    return Boolean(evalValue(ctx, scope, node.truthy as CompiledValue, depth + 1));
   }
   if (has(node, "not")) {
-    return !evalPredicate(ctx, scope, node.not as IrPredicate, depth + 1);
+    return !evalPredicate(ctx, scope, node.not as CompiledPredicate, depth + 1);
   }
   if (has(node, "and")) {
     return asArray(node.and).every((item) =>
-      evalPredicate(ctx, scope, item as IrPredicate, depth + 1),
+      evalPredicate(ctx, scope, item as CompiledPredicate, depth + 1),
     );
   }
   if (has(node, "or")) {
     return asArray(node.or).some((item) =>
-      evalPredicate(ctx, scope, item as IrPredicate, depth + 1),
+      evalPredicate(ctx, scope, item as CompiledPredicate, depth + 1),
     );
   }
   if (has(node, "cmp")) {
     const [left, right] = evalArgs(ctx, scope, node.args, depth);
-    return compare(node.cmp as IrComparison, left, right);
+    return compare(node.cmp as CompiledComparison, left, right);
   }
   return invalid("Unknown predicate.");
 };
@@ -373,7 +412,7 @@ const asArray = (value: unknown): readonly unknown[] =>
 const declarations = (
   ctx: Ctx,
   scope: Scope,
-  entries: readonly (readonly [string, IrValue])[],
+  entries: readonly (readonly [string, CompiledValue])[],
   depth: number,
 ): string => {
   const parts: string[] = [];
@@ -423,7 +462,7 @@ const declarations = (
   return parts.join(";");
 };
 
-const styleText = (ctx: Ctx, scope: Scope, style: IrStyle, depth: number): string => {
+const styleText = (ctx: Ctx, scope: Scope, style: CompiledStyle, depth: number): string => {
   checkDepth(depth);
   if (typeof style === "string") {
     if (CONTROL_CHARACTERS.test(style)) {
@@ -433,12 +472,12 @@ const styleText = (ctx: Ctx, scope: Scope, style: IrStyle, depth: number): strin
     return style;
   }
   if (Array.isArray(style)) {
-    return declarations(ctx, scope, style as readonly (readonly [string, IrValue])[], depth);
+    return declarations(ctx, scope, style as readonly (readonly [string, CompiledValue])[], depth);
   }
   if (isRecord(style) && has(style, "if")) {
-    return evalPredicate(ctx, scope, style.if as IrPredicate, depth + 1)
-      ? styleText(ctx, scope, style.then as IrStyle, depth + 1)
-      : styleText(ctx, scope, style.else as IrStyle, depth + 1);
+    return evalPredicate(ctx, scope, style.if as CompiledPredicate, depth + 1)
+      ? styleText(ctx, scope, style.then as CompiledStyle, depth + 1)
+      : styleText(ctx, scope, style.else as CompiledStyle, depth + 1);
   }
   report(
     ctx,
@@ -506,7 +545,7 @@ const buildAttributes = (
   scope: Scope,
   tag: string,
   spec: EmailElementSpec,
-  node: IrElement,
+  node: CompiledElement,
   props: Map<string, unknown>,
   depth: number,
 ): string => {
@@ -652,7 +691,7 @@ const pushText = (out: CNode[], value: unknown): void => {
 const evalElement = (
   ctx: Ctx,
   scope: Scope,
-  node: IrElement,
+  node: CompiledElement,
   depth: number,
   out: CNode[],
 ): void => {
@@ -694,7 +733,7 @@ const evalElement = (
   });
 };
 
-const evalRaw = (ctx: Ctx, scope: Scope, node: IrRaw, depth: number, out: CNode[]): void => {
+const evalRaw = (ctx: Ctx, scope: Scope, node: CompiledRaw, depth: number, out: CNode[]): void => {
   if (ctx.plain) {
     out.push({
       t: "text",
@@ -703,20 +742,20 @@ const evalRaw = (ctx: Ctx, scope: Scope, node: IrRaw, depth: number, out: CNode[
     return;
   }
   const html = asArray(node.raw)
-    .map((part) => rawPart(ctx, scope, part as IrRawPart, depth + 1))
+    .map((part) => rawPart(ctx, scope, part as CompiledRawPart, depth + 1))
     .join("");
   const text = node.text === undefined ? "" : textOf(evalValue(ctx, scope, node.text, depth + 1));
   out.push({ t: "raw", html, text });
 };
 
-const rawPart = (ctx: Ctx, scope: Scope, part: IrRawPart, depth: number): string => {
+const rawPart = (ctx: Ctx, scope: Scope, part: CompiledRawPart, depth: number): string => {
   if (typeof part === "string") return part;
   const record = part as Readonly<Record<string, unknown>>;
   if (isRecord(record) && has(record, "attr")) {
-    return escapeAttribute(textOf(evalValue(ctx, scope, record.attr as IrValue, depth + 1)));
+    return escapeAttribute(textOf(evalValue(ctx, scope, record.attr as CompiledValue, depth + 1)));
   }
   if (isRecord(record) && has(record, "text")) {
-    return escapeText(textOf(evalValue(ctx, scope, record.text as IrValue, depth + 1)));
+    return escapeText(textOf(evalValue(ctx, scope, record.text as CompiledValue, depth + 1)));
   }
   return invalid("A raw part is a string, {attr} or {text}.");
 };
@@ -729,7 +768,7 @@ const selectItems = (
   scope: Scope,
   items: readonly unknown[],
   as: string,
-  where: IrPredicate | undefined,
+  where: CompiledPredicate | undefined,
   depth: number,
 ): readonly unknown[] => {
   if (where === undefined) return items;
@@ -744,7 +783,13 @@ const selectItems = (
   });
 };
 
-const evalEach = (ctx: Ctx, scope: Scope, node: IrEach, depth: number, out: CNode[]): void => {
+const evalEach = (
+  ctx: Ctx,
+  scope: Scope,
+  node: CompiledEach,
+  depth: number,
+  out: CNode[],
+): void => {
   const source = evalValue(ctx, scope, node.each, depth + 1);
   if (!Array.isArray(source)) invalid("each needs an array.");
   const selected = selectItems(
@@ -773,12 +818,18 @@ const evalEach = (ctx: Ctx, scope: Scope, node: IrEach, depth: number, out: CNod
     inner.set(itemKey, item);
     if (indexKey !== undefined) inner.set(indexKey, index);
     for (const child of asArray(node.children)) {
-      evalNode(ctx, inner, child as IrNode, depth + 1, out);
+      evalNode(ctx, inner, child as CompiledNode, depth + 1, out);
     }
   }
 };
 
-const evalNode = (ctx: Ctx, scope: Scope, node: IrNode, depth: number, out: CNode[]): void => {
+const evalNode = (
+  ctx: Ctx,
+  scope: Scope,
+  node: CompiledNode,
+  depth: number,
+  out: CNode[],
+): void => {
   checkDepth(depth);
   if (node === null || typeof node !== "object") {
     pushText(out, node);
@@ -788,9 +839,10 @@ const evalNode = (ctx: Ctx, scope: Scope, node: IrNode, depth: number, out: CNod
     invalid("An array cannot be rendered as a node.");
     return;
   }
-  if (has(node, "el")) return evalElement(ctx, scope, node as unknown as IrElement, depth, out);
-  if (has(node, "each")) return evalEach(ctx, scope, node as unknown as IrEach, depth, out);
-  if (has(node, "raw")) return evalRaw(ctx, scope, node as unknown as IrRaw, depth, out);
+  if (has(node, "el"))
+    return evalElement(ctx, scope, node as unknown as CompiledElement, depth, out);
+  if (has(node, "each")) return evalEach(ctx, scope, node as unknown as CompiledEach, depth, out);
+  if (has(node, "raw")) return evalRaw(ctx, scope, node as unknown as CompiledRaw, depth, out);
   if (has(node, "preheader")) {
     if (!ctx.markerUsed && ctx.preheader !== undefined && !ctx.plain) {
       ctx.markerUsed = true;
@@ -799,18 +851,18 @@ const evalNode = (ctx: Ctx, scope: Scope, node: IrNode, depth: number, out: CNod
     return;
   }
   if (has(node, "if") && Array.isArray((node as Readonly<Record<string, unknown>>).then)) {
-    const branch = evalPredicate(ctx, scope, (node as unknown as IrIf).if, depth + 1)
-      ? (node as unknown as IrIf).then
-      : ((node as unknown as IrIf).else ?? []);
+    const branch = evalPredicate(ctx, scope, (node as unknown as CompiledIf).if, depth + 1)
+      ? (node as unknown as CompiledIf).then
+      : ((node as unknown as CompiledIf).else ?? []);
     for (const child of branch) evalNode(ctx, scope, child, depth + 1, out);
     return;
   }
-  pushText(out, evalValue(ctx, scope, node as IrValue, depth + 1));
+  pushText(out, evalValue(ctx, scope, node as CompiledValue, depth + 1));
 };
 
 // ── Preheader ─────────────────────────────────────────────────────────────────
 
-const PREHEADER_STYLE: readonly (readonly [string, IrValue])[] = [
+const PREHEADER_STYLE: readonly (readonly [string, CompiledValue])[] = [
   ["display", "none"],
   ["overflow", "hidden"],
   ["lineHeight", "1px"],
@@ -821,7 +873,7 @@ const PREHEADER_STYLE: readonly (readonly [string, IrValue])[] = [
 
 /** The hidden inbox-preview block: the text, then padding so the client cannot borrow body copy. */
 const preheaderBlock = (ctx: Ctx, text: string): CNode => {
-  const children: IrNode[] = [text];
+  const children: CompiledNode[] = [text];
   if (text.length < PREHEADER_TARGET_LENGTH) {
     children.push({
       el: "div",
@@ -1093,15 +1145,20 @@ const normalize = (value: string): string =>
 // ── Entry points ──────────────────────────────────────────────────────────────
 
 const createContext = (
-  ir: TemplateIr,
+  template: CompiledTemplate,
   input: unknown,
-  options: RenderOptions,
+  options: RenderSettings,
   plain: boolean,
 ): Ctx => {
+  if (template.sml !== COMPILED_TEMPLATE_VERSION)
+    fail(
+      "unsupported-version",
+      `The template was compiled as version ${String(template.sml)}; this renderer reads version ${COMPILED_TEMPLATE_VERSION}.`,
+    );
   const brandPlugin = options.brandPlugin ?? samvaBrandPlugin;
   return {
     input,
-    locale: options.locale ?? ir.locale,
+    locale: options.locale ?? template.locale,
     timeZone: options.timeZone,
     plain,
     brandPlugin,
@@ -1115,18 +1172,21 @@ const createContext = (
 };
 
 const settle = (ctx: Ctx): void => {
-  if (ctx.diagnostics.length > 0) throw new IrRenderError(ctx.diagnostics);
+  if (ctx.diagnostics.length > 0) throw new RenderError({ diagnostics: ctx.diagnostics });
 };
 
-/** Render the email channel of a compiled template against one validated input. */
-export const renderIr = (
-  ir: TemplateIr,
+/**
+ * Render the email channel against one validated input. `positions` also returns where each
+ * element landed in the HTML, which compatibility findings and editor selections map back to source.
+ */
+export const renderEmail = (
+  template: CompiledTemplate,
   input: unknown,
-  options: RenderOptions = {},
-): RenderedIrEmail => {
-  const email = ir.email;
+  options: RenderSettings & { readonly positions?: boolean } = {},
+): PositionedEmail => {
+  const ctx = createContext(template, input, options, false);
+  const email = template.email;
   if (email === undefined) return fail("missing-channel", "The template has no email channel.");
-  const ctx = createContext(ir, input, options, false);
   const empty: Scope = new Map();
 
   const subject = textOf(evalValue(ctx, empty, email.subject, 0));
@@ -1170,38 +1230,37 @@ export const renderIr = (
   return { subject, preheader, html, text };
 };
 
-const plainText = (ctx: Ctx, nodes: readonly IrNode[]): string => {
+const plainText = (ctx: Ctx, nodes: readonly CompiledNode[]): string => {
   const out: CNode[] = [];
-  for (const node of asArray(nodes)) evalNode(ctx, new Map(), node as IrNode, 0, out);
+  for (const node of asArray(nodes)) evalNode(ctx, new Map(), node as CompiledNode, 0, out);
   return out
     .map((node) => (node.t === "text" ? node.v : node.t === "raw" ? node.text : ""))
     .join("");
 };
 
-/** Render the SMS channel of a compiled template to plain text. */
-export const renderIrSms = (
-  ir: TemplateIr,
+const renderSms = (
+  template: CompiledTemplate,
   input: unknown,
-  options: RenderOptions = {},
-): string => {
-  const sms = ir.sms;
+  options: RenderSettings,
+): RenderedSms => {
+  const ctx = createContext(template, input, options, true);
+  const sms = template.sms;
   if (sms === undefined) return fail("missing-channel", "The template has no SMS channel.");
-  const ctx = createContext(ir, input, options, true);
   const text = plainText(ctx, sms.body);
   settle(ctx);
-  return text;
+  return { text, segments: smsSegmentInfo(text) };
 };
 
 const resolveButtons = (
   ctx: Ctx,
-  nodes: readonly IrWhatsAppButtonNode[],
+  nodes: readonly CompiledWhatsAppButtonNode[],
   out: RenderedWhatsAppButton[],
   depth: number,
 ): void => {
   checkDepth(depth);
   const scope: Scope = new Map();
-  const value = (part: IrValue): string => textOf(evalValue(ctx, scope, part, 0));
-  for (const node of asArray(nodes) as readonly IrWhatsAppButtonNode[]) {
+  const value = (part: CompiledValue): string => textOf(evalValue(ctx, scope, part, 0));
+  for (const node of asArray(nodes) as readonly CompiledWhatsAppButtonNode[]) {
     if ("if" in node) {
       const branch = evalPredicate(ctx, scope, node.if, depth + 1) ? node.then : (node.else ?? []);
       resolveButtons(ctx, branch, out, depth + 1);
@@ -1238,16 +1297,16 @@ const resolveButtons = (
   }
 };
 
-/** Render the WhatsApp channel of a compiled template: every text rendered, conditional buttons resolved. */
-export const renderIrWhatsApp = (
-  ir: TemplateIr,
+/** The WhatsApp channel with every text rendered and conditional buttons resolved. */
+const renderWhatsApp = (
+  template: CompiledTemplate,
   input: unknown,
-  options: RenderOptions = {},
-): RenderedIrWhatsApp => {
-  const whatsapp = ir.whatsapp;
+  options: RenderSettings,
+): RenderedWhatsApp => {
+  const ctx = createContext(template, input, options, true);
+  const whatsapp = template.whatsapp;
   if (whatsapp === undefined)
     return fail("missing-channel", "The template has no WhatsApp channel.");
-  const ctx = createContext(ir, input, options, true);
   const header =
     whatsapp.header === undefined
       ? undefined
@@ -1268,3 +1327,28 @@ export const renderIrWhatsApp = (
     buttons,
   };
 };
+
+type ChannelRenderers = {
+  readonly [C in Channel]: (
+    template: CompiledTemplate,
+    input: unknown,
+    options: RenderSettings,
+  ) => RenderedMessage[C];
+};
+
+const CHANNEL_RENDERERS: ChannelRenderers = {
+  email: (template, input, options) => renderEmail(template, input, options),
+  sms: renderSms,
+  whatsapp: renderWhatsApp,
+};
+
+/**
+ * Render one channel of a compiled template against one validated input. It throws only
+ * `RenderError`: a template compiled by another version, a channel the template does not declare,
+ * or input or markup the renderer refuses.
+ */
+export const render = <C extends Channel>(
+  template: CompiledTemplate,
+  input: unknown,
+  options: RenderSettings & { readonly channel: C },
+): RenderedMessage[C] => CHANNEL_RENDERERS[options.channel](template, input, options);

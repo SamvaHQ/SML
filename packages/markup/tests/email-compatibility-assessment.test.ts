@@ -1,9 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { checkEmailCompatibility, hasBlockingCompatibility } from "../src/email/compatibility";
+import { checkHtmlCompatibility, hasBlockingCompatibility } from "../src/email/compatibility";
 
 const finding = (html: string, code: string, client?: string) => {
-  const result = checkEmailCompatibility({ html }).find(
+  const result = checkHtmlCompatibility({ html }).find(
     (item) =>
       item.code === `caniemail/${code}` && (client === undefined || item.clients?.includes(client)),
   );
@@ -73,7 +73,7 @@ describe("compatibility assessments", () => {
     '<img style="display:none!important;display:block" src="https://example.com/a.png">',
   ])("blocks demonstrated partial hidden-content failures: %s", (html) => {
     const origin = { fileName: "template.tsx", lineNumber: 4, columnNumber: 3 };
-    const result = checkEmailCompatibility({
+    const result = checkHtmlCompatibility({
       html,
       fixture: "hidden-content",
       positions: [
@@ -112,7 +112,7 @@ describe("compatibility assessments", () => {
     '<!--[if !mso]><!--><img style="display:none" src="https://example.com/a.png"><!--<![endif]-->',
     '<style>img { display:block!important }</style><img style="display:none" src="https://example.com/a.png">',
   ])("does not block safe or unresolved hidden-content context: %s", (html) => {
-    const result = checkEmailCompatibility({ html });
+    const result = checkHtmlCompatibility({ html });
     expect(hasBlockingCompatibility(result)).toBe(false);
     expect(
       result
@@ -143,7 +143,7 @@ describe("compatibility assessments", () => {
       `<div style="display:none;${style}"><table><tr><td>hidden</td></tr></table></div>`,
       `<div style="display:none"><table style="${style}"><tr><td>hidden</td></tr></table></div>`,
     ]) {
-      const result = checkEmailCompatibility({ html });
+      const result = checkHtmlCompatibility({ html });
       expect(hasBlockingCompatibility(result)).toBe(true);
       expect(
         result.some(
@@ -179,7 +179,7 @@ describe("compatibility assessments", () => {
       `<div style="display:none;${style}"><table><tr><td>hidden</td></tr></table></div>`,
       `<div style="display:none"><table style="${style}"><tr><td>hidden</td></tr></table></div>`,
     ]) {
-      const result = checkEmailCompatibility({ html });
+      const result = checkHtmlCompatibility({ html });
       expect(hasBlockingCompatibility(result)).toBe(false);
       const display = result.filter((item) => item.code.startsWith("caniemail/display"));
       expect(display.length).toBeGreaterThan(0);
@@ -188,7 +188,7 @@ describe("compatibility assessments", () => {
   });
 
   it("leaves hidden content with external CSS unverified", () => {
-    const result = checkEmailCompatibility({
+    const result = checkHtmlCompatibility({
       html: '<img style="display:none" src="https://example.com/a.png">',
       css: "img { mso-hide:all }",
     });
@@ -207,7 +207,7 @@ describe("compatibility assessments", () => {
       css: "p { background-image:url(https://example.com/a.png) }",
     },
   ])("does not call mixed backgrounds colors-only: %s", (input) => {
-    const backgrounds = checkEmailCompatibility(input).filter(
+    const backgrounds = checkHtmlCompatibility(input).filter(
       (item) => item.code === "caniemail/background",
     );
     expect(backgrounds.length).toBeGreaterThan(0);
@@ -222,7 +222,7 @@ describe("compatibility assessments", () => {
   });
 
   it("keeps known broken navigation blocking", () => {
-    const result = checkEmailCompatibility({
+    const result = checkHtmlCompatibility({
       html: '<a href="#section">Jump</a><p id="section">Hello</p>',
     });
     const blocked = result.filter((item) => item.severity === "error");

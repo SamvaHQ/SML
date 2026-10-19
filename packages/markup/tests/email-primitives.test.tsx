@@ -363,3 +363,29 @@ describe("primitive defaults", () => {
     ).toContain('class="sml-button shadow-sm"');
   });
 });
+
+describe("primitive findings", () => {
+  it("travel with the tree: one render never reports another's", () => {
+    const flawed = <Button href="https://example.com/order">View order</Button>;
+    const clean = (
+      <Button href="https://example.com/order" height={40}>
+        View order
+      </Button>
+    );
+    expect(diagnosticCodes(flawed)).toEqual(["button-outlook-fallback"]);
+    expect(diagnosticCodes(clean)).toEqual([]);
+    expect(diagnosticCodes(flawed)).toEqual(["button-outlook-fallback"]);
+  });
+
+  it("stay on the node that built them when renders interleave", () => {
+    const flawed = <Button href="https://example.com/order">View order</Button>;
+    const clean = (
+      <Button href="https://example.com/order" height={40}>
+        View order
+      </Button>
+    );
+    const cleanCodes = diagnosticCodes(clean);
+    expect(diagnosticCodes(flawed)).toEqual(["button-outlook-fallback"]);
+    expect(cleanCodes).toEqual([]);
+  });
+});

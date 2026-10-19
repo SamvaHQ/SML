@@ -1,22 +1,22 @@
+import type {
+  CompiledArithmetic,
+  CompiledComparison,
+  CompiledEach,
+  CompiledElement,
+  CompiledFormatter,
+  CompiledIf,
+  CompiledNode,
+  CompiledPredicate,
+  CompiledSource,
+  CompiledStyle,
+  CompiledValue,
+} from "../compiled-template";
 // oxlint-disable samva/no-hand-rolled-object-guard -- IR nodes and Babel nodes are this package's own typed data, discriminated structurally; nothing here validates external input.
 import type { DiagnosticCode } from "../diagnostic-codes";
 import { reservedBrandAttributes, type BrandPlugin } from "../email/brand-plugin";
 import { EMAIL_ELEMENTS, emailElement } from "../email/elements";
 import { checkAttribute } from "../email/html";
 import { FORMATTER_NAMES } from "../fmt";
-import type {
-  IrArithmetic,
-  IrComparison,
-  IrEach,
-  IrElement,
-  IrFormatter,
-  IrIf,
-  IrNode,
-  IrPredicate,
-  IrSource,
-  IrStyle,
-  IrValue,
-} from "../ir";
 import { child, children, keyName, text, unwrap, type Node } from "./ast";
 import { bindingValue, joinPath, type Binding, type Env } from "./bindings";
 import { runBuiltinComponent, type ChannelLowering } from "./components";
@@ -48,20 +48,20 @@ export interface Ctx {
   readonly loops: readonly string[];
   readonly depth: number;
   /** Inside a chunked `<Columns each>`: the width a `Column` that states none takes. */
-  readonly columnWidth?: IrValue | undefined;
+  readonly columnWidth?: CompiledValue | undefined;
   /** Inside a `<Columns>` that stacks on a narrow viewport: its `Column`s carry the stacking class. */
   readonly columnStack?: boolean | undefined;
 }
 
 const MAX_DEPTH = 40;
-const ARITHMETIC: Readonly<Record<string, IrArithmetic>> = {
+const ARITHMETIC: Readonly<Record<string, CompiledArithmetic>> = {
   "+": "+",
   "-": "-",
   "*": "*",
   "/": "/",
   "%": "%",
 };
-const COMPARISON: Readonly<Record<string, IrComparison>> = {
+const COMPARISON: Readonly<Record<string, CompiledComparison>> = {
   "===": "eq",
   "!==": "ne",
   "<": "lt",
@@ -69,7 +69,7 @@ const COMPARISON: Readonly<Record<string, IrComparison>> = {
   "<=": "le",
   ">=": "ge",
 };
-const FORMATTER_ARITY: Readonly<Record<IrFormatter, readonly [number, number]>> = {
+const FORMATTER_ARITY: Readonly<Record<CompiledFormatter, readonly [number, number]>> = {
   money: [2, 3],
   number: [1, 3],
   date: [1, 3],
@@ -129,7 +129,7 @@ const jsxName = (name: Node): string => {
   return "";
 };
 
-const isStatic = (value: IrValue): value is string | number | boolean | null =>
+const isStatic = (value: CompiledValue): value is string | number | boolean | null =>
   value === null ||
   typeof value === "string" ||
   typeof value === "number" ||
@@ -157,7 +157,7 @@ export class Lowerer {
   }
 
   /** A stable source reference for a node: `[line, column]` in the entry, else with a file index. */
-  src(module: ProjectModule, node: { readonly start: number }): IrSource {
+  src(module: ProjectModule, node: { readonly start: number }): CompiledSource {
     const at = module.parsed.position(node.start);
     if (module.path === this.options.project.entry.path) return [at.line, at.column];
     let index = this.sources.indexOf(module.path);
@@ -249,7 +249,7 @@ export class Lowerer {
             );
             return;
           }
-          resolved = { k: "value", value: defaultValue.value as IrValue };
+          resolved = { k: "value", value: defaultValue.value as CompiledValue };
         }
         this.bindPattern(ctx, left, resolved, env, allowDefaults);
         return;
@@ -406,7 +406,7 @@ export class Lowerer {
   }
 
   /** Lower an expression to a value read at render time. `arith` allows arithmetic operators. */
-  value(ctx: Ctx, expression: Node, arith: boolean): IrValue | undefined {
+  value(ctx: Ctx, expression: Node, arith: boolean): CompiledValue | undefined {
     const node = unwrap(expression);
     switch (node.type) {
       case "StringLiteral":
@@ -592,7 +592,7 @@ export class Lowerer {
     }
   }
 
-  private checkedText(ctx: Ctx, node: Node, value: string): IrValue {
+  private checkedText(ctx: Ctx, node: Node, value: string): CompiledValue {
     if (/[-]/.test(value))
       this.error(
         ctx,
@@ -604,10 +604,10 @@ export class Lowerer {
     return value;
   }
 
-  private template(ctx: Ctx, node: Node, arith: boolean): IrValue | undefined {
+  private template(ctx: Ctx, node: Node, arith: boolean): CompiledValue | undefined {
     const quasis = children(node, "quasis");
     const expressions = children(node, "expressions");
-    const parts: IrValue[] = [];
+    const parts: CompiledValue[] = [];
     let ok = true;
     for (const [index, quasi] of quasis.entries()) {
       const chunk = templateChunk(quasi);
@@ -624,7 +624,7 @@ export class Lowerer {
   }
 
   /** A `fmt.*` call. Any other call is the dynamic expression the profile refuses. */
-  private call(ctx: Ctx, node: Node): IrValue | undefined {
+  private call(ctx: Ctx, node: Node): CompiledValue | undefined {
     const callee = child(node, "callee");
     const args = children(node, "arguments");
     if (callee === undefined) return undefined;
@@ -644,7 +644,7 @@ export class Lowerer {
           );
           return undefined;
         }
-        const name = method as IrFormatter;
+        const name = method as CompiledFormatter;
         const [min, max] = FORMATTER_ARITY[name];
         if (args.length < min || args.length > max) {
           this.error(
@@ -656,7 +656,7 @@ export class Lowerer {
           );
           return undefined;
         }
-        const lowered: IrValue[] = [];
+        const lowered: CompiledValue[] = [];
         for (const argument of args) {
           const inner = unwrap(argument);
           if (inner.type === "ObjectExpression") {
@@ -729,7 +729,7 @@ export class Lowerer {
 
   // ── Conditions ───────────────────────────────────────────────────────────────
 
-  predicate(ctx: Ctx, expression: Node): IrPredicate | undefined {
+  predicate(ctx: Ctx, expression: Node): CompiledPredicate | undefined {
     const node = unwrap(expression);
     if (node.type === "LogicalExpression") {
       const operator = text(node, "operator");
@@ -740,11 +740,11 @@ export class Lowerer {
         const b = this.predicate(ctx, right);
         if (a === undefined || b === undefined) return undefined;
         if (operator === "&&") {
-          const flat = (predicate: IrPredicate): readonly IrPredicate[] =>
+          const flat = (predicate: CompiledPredicate): readonly CompiledPredicate[] =>
             "and" in predicate ? predicate.and : [predicate];
           return { and: [...flat(a), ...flat(b)] };
         }
-        const flat = (predicate: IrPredicate): readonly IrPredicate[] =>
+        const flat = (predicate: CompiledPredicate): readonly CompiledPredicate[] =>
           "or" in predicate ? predicate.or : [predicate];
         return { or: [...flat(a), ...flat(b)] };
       }
@@ -786,13 +786,13 @@ export class Lowerer {
   // ── Content ──────────────────────────────────────────────────────────────────
 
   /** Lower the children of a JSX element or fragment. */
-  jsxChildren(ctx: Ctx, parent: Node): IrNode[] {
-    const output: IrNode[] = [];
+  jsxChildren(ctx: Ctx, parent: Node): CompiledNode[] {
+    const output: CompiledNode[] = [];
     for (const item of children(parent, "children")) {
       switch (item.type) {
         case "JSXText": {
           const cleaned = cleanJsxText(text(item, "value") ?? "");
-          if (cleaned !== "") output.push(this.checkedText(ctx, item, cleaned) as IrNode);
+          if (cleaned !== "") output.push(this.checkedText(ctx, item, cleaned) as CompiledNode);
           break;
         }
         case "JSXExpressionContainer": {
@@ -816,7 +816,7 @@ export class Lowerer {
   }
 
   /** Lower an expression in content position. */
-  content(ctx: Ctx, expression: Node): IrNode[] {
+  content(ctx: Ctx, expression: Node): CompiledNode[] {
     if (ctx.depth > MAX_DEPTH) {
       this.error(ctx, expression, "nesting-limit", "The template nests too deeply.", "Flatten it.");
       return [];
@@ -828,7 +828,7 @@ export class Lowerer {
         return this.element(ctx, node);
       case "StringLiteral": {
         const value = text(node, "value") ?? "";
-        return value === "" ? [] : [this.checkedText(ctx, node, value) as IrNode];
+        return value === "" ? [] : [this.checkedText(ctx, node, value) as CompiledNode];
       }
       case "NumericLiteral":
         return typeof node.value === "number" ? [node.value] : [];
@@ -863,7 +863,7 @@ export class Lowerer {
         const then = this.content(ctx, consequent);
         const otherwise = this.content(ctx, alternate);
         if (predicate === undefined) return [];
-        const branch: IrIf = {
+        const branch: CompiledIf = {
           if: predicate,
           then,
           ...(otherwise.length === 0 ? {} : { else: otherwise }),
@@ -902,7 +902,7 @@ export class Lowerer {
     return `${base}_${this.uniqueId}`;
   }
 
-  private each(ctx: Ctx, call: Node, callee: Node): IrNode[] {
+  private each(ctx: Ctx, call: Node, callee: Node): CompiledNode[] {
     const object = child(callee, "object");
     const callback = children(call, "arguments")[0];
     if (object === undefined || callback === undefined) return [];
@@ -927,7 +927,7 @@ export class Lowerer {
   private filterChain(
     ctx: Ctx,
     expression: Node,
-  ): { readonly list: IrValue | undefined; readonly filters: readonly Node[] } | undefined {
+  ): { readonly list: CompiledValue | undefined; readonly filters: readonly Node[] } | undefined {
     const filters: Node[] = [];
     let current = unwrap(expression);
     for (;;) {
@@ -953,8 +953,12 @@ export class Lowerer {
   }
 
   /** The condition `.filter(callbacks)` keeps items by, with the item bound as `$as`. */
-  private whereClause(ctx: Ctx, as: string, filters: readonly Node[]): IrPredicate | undefined {
-    const predicates: IrPredicate[] = [];
+  private whereClause(
+    ctx: Ctx,
+    as: string,
+    filters: readonly Node[],
+  ): CompiledPredicate | undefined {
+    const predicates: CompiledPredicate[] = [];
     for (const filter of filters) {
       if (!/Function/.test(filter.type)) {
         this.dynamic(
@@ -993,11 +997,11 @@ export class Lowerer {
   eachOver(
     ctx: Ctx,
     at: Node,
-    list: IrValue,
+    list: CompiledValue,
     fn: Node,
     filters: readonly Node[] = [],
     options: { readonly chunk?: number; readonly name?: string } = {},
-  ): IrEach | undefined {
+  ): CompiledEach | undefined {
     const params = children(fn, "params");
     if (params.length > 2) {
       this.error(
@@ -1057,7 +1061,7 @@ export class Lowerer {
   // ── Elements ─────────────────────────────────────────────────────────────────
 
   /** Lower a JSX element or fragment to IR nodes. */
-  element(ctx: Ctx, node: Node): IrNode[] {
+  element(ctx: Ctx, node: Node): CompiledNode[] {
     if (node.type === "JSXFragment")
       return this.jsxChildren({ ...ctx, depth: ctx.depth + 1 }, node);
     const opening = child(node, "openingElement");
@@ -1079,7 +1083,7 @@ export class Lowerer {
     return name === undefined ? "" : jsxName(name);
   }
 
-  private intrinsic(ctx: Ctx, node: Node, opening: Node, tag: string): IrNode[] {
+  private intrinsic(ctx: Ctx, node: Node, opening: Node, tag: string): CompiledNode[] {
     const spec = emailElement(tag);
     if (spec === undefined) {
       const near = didYouMean(tag, Object.keys(EMAIL_ELEMENTS));
@@ -1094,8 +1098,8 @@ export class Lowerer {
       );
       return [];
     }
-    const attrs: Record<string, IrValue> = {};
-    let style: IrStyle | undefined;
+    const attrs: Record<string, CompiledValue> = {};
+    let style: CompiledStyle | undefined;
     const origin = [this.findings.locate(ctx.module.parsed, node)];
     for (const attribute of children(opening, "attributes")) {
       if (attribute.type === "JSXSpreadAttribute") {
@@ -1139,7 +1143,7 @@ export class Lowerer {
         style = this.styleAttribute(ctx, valueNode);
         continue;
       }
-      let value: IrValue | undefined;
+      let value: CompiledValue | undefined;
       if (valueNode === undefined) value = true;
       else if (valueNode.type === "StringLiteral")
         value = this.checkedText(ctx, valueNode, text(valueNode, "value") ?? "");
@@ -1190,7 +1194,7 @@ export class Lowerer {
       attrs[name] = value;
     }
     const kids = spec.content === "void" ? [] : this.jsxChildren(ctx, node);
-    const element: IrElement = {
+    const element: CompiledElement = {
       el: tag,
       ...(Object.keys(attrs).length === 0 ? {} : { attrs }),
       ...(style === undefined ? {} : { style }),
@@ -1201,7 +1205,7 @@ export class Lowerer {
   }
 
   /** A class value: literal classes, possibly chosen by a condition. Tailwind cannot see anything else. */
-  private classValue(ctx: Ctx, valueNode: Node): IrValue | undefined {
+  private classValue(ctx: Ctx, valueNode: Node): CompiledValue | undefined {
     const node =
       valueNode.type === "JSXExpressionContainer" ? child(valueNode, "expression") : valueNode;
     if (node === undefined) return undefined;
@@ -1218,7 +1222,7 @@ export class Lowerer {
     return value;
   }
 
-  private classExpression(ctx: Ctx, expression: Node): IrValue | undefined {
+  private classExpression(ctx: Ctx, expression: Node): CompiledValue | undefined {
     const node = unwrap(expression);
     switch (node.type) {
       case "StringLiteral":
@@ -1237,7 +1241,7 @@ export class Lowerer {
       case "TemplateLiteral": {
         const quasis = children(node, "quasis");
         const expressions = children(node, "expressions");
-        const parts: IrValue[] = [];
+        const parts: CompiledValue[] = [];
         for (const [index, quasi] of quasis.entries()) {
           const chunk = templateChunk(quasi);
           if (chunk !== "") parts.push(chunk);
@@ -1287,7 +1291,7 @@ export class Lowerer {
     }
   }
 
-  private styleAttribute(ctx: Ctx, valueNode: Node | undefined): IrStyle | undefined {
+  private styleAttribute(ctx: Ctx, valueNode: Node | undefined): CompiledStyle | undefined {
     const expression = valueNode === undefined ? undefined : child(valueNode, "expression");
     const object = expression === undefined ? undefined : unwrap(expression);
     if (object === undefined || object.type !== "ObjectExpression") {
@@ -1305,8 +1309,8 @@ export class Lowerer {
   }
 
   /** A `style` object literal as declarations whose values may be read at render time. */
-  styleObject(ctx: Ctx, object: Node): IrStyle | undefined {
-    const entries: (readonly [string, IrValue])[] = [];
+  styleObject(ctx: Ctx, object: Node): CompiledStyle | undefined {
+    const entries: (readonly [string, CompiledValue])[] = [];
     for (const property of children(object, "properties")) {
       if (property.type !== "ObjectProperty" || property.computed === true) {
         this.dynamic(ctx, property, "A spread or computed style entry", "Write each property.");
@@ -1326,7 +1330,7 @@ export class Lowerer {
 
   // ── Components ───────────────────────────────────────────────────────────────
 
-  private component(ctx: Ctx, node: Node, opening: Node, name: string): IrNode[] {
+  private component(ctx: Ctx, node: Node, opening: Node, name: string): CompiledNode[] {
     const head = name.split(".")[0] ?? name;
     const imported = ctx.module.imports.get(head);
     const local = ctx.module.declarations.get(head);
@@ -1480,7 +1484,7 @@ export class Lowerer {
     name: string,
     module: ProjectModule,
     fn: Node,
-  ): IrNode[] {
+  ): CompiledNode[] {
     const id = `${module.path}#${fn.start}`;
     if (ctx.stack.includes(id)) {
       this.error(
@@ -1520,7 +1524,7 @@ const jsxLike = (node: Node | undefined): string =>
   node === undefined ? "" : node.type === "Identifier" ? (text(node, "name") ?? "") : "…";
 
 /** A value made only of literal class lists and choices between them. */
-const isClassValue = (value: IrValue): boolean => {
+const isClassValue = (value: CompiledValue): boolean => {
   if (typeof value === "string") return true;
   if (typeof value !== "object" || value === null) return false;
   if ("if" in value) return isClassValue(value.then) && isClassValue(value.else);
@@ -1538,8 +1542,8 @@ const templateChunk = (quasi: Node): string => {
 };
 
 /** Concatenate values, merging adjacent literals. A lone part stays itself. */
-export const joinValues = (parts: readonly IrValue[]): IrValue => {
-  const merged: IrValue[] = [];
+export const joinValues = (parts: readonly CompiledValue[]): CompiledValue => {
+  const merged: CompiledValue[] = [];
   for (const part of parts) {
     const previous = merged[merged.length - 1];
     if (typeof part === "string" && typeof previous === "string")

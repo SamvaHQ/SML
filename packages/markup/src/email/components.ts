@@ -6,7 +6,8 @@ import {
   jsx,
   normalizeChildren,
   rawMarkup,
-  reportEmailDiagnostic,
+  withEmailDiagnostics,
+  type EmailFinding,
   type EmailChild,
 } from "./jsx-runtime";
 import { PRIMITIVE_CLASSES } from "./primitive-css";
@@ -42,6 +43,7 @@ const classNames = (own: string, authored: string | undefined): string =>
   authored === undefined || authored.trim() === "" ? own : `${own} ${authored}`;
 
 const optionalNumber = (
+  found: EmailFinding[],
   component: string,
   name: string,
   value: unknown,
@@ -54,7 +56,7 @@ const optionalNumber = (
     (bounds.min === undefined || value >= bounds.min)
   )
     return value;
-  reportEmailDiagnostic({
+  found.push({
     code: "invalid-number-prop",
     severity: "error",
     message: `<${component} ${name}> must be a finite number${bounds.min === undefined ? "" : ` of at least ${bounds.min}`}.`,
@@ -128,13 +130,14 @@ export const Email = ({
   style,
   children,
 }: EmailProps): EmailNode => {
-  const safeGutter = optionalNumber("Email", "gutter", gutter, { min: 0 });
+  const found: EmailFinding[] = [];
+  const safeGutter = optionalNumber(found, "Email", "gutter", gutter, { min: 0 });
   const padding =
     safeGutter === undefined
       ? {}
       : { paddingLeft: `${safeGutter}px`, paddingRight: `${safeGutter}px` };
   const cellStyle = { ...padding, ...style };
-  return jsx("html", {
+  const document = jsx("html", {
     lang,
     dir,
     xmlns: "http://www.w3.org/1999/xhtml",
@@ -175,6 +178,7 @@ export const Email = ({
       }),
     ],
   });
+  return withEmailDiagnostics(document, found);
 };
 
 // ── Layout ──────────────────────────────────────────────────────────────────
@@ -337,21 +341,25 @@ export const Columns = <Item = never>({
   children,
 }: ColumnsProps<Item>): EmailNode => {
   const table = { className, align, width, ...(style === undefined ? {} : { style }) };
-  const safeGap = optionalNumber("Columns", "gap", gap, { min: 0 });
+  const found: EmailFinding[] = [];
+  const safeGap = optionalNumber(found, "Columns", "gap", gap, { min: 0 });
   if (each === undefined || typeof children !== "function")
-    return presentation(
-      table,
-      withGaps(
-        normalizeChildren(children as EmailChild).map((cell) =>
-          withColumnLayout(cell, undefined, stack),
+    return withEmailDiagnostics(
+      presentation(
+        table,
+        withGaps(
+          normalizeChildren(children as EmailChild).map((cell) =>
+            withColumnLayout(cell, undefined, stack),
+          ),
+          safeGap,
+          stack,
         ),
-        safeGap,
-        stack,
+        { style: { width: "100%" } },
       ),
-      { style: { width: "100%" } },
+      found,
     );
   if (per !== undefined && (!Number.isInteger(per) || per < 1))
-    reportEmailDiagnostic({
+    found.push({
       code: "invalid-columns-per",
       severity: "error",
       message: "<Columns per> must be a positive integer.",
@@ -361,7 +369,7 @@ export const Columns = <Item = never>({
   if (size === undefined) chunks.push(each);
   else for (let at = 0; at < each.length; at += size) chunks.push(each.slice(at, at + size));
   const share = equalColumnWidth(size ?? Math.max(each.length, 1));
-  return jsx(Fragment, {
+  const rows = jsx(Fragment, {
     children: chunks.map((chunk) =>
       presentation(
         table,
@@ -378,6 +386,7 @@ export const Columns = <Item = never>({
       ),
     ),
   });
+  return withEmailDiagnostics(rows, found);
 };
 
 export interface ColumnProps {
@@ -439,30 +448,44 @@ export interface ButtonProps {
 /** Average advance of a bold sans-serif glyph, as a fraction of the font size. */
 const BOLD_GLYPH_ADVANCE = 0.6;
 
-const invalidButtonNumber = (name: string): void =>
-  reportEmailDiagnostic({
+const invalidButtonNumber = (found: EmailFinding[], name: string): void => {
+  found.push({
     code: "invalid-button-number",
     severity: "error",
     message: `<Button ${name}> must be a finite number.`,
   });
+};
 
-const buttonNumber = (name: string, value: unknown, fallback: number): number => {
+const buttonNumber = (
+  found: EmailFinding[],
+  name: string,
+  value: unknown,
+  fallback: number,
+): number => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  invalidButtonNumber(name);
+  invalidButtonNumber(found, name);
   return fallback;
 };
 
-const optionalButtonNumber = (name: string, value: unknown): number | undefined => {
+const optionalButtonNumber = (
+  found: EmailFinding[],
+  name: string,
+  value: unknown,
+): number | undefined => {
   if (value === undefined) return undefined;
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  invalidButtonNumber(name);
+  invalidButtonNumber(found, name);
   return undefined;
 };
 
-const optionalPositiveButtonNumber = (name: string, value: unknown): number | undefined => {
+const optionalPositiveButtonNumber = (
+  found: EmailFinding[],
+  name: string,
+  value: unknown,
+): number | undefined => {
   if (value === undefined) return undefined;
   if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
-  reportEmailDiagnostic({
+  found.push({
     code: "invalid-button-number",
     severity: "error",
     message: `<Button ${name}> must be a positive finite number.`,
@@ -494,16 +517,17 @@ export const Button = ({
   style,
   children,
 }: ButtonProps): EmailNode => {
-  const safeWidth = optionalButtonNumber("width", width);
-  const safeHeight = optionalPositiveButtonNumber("height", height);
-  const safePaddingX = buttonNumber("paddingX", paddingX, 16);
-  const safeBorderRadius = optionalButtonNumber("borderRadius", borderRadius);
-  const safeBorderWidth = buttonNumber("borderWidth", borderWidth, 0);
-  const safeFontSize = buttonNumber("fontSize", fontSize, 16);
+  const found: EmailFinding[] = [];
+  const safeWidth = optionalButtonNumber(found, "width", width);
+  const safeHeight = optionalPositiveButtonNumber(found, "height", height);
+  const safePaddingX = buttonNumber(found, "paddingX", paddingX, 16);
+  const safeBorderRadius = optionalButtonNumber(found, "borderRadius", borderRadius);
+  const safeBorderWidth = buttonNumber(found, "borderWidth", borderWidth, 0);
+  const safeFontSize = buttonNumber(found, "fontSize", fontSize, 16);
   const label = typeof children === "string" ? children : undefined;
   const fallback = safeHeight !== undefined && label !== undefined;
   if (!fallback)
-    reportEmailDiagnostic({
+    found.push({
       code: "button-outlook-fallback",
       severity: "warning",
       message:
@@ -519,7 +543,7 @@ export const Button = ({
   const fill = backgroundColor ?? "var(--color-primary)";
   const ink = color ?? "var(--color-primary-foreground)";
   const family = fontFamily ?? "var(--font-sans)";
-  return presentation(
+  const button = presentation(
     { width: "100%", style: { borderCollapse: "collapse" } },
     jsx("td", {
       align,
@@ -564,6 +588,7 @@ export const Button = ({
       ],
     }),
   );
+  return withEmailDiagnostics(button, found);
 };
 
 // ── Rhythm ──────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { JsxSourceLocation } from "@samva/markup/edit";
-import { emailSelections, type EmittedPosition } from "@samva/markup/render";
+import { emailSelections, type EmittedPosition } from "@samva/markup/edit";
 
 import {
   authoringOrigin,
