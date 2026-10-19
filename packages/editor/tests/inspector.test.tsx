@@ -64,7 +64,7 @@ describe("Inspector document scope", () => {
     expect(view.container.textContent).toContain("firstName");
     expect(view.container.textContent).toContain("claimUrl");
     // Values come from the fixture the toolbar selected, not from editable samples.
-    expect(view.container.textContent).toContain("values of the fixture selected in the toolbar");
+    expect(view.container.textContent).toContain("values of the fixture selected above it");
   });
 });
 

@@ -1,5 +1,4 @@
 import { ScrollArea } from "@base-ui/react/scroll-area";
-import { Tooltip } from "@base-ui/react/tooltip";
 import type { EditorDocument } from "@samva/editor/host";
 import {
   emailDefinitionInstances,
@@ -11,13 +10,14 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
 import { DEVICE_WIDTH } from "../state/store";
-import { AttentionSummary } from "./compatibility-report";
+import { Button } from "../ui/button";
+import { ChecksPanel } from "./checks-panel";
 import { SidebarRightHide } from "./editor-icons";
 import { formatOrigin, selectionLabel } from "./email-outline";
 import { SourceControls, FixtureSourceControls } from "./source-controls";
-import { GroupLabel, MonoCtl, VarChip } from "./ui";
+import { GroupLabel, Value, VarChip } from "./ui";
+import { Tip } from "./ui";
 import { cn, focusRing } from "./ui-classes";
-import { useEditorPortalContainer } from "./use-editor-portal";
 
 /** Stable empty lists, so a selector that falls back never mints a fresh snapshot. */
 const NO_FIXTURES: ReadonlyArray<string> = [];
@@ -59,23 +59,21 @@ function VariablesGroup() {
         ))}
       </div>
       <p className="text-muted-foreground mt-2.5 text-[11.5px]">
-        The canvas shows the values of the fixture selected in the toolbar.
+        The preview shows the values of the fixture selected above it.
       </p>
     </div>
   );
 }
 
 function ChecksGroup() {
-  const checks = useEditorStore((state) => state.checks);
-  const editable = useEditorStore((state) => state.sourceEditable);
   return (
     <div className="py-3">
-      <AttentionSummary checks={checks} editable={editable} />
+      <ChecksPanel />
     </div>
   );
 }
 
-function DocumentInspector() {
+function DocumentInspector({ checks }: { readonly checks: boolean }) {
   const { deviceWidth, entryFile, fixture, fixtures } = useEditorStore(
     useShallow((state) => ({
       deviceWidth: DEVICE_WIDTH[state.previewDevice],
@@ -90,24 +88,24 @@ function DocumentInspector() {
       <div className="border-border-subtle border-b py-3">
         <GroupLabel>Document</GroupLabel>
         <Row label="Width">
-          <MonoCtl>
+          <Value>
             {deviceWidth} <span className="text-placeholder text-[10.5px]">px</span>
-          </MonoCtl>
+          </Value>
         </Row>
         {entryFile !== null && (
           <Row label="Entry">
-            <MonoCtl>{entryFile}</MonoCtl>
+            <Value>{entryFile}</Value>
           </Row>
         )}
         {fixture !== null && (
           <Row label="Fixture" title={`${fixtures.length} declared`}>
-            <MonoCtl>{fixture}</MonoCtl>
+            <Value>{fixture}</Value>
           </Row>
         )}
       </div>
       <FixtureSourceControls key={`${fixture}:${entryFile}`} />
       <VariablesGroup />
-      <ChecksGroup />
+      {checks && <ChecksGroup />}
     </>
   );
 }
@@ -231,10 +229,10 @@ function EnvelopeInspector() {
       <div className="border-border-subtle border-b py-3">
         <GroupLabel>Rendered</GroupLabel>
         <Row label="Subject">
-          <MonoCtl>{render?.subject ?? "No subject"}</MonoCtl>
+          <Value>{render?.subject ?? "No subject"}</Value>
         </Row>
         <Row label="Preview">
-          <MonoCtl>{render?.preheader ?? "No preview text"}</MonoCtl>
+          <Value>{render?.preheader ?? "No preview text"}</Value>
         </Row>
       </div>
       {metadataEditable ? (
@@ -266,7 +264,7 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
       <div className="border-border-subtle border-b py-3">
         <GroupLabel>Element</GroupLabel>
         <Row label="Tag">
-          <MonoCtl testId="inspector.element.tag">{selection.tag}</MonoCtl>
+          <Value testId="inspector.element.tag">{selection.tag}</Value>
         </Row>
         <Row
           label="Source"
@@ -276,12 +274,12 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
               : "A compiler primitive produced this element; the authoring below is the call that asked for it."
           }
         >
-          <MonoCtl testId="inspector.element.provenance">
+          <Value testId="inspector.element.provenance">
             {selection.authored ? "Authored" : "Generated"}
-          </MonoCtl>
+          </Value>
         </Row>
         <Row label="Instance">
-          <MonoCtl testId="inspector.element.instance">{selection.instancePath}</MonoCtl>
+          <Value testId="inspector.element.instance">{selection.instancePath}</Value>
         </Row>
       </div>
 
@@ -295,7 +293,7 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
         ) : (
           <>
             <Row label="Written at">
-              <MonoCtl testId="inspector.authoring.origin">{formatOrigin(authoring)}</MonoCtl>
+              <Value testId="inspector.authoring.origin">{formatOrigin(authoring)}</Value>
             </Row>
             <p
               data-testid="inspector.authoring.occurrence"
@@ -369,8 +367,14 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
 }
 
 /** The contextual inspector: which scope is selected, and what that scope is. */
-export function Inspector({ embedded = false }: { readonly embedded?: boolean | undefined } = {}) {
-  const portalContainer = useEditorPortalContainer();
+export function Inspector({
+  embedded = false,
+  checks = true,
+}: {
+  readonly embedded?: boolean | undefined;
+  /** Show the checks in document scope. Off where the layout gives checks a tab of their own. */
+  readonly checks?: boolean | undefined;
+} = {}) {
   const { outline, selection, rightCollapsed, rightWidth, layoutMode } = useEditorStore(
     useShallow((state) => ({
       outline: state.outline,
@@ -462,31 +466,18 @@ export function Inspector({ embedded = false }: { readonly embedded?: boolean | 
               </span>
             )}
             {!embedded && (
-              <Tooltip.Root>
-                <Tooltip.Trigger
-                  render={
-                    <button
-                      type="button"
-                      aria-label="Collapse inspector"
-                      data-testid="inspector.collapse"
-                      onClick={toggleRight}
-                      className="text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 rounded-md p-1.5"
-                    />
-                  }
+              <Tip label="Collapse inspector" side="bottom">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Collapse inspector"
+                  data-testid="inspector.collapse"
+                  onClick={toggleRight}
+                  className="text-muted-foreground ml-auto"
                 >
-                  <SidebarRightHide className="size-[15px]" />
-                </Tooltip.Trigger>
-                <Tooltip.Portal container={portalContainer}>
-                  <Tooltip.Positioner side="bottom" sideOffset={5} className="z-[200]">
-                    <Tooltip.Popup
-                      role="tooltip"
-                      className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-                    >
-                      Collapse inspector
-                    </Tooltip.Popup>
-                  </Tooltip.Positioner>
-                </Tooltip.Portal>
-              </Tooltip.Root>
+                  <SidebarRightHide />
+                </Button>
+              </Tip>
             )}
           </div>
         </div>
@@ -494,7 +485,7 @@ export function Inspector({ embedded = false }: { readonly embedded?: boolean | 
         <ScrollArea.Root data-samva-scroll-area="inspector" className="relative min-h-0 flex-1">
           <ScrollArea.Viewport className="size-full">
             <div className="samva-inspector-content pb-4">
-              {scope === "document" && <DocumentInspector />}
+              {scope === "document" && <DocumentInspector checks={checks} />}
               {scope === "envelope" && <EnvelopeInspector />}
               {selected !== null && <ElementInspector selection={selected} />}
             </div>

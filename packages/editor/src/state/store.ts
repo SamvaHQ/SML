@@ -26,6 +26,7 @@ import {
   type EmailOutline,
 } from "../chrome/email-outline";
 import {
+  type SizeSource,
   deriveDocumentState,
   documentChecks,
   resolveSelection,
@@ -41,13 +42,26 @@ import {
 
 export type EditorLayoutMode = "wide" | "standard" | "compact" | "narrow";
 /**
- * Views of the Design rail. "review" is the host's own diff review surface; the
- * rail only offers it when the host docks one.
+ * The tabs of the work pane beside a docked assistant. Preview is always open; the rest are
+ * added from its "+" menu and closed again. "review" is the host's own review surface, offered
+ * only when the host docks one.
  */
-export type DesignRailView = "layers" | "inspector" | "review";
-/** The focused pane of an email workspace in its focused (compact/narrow) layout. */
-export type FocusedPane = "assistant" | "preview" | "design";
-type CanvasZoom = "fit" | "100";
+export type WorkTab = "preview" | "source" | "design" | "review" | "checks";
+/** A work-pane tab the author adds and closes. */
+export type AddedWorkTab = Exclude<WorkTab, "preview">;
+/** Every addable tab, in the order the "+" menu lists them and the tab bar keeps them. */
+export const ADDED_WORK_TABS: ReadonlyArray<AddedWorkTab> = [
+  "source",
+  "design",
+  "review",
+  "checks",
+];
+/** The pane a docked workspace shows when its frame is too narrow for both. */
+export type FocusedPane = "assistant" | "preview";
+/** Canvas zoom: fit to the pane, or a percentage between {@link ZOOM_MIN} and {@link ZOOM_MAX}. */
+export type CanvasZoom = "fit" | number;
+export const ZOOM_MIN = 50;
+export const ZOOM_MAX = 200;
 
 export const DEVICE_WIDTH: Record<DeviceMode, number> = {
   desktop: 600,
@@ -57,36 +71,69 @@ export const DEVICE_WIDTH: Record<DeviceMode, number> = {
 const LEFT_KEY = "samva.editor.leftWidth";
 const ASSISTANT_KEY = "samva.editor.assistantWidth";
 const RIGHT_KEY = "samva.editor.rightWidth";
+const CHAT_COLLAPSED_KEY = "samva.editor.chatCollapsed";
+const WORK_TABS_KEY = "samva.editor.workTabs";
+const WORK_TAB_KEY = "samva.editor.workTab";
 const LEFT_DEFAULT = 260;
-const ASSISTANT_DEFAULT = 360;
+const ASSISTANT_DEFAULT = 420;
 const RIGHT_DEFAULT = 320;
 const LEFT_MIN = 200;
 const LEFT_MAX = 420;
-const ASSISTANT_MIN = 300;
-const ASSISTANT_MAX = 520;
+export const ASSISTANT_MIN = 280;
+export const ASSISTANT_MAX = 640;
+/** Dragging the chat divider narrower than this collapses the chat instead of clamping it. */
+export const CHAT_COLLAPSE_BELOW = 140;
 const RIGHT_MIN = 260;
 const RIGHT_MAX = 440;
 
-const readStoredWidth = (key: string, fallback: number): number => {
-  // oxlint-disable-next-line samva/no-try-catch-or-throw -- Browser localStorage adapter boundary (not Effect domain): access throws in private mode / SSR, so fall back to the default width.
+const readStored = (key: string): string | null => {
+  // oxlint-disable-next-line samva/no-try-catch-or-throw -- Browser localStorage adapter boundary (not Effect domain): access throws in private mode / SSR, so fall back to the default.
   try {
-    const value = localStorage.getItem(key);
-    if (value === null) return fallback;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
+    return localStorage.getItem(key);
   } catch {
-    return fallback;
+    return null;
   }
 };
 
-const writeStoredWidth = (key: string, value: number): void => {
+const writeStored = (key: string, value: string): void => {
   // oxlint-disable-next-line samva/no-try-catch-or-throw -- Browser localStorage adapter boundary (not Effect domain): writes throw in private mode / SSR, where persistence is simply best-effort.
   try {
-    localStorage.setItem(key, String(value));
+    localStorage.setItem(key, value);
   } catch {
     // localStorage is unavailable (private mode, SSR) — persistence is best-effort.
   }
 };
+
+const readStoredWidth = (key: string, fallback: number): number => {
+  const value = readStored(key);
+  if (value === null) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const writeStoredWidth = (key: string, value: number): void => writeStored(key, String(value));
+
+const isAddedWorkTab = (value: unknown): value is AddedWorkTab =>
+  ADDED_WORK_TABS.some((tab) => tab === value);
+
+/** The added tabs a previous session left open, in tab-bar order; unknown names are dropped. */
+const readStoredWorkTabs = (): ReadonlyArray<AddedWorkTab> => {
+  const value = readStored(WORK_TABS_KEY);
+  if (value === null) return [];
+  const names = new Set(value.split(","));
+  return ADDED_WORK_TABS.filter((tab) => names.has(tab));
+};
+
+const readStoredWorkTab = (open: ReadonlyArray<AddedWorkTab>): WorkTab => {
+  const value = readStored(WORK_TAB_KEY);
+  return isAddedWorkTab(value) && open.includes(value) ? value : "preview";
+};
+
+const clampAssistantWidth = (width: number): number =>
+  Math.min(ASSISTANT_MAX, Math.max(ASSISTANT_MIN, Math.round(width)));
+
+const clampZoom = (zoom: CanvasZoom): CanvasZoom =>
+  zoom === "fit" ? zoom : Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(zoom)));
 
 /**
  * Every mutator, grouped under one object created at store init so its identity
@@ -140,22 +187,31 @@ export interface EditorActions {
   readonly selectEnvelope: () => void;
   readonly toggleLeft: () => void;
   readonly toggleRight: () => void;
-  /** Switch the Design rail between its views, including the host's review surface. */
-  readonly setDesignView: (view: DesignRailView) => void;
-  /** Switch the focused pane of a focused (compact/narrow) email workspace. */
+  /** Show a work-pane tab, adding it to the tab bar when it is not open yet. */
+  readonly openWorkTab: (tab: WorkTab) => void;
+  /** Close an added tab. Closing the shown tab shows the one before it. */
+  readonly closeWorkTab: (tab: AddedWorkTab) => void;
+  /** Collapse or restore the docked chat; the work pane takes the full width while collapsed. */
+  readonly setChatCollapsed: (collapsed: boolean) => void;
+  /** Switch the pane a docked workspace shows when its frame is too narrow for both. */
   readonly setFocusedPane: (pane: FocusedPane) => void;
   /**
-   * Reveal the host's review surface: the Design rail switches to Review, and
-   * a focused workspace that carries the rail focuses its pane. The layout
-   * owns where the surface lives, so this is the one open path every host
-   * deep-link uses.
+   * Reveal the host's review surface: the work pane opens its Review tab, and a
+   * workspace too narrow for both panes shows the work pane. This is the one open
+   * path every host deep-link uses.
    */
   readonly openReview: () => void;
+  /**
+   * Re-open the document from the host and mount the preview again. A no-op while an edit is
+   * still on its way to the host, so a refresh never drops it.
+   */
+  readonly refreshPreview: () => void;
   readonly setWorkspaceView: (view: "visual" | "source") => void;
   readonly setLeftWidth: (width: number) => void;
   readonly setAssistantWidth: (width: number) => void;
   readonly setRightWidth: (width: number) => void;
   readonly setPreviewDevice: (mode: DeviceMode) => void;
+  /** Fit, or a percentage clamped to {@link ZOOM_MIN}–{@link ZOOM_MAX}. */
   readonly setCanvasZoom: (zoom: CanvasZoom) => void;
   readonly setLayoutMode: (mode: EditorLayoutMode) => void;
   readonly setRenameActive: (on: boolean) => void;
@@ -212,6 +268,8 @@ export interface EditorState {
   /** The tree of the current render. Null for a non-email document or an unbuilt entry. */
   readonly outline: EmailOutline | null;
   readonly sizeKb: number;
+  /** Whether {@link sizeKb} measures the email as sent or the preview HTML. */
+  readonly sizeSource: SizeSource;
   /** Host findings merged with host-supplied checks — shared by statusbar and inspector. */
   readonly checks: ReadonlyArray<CheckItem>;
   readonly hostChecks: ReadonlyArray<CheckItem>;
@@ -240,10 +298,20 @@ export interface EditorState {
   // ── layout
   readonly leftCollapsed: boolean;
   readonly rightCollapsed: boolean;
-  /** Which view the Design rail is showing. */
-  readonly designView: DesignRailView;
-  /** Which pane the focused (compact/narrow) workspace is showing. */
+  /** The work pane's added tabs, in tab-bar order. Preview is always open and not listed. */
+  readonly workTabs: ReadonlyArray<AddedWorkTab>;
+  /** The work-pane tab on screen. */
+  readonly activeWorkTab: WorkTab;
+  /** The docked chat is collapsed and the work pane has the full width. */
+  readonly chatCollapsed: boolean;
+  /** Which pane a docked workspace too narrow for both is showing. */
   readonly focusedPane: FocusedPane;
+  /** The host changed the email while the narrow layout showed the chat; cleared on viewing it. */
+  readonly previewUnseen: boolean;
+  /** Bumped by a refresh so the preview mounts its document again. */
+  readonly previewEpoch: number;
+  /** A refresh re-opened the document and its first snapshot has not arrived yet. */
+  readonly previewRefreshing: boolean;
   readonly leftWidth: number;
   readonly assistantWidth: number;
   readonly rightWidth: number;
@@ -307,9 +375,15 @@ export const createEditorBundle = (
   let spine!: EditorSpine;
   let userSelectListener: ((selection: UserSelection) => void) | undefined;
 
-  /** An uneditable host, readonly document, or active lifecycle operation rejects mutations. */
+  /**
+   * An uneditable host, readonly document, active lifecycle operation, or a refresh still waiting
+   * for its reopened snapshot rejects mutations; that snapshot replaces the draft when it lands.
+   */
   const gated = (state: EditorState): boolean =>
-    host.access !== "editable" || state.doc?.access.kind === "readonly" || state.lifecycleBusy;
+    host.access !== "editable" ||
+    state.doc?.access.kind === "readonly" ||
+    state.lifecycleBusy ||
+    state.previewRefreshing;
 
   const sourceEditableFor = (document: EditorDocument | null): boolean =>
     document !== null &&
@@ -382,11 +456,18 @@ export const createEditorBundle = (
       );
       commitSource(direction === "undo" ? entry.before : entry.after);
     };
+    /** The chat a request is addressed to comes into view, in every layout. */
+    const revealedChat = (): Partial<EditorState> => {
+      writeStored(CHAT_COLLAPSED_KEY, "false");
+      return { chatCollapsed: false, focusedPane: "assistant" };
+    };
+    const initialWorkTabs = readStoredWorkTabs();
     const actions: EditorActions = {
       requestSourceAssistance: (originIndex) =>
         set({
           assistantOriginIndex: originIndex,
           rightCollapsed: false,
+          ...revealedChat(),
         }),
       requestDiagnosticAssistance: (check) => {
         const state = get();
@@ -404,9 +485,13 @@ export const createEditorBundle = (
             check,
           },
           rightCollapsed: false,
+          ...revealedChat(),
         });
       },
-      openSource: () => set({ workspaceView: "source" }),
+      openSource: () => {
+        set({ workspaceView: "source" });
+        actions.openWorkTab("source");
+      },
       undo: () => history("undo"),
       redo: () => history("redo"),
       applySourceEdit: (input) => {
@@ -585,25 +670,61 @@ export const createEditorBundle = (
 
       toggleLeft: () => set((current) => ({ leftCollapsed: !current.leftCollapsed })),
       toggleRight: () => set((current) => ({ rightCollapsed: !current.rightCollapsed })),
-      setDesignView: (view) => {
-        if (get().designView === view) return;
-        set({ designView: view });
+      openWorkTab: (tab) => {
+        const state = get();
+        const workTabs =
+          tab === "preview" || state.workTabs.includes(tab)
+            ? state.workTabs
+            : ADDED_WORK_TABS.filter((entry) => entry === tab || state.workTabs.includes(entry));
+        if (workTabs === state.workTabs && state.activeWorkTab === tab) return;
+        writeStored(WORK_TABS_KEY, workTabs.join(","));
+        writeStored(WORK_TAB_KEY, tab);
+        set({ workTabs, activeWorkTab: tab });
+      },
+      closeWorkTab: (tab) => {
+        const state = get();
+        const index = state.workTabs.indexOf(tab);
+        if (index === -1) return;
+        const workTabs = state.workTabs.filter((entry) => entry !== tab);
+        const activeWorkTab =
+          state.activeWorkTab === tab
+            ? (state.workTabs[index - 1] ?? "preview")
+            : state.activeWorkTab;
+        writeStored(WORK_TABS_KEY, workTabs.join(","));
+        writeStored(WORK_TAB_KEY, activeWorkTab);
+        set({ workTabs, activeWorkTab });
+      },
+      setChatCollapsed: (collapsed) => {
+        if (get().chatCollapsed === collapsed) return;
+        writeStored(CHAT_COLLAPSED_KEY, String(collapsed));
+        set({ chatCollapsed: collapsed });
       },
       setFocusedPane: (pane) => {
-        if (get().focusedPane === pane) return;
-        set({ focusedPane: pane });
+        const state = get();
+        if (state.focusedPane === pane && !(pane === "preview" && state.previewUnseen)) return;
+        set(
+          pane === "preview" ? { focusedPane: pane, previewUnseen: false } : { focusedPane: pane },
+        );
       },
-      openReview: () =>
-        set((current) => ({
-          designView: "review" as const,
-          // Focus the pane that carries the review on this layout. Narrow has
-          // no Design tab — its review lives in the host panel's own transcript
-          // — so writing "design" there would park the focus on a pane the
-          // reader cannot reach and drop them onto it the moment the container
-          // crosses into compact. Everywhere else the rail carries it.
-          focusedPane:
-            current.layoutMode === "narrow" ? ("assistant" as const) : ("design" as const),
-        })),
+      openReview: () => {
+        actions.openWorkTab("review");
+        set({ focusedPane: "preview", previewUnseen: false });
+      },
+      refreshPreview: () => {
+        const state = get();
+        if (
+          state.doc === null ||
+          state.pendingAuthoredSource !== null ||
+          // A metadata save sends no document change, so a snapshot taken before it lands
+          // would put the old name or sender defaults back on screen.
+          state.metadataSaving ||
+          state.conflict ||
+          state.lifecycleBusy
+        )
+          return;
+        set({ previewEpoch: state.previewEpoch + 1, previewRefreshing: true });
+        spine.reload();
+      },
       setWorkspaceView: (view) => set({ workspaceView: view }),
       setLeftWidth: (width) => {
         const clamped = Math.min(LEFT_MAX, Math.max(LEFT_MIN, Math.round(width)));
@@ -611,7 +732,7 @@ export const createEditorBundle = (
         set({ leftWidth: clamped });
       },
       setAssistantWidth: (width) => {
-        const clamped = Math.min(ASSISTANT_MAX, Math.max(ASSISTANT_MIN, Math.round(width)));
+        const clamped = clampAssistantWidth(width);
         writeStoredWidth(ASSISTANT_KEY, clamped);
         set({ assistantWidth: clamped });
       },
@@ -621,7 +742,10 @@ export const createEditorBundle = (
         set({ rightWidth: clamped });
       },
       setPreviewDevice: (mode) => set({ previewDevice: mode }),
-      setCanvasZoom: (zoom) => set({ canvasZoom: zoom }),
+      setCanvasZoom: (zoom) => {
+        const next = clampZoom(zoom);
+        if (get().canvasZoom !== next) set({ canvasZoom: next });
+      },
 
       // Apply a mode crossing and its dock defaults as one transition so the UI
       // never renders an intermediate mode with the previous mode's panels or
@@ -634,7 +758,8 @@ export const createEditorBundle = (
             layoutMode: mode,
             leftCollapsed: false,
             rightCollapsed: false,
-            canvasZoom: "100",
+            canvasZoom: 100,
+            previewUnseen: false,
           });
           return;
         }
@@ -775,6 +900,7 @@ export const createEditorBundle = (
       render: null,
       outline: null,
       sizeKb: 0,
+      sizeSource: "preview",
       checks: options.hostChecks,
       hostChecks: options.hostChecks,
       lifecycleCapability: host.lifecycle,
@@ -791,16 +917,18 @@ export const createEditorBundle = (
       layersSeeded: false,
       leftCollapsed: false,
       rightCollapsed: false,
-      designView: "layers",
+      workTabs: initialWorkTabs,
+      activeWorkTab: readStoredWorkTab(initialWorkTabs),
+      chatCollapsed: readStored(CHAT_COLLAPSED_KEY) === "true",
       focusedPane: "assistant",
+      previewUnseen: false,
+      previewEpoch: 0,
+      previewRefreshing: false,
       leftWidth: readStoredWidth(LEFT_KEY, LEFT_DEFAULT),
-      assistantWidth: Math.min(
-        ASSISTANT_MAX,
-        Math.max(ASSISTANT_MIN, readStoredWidth(ASSISTANT_KEY, ASSISTANT_DEFAULT)),
-      ),
+      assistantWidth: clampAssistantWidth(readStoredWidth(ASSISTANT_KEY, ASSISTANT_DEFAULT)),
       rightWidth: readStoredWidth(RIGHT_KEY, RIGHT_DEFAULT),
       previewDevice: "desktop",
-      canvasZoom: "100",
+      canvasZoom: 100,
       layoutMode: "wide",
       metadataSaving: false,
       metadataError: null,
@@ -819,7 +947,16 @@ export const createEditorBundle = (
       const next = withDocumentChange(current.doc, change, pending);
       const settled =
         change.authoredSource !== undefined && change.authoredSource === next.origin.authoredSource;
-      return committedDocument(current, next, settled ? null : pending);
+      // A change the author did not make here lands while a narrow layout shows the chat: mark
+      // the preview so the switch says there is something new to look at.
+      const unseen =
+        change.origin !== "self" &&
+        current.layoutMode !== "wide" &&
+        current.focusedPane === "assistant";
+      return {
+        ...committedDocument(current, next, settled ? null : pending),
+        ...(unseen ? { previewUnseen: true } : {}),
+      };
     });
   };
 
@@ -827,6 +964,7 @@ export const createEditorBundle = (
     onInitial: (doc) => {
       store.setState((current) => ({
         ...committedDocument(current, doc, null),
+        previewRefreshing: false,
         editable: host.access === "editable" && doc.access.kind !== "readonly",
         sourceEditable: sourceEditableFor(doc),
         readonlyReason: doc.access.kind === "readonly" ? doc.access.reason : null,
@@ -865,7 +1003,7 @@ export const createEditorBundle = (
     onStorageError: (reason) => store.setState({ storageError: reason }),
     // A failed open / dead change stream surfaces through the storage banner;
     // its Retry re-opens the session (the spine routes retrySave by liveness).
-    onSessionError: (reason) => store.setState({ storageError: reason }),
+    onSessionError: (reason) => store.setState({ storageError: reason, previewRefreshing: false }),
   });
 
   return {

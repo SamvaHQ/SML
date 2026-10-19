@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import { isCanvasActivationTarget, resolveInstancePath } from "./instance-dom";
 import { PreviewDocumentContext, type PreparedPreviewDocument } from "./preview-document";
+import { isZoomWheel, zoomKeyOf, type ZoomGesture } from "./zoom";
 
 /**
  * The rendered email, mounted in a same-origin iframe.
@@ -109,6 +110,13 @@ export interface EmailFrameProps {
         readonly clientY: number;
       }) => void)
     | undefined;
+  /**
+   * A pinch, Ctrl/⌘ + wheel, or ⌘/Ctrl with +, − or 0 inside the email. The frame keeps the
+   * browser from zooming the page and reports the gesture so the canvas zooms instead.
+   */
+  readonly onZoomGesture?: ((gesture: ZoomGesture) => void) | undefined;
+  /** Mount the document again when this changes, as a refresh does. */
+  readonly epoch?: number | undefined;
 }
 
 /**
@@ -125,6 +133,7 @@ const FrameDocument = ({
   onSelect,
   onHover,
   onContextMenu,
+  onZoomGesture,
 }: {
   readonly document_: string;
   readonly mount: PreparedPreviewDocument["mount"] | undefined;
@@ -134,15 +143,16 @@ const FrameDocument = ({
   readonly onSelect?: ((instancePath: string | null) => void) | undefined;
   readonly onHover?: ((instancePath: string | null) => void) | undefined;
   readonly onContextMenu?: EmailFrameProps["onContextMenu"];
+  readonly onZoomGesture?: EmailFrameProps["onZoomGesture"];
 }): ReactNode => {
   const ref = useRef<HTMLIFrameElement>(null);
   const [body, setBody] = useState<HTMLElement | null>(null);
   // Handlers are read at event time so re-attaching listeners is never needed for
   // a changed callback identity, and the document listeners live with the frame.
-  const handlers = useRef({ onSelect, onHover, onContextMenu });
+  const handlers = useRef({ onSelect, onHover, onContextMenu, onZoomGesture });
   useLayoutEffect(() => {
-    handlers.current = { onSelect, onHover, onContextMenu };
-  }, [onSelect, onHover, onContextMenu]);
+    handlers.current = { onSelect, onHover, onContextMenu, onZoomGesture };
+  }, [onSelect, onHover, onContextMenu, onZoomGesture]);
 
   // Layout effect (not passive) so the frame is wired and the portal content is
   // committed before the browser paints — otherwise one empty frame flashes.
@@ -221,17 +231,37 @@ const FrameDocument = ({
       });
     };
 
+    // Events inside the email never reach the page, so a pinch or a zoom chord over it would
+    // zoom the whole page. Take those here and hand them to the canvas.
+    const onWheel = (event: WheelEvent) => {
+      const report = handlers.current.onZoomGesture;
+      if (report === undefined || !isZoomWheel(event)) return;
+      event.preventDefault();
+      report({ kind: "wheel", deltaY: event.deltaY });
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      const report = handlers.current.onZoomGesture;
+      const direction = zoomKeyOf(event);
+      if (report === undefined || direction === null) return;
+      event.preventDefault();
+      report({ kind: "key", direction });
+    };
+
     const attach = () => {
       idoc.addEventListener("click", onClick);
       idoc.addEventListener("mousemove", onMove);
       idoc.addEventListener("mouseleave", onLeave);
       idoc.addEventListener("contextmenu", onContext);
+      idoc.addEventListener("wheel", onWheel, { passive: false });
+      idoc.addEventListener("keydown", onKeyDown);
     };
     const detach = () => {
       idoc.removeEventListener("click", onClick);
       idoc.removeEventListener("mousemove", onMove);
       idoc.removeEventListener("mouseleave", onLeave);
       idoc.removeEventListener("contextmenu", onContext);
+      idoc.removeEventListener("wheel", onWheel);
+      idoc.removeEventListener("keydown", onKeyDown);
     };
 
     // Writing the document is what installs it, and `close()` fires the frame's
@@ -282,7 +312,12 @@ const FrameDocument = ({
   );
 };
 
-export const EmailFrame = ({ html, forceColorScheme, ...rest }: EmailFrameProps): ReactNode => {
+export const EmailFrame = ({
+  html,
+  forceColorScheme,
+  epoch = 0,
+  ...rest
+}: EmailFrameProps): ReactNode => {
   const prepare = useContext(PreviewDocumentContext);
   const schemeHtml = forceColorScheme === undefined ? html : forceScheme(html, forceColorScheme);
   const prepared = useMemo(() => prepare?.(schemeHtml), [schemeHtml, prepare]);
@@ -294,7 +329,7 @@ export const EmailFrame = ({ html, forceColorScheme, ...rest }: EmailFrameProps)
   return (
     <FrameDocument
       // Original HTML remains part of identity even when preparation strips the changed content.
-      key={`${preparation.generation}:${forceColorScheme ?? ""}:${html}`}
+      key={`${epoch}:${preparation.generation}:${forceColorScheme ?? ""}:${html}`}
       document_={document_}
       mount={prepared?.mount}
       dark={forceColorScheme === "dark"}

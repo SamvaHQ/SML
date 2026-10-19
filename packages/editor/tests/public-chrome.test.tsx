@@ -9,6 +9,7 @@ import { LockedAction } from "../src/chrome/locked-action";
 import { EditorShell } from "../src/chrome/shell";
 import { useEditorStoreApi } from "../src/state/context";
 import { EditorProvider } from "../src/state/provider";
+import { markupEditor, SMS_TSX } from "./markup-host";
 import { mockEditor } from "./mock-host";
 
 afterEach(() => {
@@ -36,6 +37,7 @@ const stubWideShell = () => {
     "ResizeObserver",
     class {
       observe() {}
+      unobserve() {}
       disconnect() {}
     },
   );
@@ -190,7 +192,7 @@ describe("public editor chrome", () => {
     );
     expect(view.container.querySelector('nav[aria-label="Editor panels"]')).toBeNull();
     expect(view.container.querySelector('[data-agent-workspace-layout="split"]')).toBeTruthy();
-    expect(view.getByTestId("design-rail")).toBeTruthy();
+    expect(view.getByTestId("work-pane")).toBeTruthy();
   });
 
   it("pins a host canvas status over the canvas without taking it from the pointer", async () => {
@@ -327,7 +329,7 @@ describe("public editor chrome", () => {
     expect(onLockedLifecycle).toHaveBeenCalledTimes(1);
   });
 
-  it("docks the host's review surface as the Design rail's Review view", async () => {
+  it("offers the host's review surface as a Review tab of the work pane", async () => {
     stubWideShell();
     const view = render(
       <EditorProvider host={await host()}>
@@ -350,17 +352,21 @@ describe("public editor chrome", () => {
     );
 
     await waitFor(() => expect(view.getByTestId("agent-column")).toBeTruthy());
-    const reviewTab = view.getByTestId("design.tab.review");
-    expect(reviewTab.textContent).toContain("Review");
-    expect(view.getByTestId("test.review-badge").textContent).toBe("2");
+    fireEvent.click(view.getByTestId("work-pane.add"));
+    const menu = await view.findByTestId("work-pane.add-menu");
+    for (const tab of ["source", "design", "review", "checks"]) {
+      expect(menu.querySelector(`[data-testid="work-pane.add.${tab}"]`)).not.toBeNull();
+    }
     // A new diff never moves the reader on its own: the surface mounts on selection.
     expect(view.queryByTestId("test.review-content")).toBeNull();
-    fireEvent.click(reviewTab);
-    expect(view.getByTestId("test.review-content")).toBeTruthy();
-    expect(view.getByTestId("design-rail").textContent).toContain("Draft changes");
+    fireEvent.click(view.getByTestId("work-pane.add.review"));
+    const reviewTab = await view.findByTestId("work-pane.tab.review");
+    expect(reviewTab.textContent).toContain("Review");
+    expect(view.getByTestId("test.review-badge").textContent).toBe("2");
+    expect(view.getByTestId("work-pane.panel.review").textContent).toContain("Draft changes");
   });
 
-  it("keeps Layers and Inspector as the rail's whole story without a review surface", async () => {
+  it("keeps Source, Design and Checks without a review surface", async () => {
     stubWideShell();
     const view = render(
       <EditorProvider host={await host()}>
@@ -377,9 +383,49 @@ describe("public editor chrome", () => {
     );
 
     await waitFor(() => expect(view.getByTestId("agent-column")).toBeTruthy());
-    expect(view.getByTestId("design.tab.layers")).toBeTruthy();
-    expect(view.getByTestId("design.tab.inspector")).toBeTruthy();
-    expect(view.queryByTestId("design.tab.review")).toBeNull();
+    fireEvent.click(view.getByTestId("work-pane.add"));
+    const menu = await view.findByTestId("work-pane.add-menu");
+    expect(menu.querySelector('[data-testid="work-pane.add.review"]')).toBeNull();
+    fireEvent.click(view.getByTestId("work-pane.add.design"));
+    expect(await view.findByTestId("design-panel")).toBeTruthy();
+    expect(view.getByTestId("inspector")).toBeTruthy();
+    // The Design tab's inspector leaves checks to their own tab.
+    expect(
+      view.getByTestId("design-panel").querySelector('section[aria-label="Needs attention"]'),
+    ).toBeNull();
+
+    fireEvent.click(view.getByTestId("work-pane.add"));
+    fireEvent.click(await view.findByTestId("work-pane.add.checks"));
+    expect((await view.findByTestId("work-pane.panel.checks")).textContent).toContain(
+      "Needs attention",
+    );
+    // An added tab closes from its own control; the tab before it takes over.
+    fireEvent.click(view.getByTestId("work-pane.close.checks"));
+    expect(view.queryByTestId("work-pane.tab.checks")).toBeNull();
+    expect(view.getByTestId("work-pane.tab.design").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("keeps fixture switching in the toolbar for a message channel", async () => {
+    stubWideShell();
+    const editor = markupEditor(
+      "sms",
+      SMS_TSX.replace(
+        'fixtures: { default: { name: "Ada", code: "123456", vip: true } },',
+        'fixtures: { default: { name: "Ada", code: "123456", vip: true }, returning: { name: "Grace", code: "654321" } },',
+      ),
+    );
+    const view = render(
+      <EditorProvider
+        host={{ ...editor.host, fixtures: { status: "ready", api: { view: async () => {} } } }}
+      >
+        <EditorShell />
+      </EditorProvider>,
+    );
+
+    const picker = (await view.findByTestId("topbar.fixture")) as HTMLSelectElement;
+    expect([...picker.options].map((option) => option.value)).toEqual(["default", "returning"]);
+    // An SMS has no email canvas, so no preview bar carries the picker.
+    expect(view.queryByTestId("preview-bar")).toBeNull();
   });
 
   it("yields the guest headline to the live save note while a persist is queued", async () => {
@@ -426,7 +472,8 @@ describe("public editor chrome", () => {
 
     const drawn = await view.findAllByTestId("test.host-preview-icon");
     expect(drawn.length).toBeGreaterThan(0);
-    expect(drawn[0]?.getAttribute("class")).toContain("size-[15px]");
+    // The host's glyph stands where the default did: inside the top bar's Preview action.
+    expect((await view.findByTestId("topbar.preview")).contains(drawn[0] ?? null)).toBe(true);
   });
 
   it("reports Preview to the host's telemetry instead of a shell callback", async () => {

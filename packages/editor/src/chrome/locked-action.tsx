@@ -2,8 +2,9 @@ import { Drawer } from "@base-ui/react/drawer";
 import { useState, type ReactNode } from "react";
 
 import type { Upsell } from "../host/types";
+import { Button, buttonVariants } from "../ui/button";
 import { Xmark } from "./editor-icons";
-import { IconBtn } from "./ui";
+import { Tip } from "./ui";
 import { useEditorPortalContainer } from "./use-editor-portal";
 
 export interface LockedActionProps {
@@ -32,16 +33,19 @@ export function LockedAction({ label, icon, title, upsell, onAction, testId }: L
   const portalContainer = useEditorPortalContainer();
   return (
     <>
-      <IconBtn
-        title={label}
-        help={upsell.reason}
-        testId={testId}
-        onClick={() => setOpen(true)}
-        className="h-[30px] px-2.5"
-      >
-        {icon}
-        {label}
-      </IconBtn>
+      <Tip label={upsell.reason}>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={label}
+          data-testid={testId}
+          data-editor-control=""
+          onClick={() => setOpen(true)}
+        >
+          {icon}
+          {label}
+        </Button>
+      </Tip>
       <Drawer.Root open={open} onOpenChange={setOpen} swipeDirection="right">
         <Drawer.Portal container={portalContainer}>
           <Drawer.Backdrop className="fixed inset-0 z-[110] bg-[var(--editor-backdrop,rgb(0_0_0/0.28))]" />
@@ -71,7 +75,7 @@ export function LockedAction({ label, icon, title, upsell, onAction, testId }: L
                     onAction();
                   }}
                   data-testid={testId === undefined ? undefined : `${testId}.cta`}
-                  className="bg-primary text-primary-foreground inline-flex h-9 items-center rounded-[7px] px-4 font-medium transition-opacity hover:opacity-90"
+                  className={buttonVariants()}
                 >
                   {upsell.cta.label}
                 </a>

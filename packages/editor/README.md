@@ -58,6 +58,91 @@ A contribution names the region it lands in: `frame.start`, `toolbar.leading`,
 `statusbar.headline`. The editor owns each region's layout. A region that holds one thing
 refuses a second contribution, and an id used twice fails, so a host bug is loud.
 
+### Layout
+
+A `rail.assistant` contribution puts the host's chat beside one **work pane**. The work pane's
+tab bar always has Preview; the author adds Source, Design (layers beside the inspector),
+Review (the `rail.review` content, offered only when the host contributes one) and Checks from
+its "+" menu and closes them again. The open tabs, the shown tab, the chat width and whether the
+chat is collapsed persist per browser like the other layout preferences. From 1280px of editor
+frame width the chat and the work pane sit side by side with a draggable divider (280–640px,
+dragging below 140px collapses the chat); below it a Chat | Preview switch shows one at a time,
+and Preview carries a dot when the host changed the email while the chat was shown. The host's
+assistant stays mounted across those changes. Without an assistant the shell keeps layers,
+canvas and inspector around a Visual | Source switch.
+
+Above the canvas, the preview bar holds the version picker (with the `lifecycle` capability; an
+older version is restored only after the author confirms), the desktop/phone width, the fixture
+picker, the size readout, open in a new tab and refresh. The canvas zooms from 50% to 200% or
+fits its pane, by its floating control, a pinch, or ⌘/Ctrl with +, − and 0.
+
+`EditorShell` takes two preview signals from the host:
+
+- `previewBusy` — the host is producing a change the author will see (an assistant turn at
+  work). The preview bar runs a thin progress line while it is true, as it does for the editor's
+  own waits.
+- `onOpenPreview` — opens the current preview in a new browser tab; omit it where the host has
+  no page for that.
+
+A host that knows the size of the email as sent reports it on each render as
+`EmailRender.sentBytes`. The size readout and the Gmail clipping check then measure the sent
+email; without it they measure the preview and say so.
+
+### Composing the chrome
+
+`EditorShell` is a thin assembly of parts, and a host can assemble them itself. `EditorRoot`
+takes every `EditorShellProps` prop, measures the frame, provides what the parts read, and
+renders its children in order:
+
+```tsx
+import {
+  EditorProvider,
+  EditorRoot,
+  EditorStatusBar,
+  EditorTopBar,
+  EditorWorkspace,
+} from "@samva/editor/shell";
+import { Button } from "@samva/ui/button";
+
+<EditorProvider host={host}>
+  <EditorRoot contributions={contributions} className="rounded-xl border">
+    <EditorTopBar className={(state) => (state.layout === "narrow" ? "px-2" : "px-4")} />
+    <EditorWorkspace />
+    <EditorStatusBar render={<footer className="bg-muted/40" />} />
+  </EditorRoot>
+</EditorProvider>;
+```
+
+Every part follows Base UI's and shadcn's conventions:
+
+- it renders one element with a `data-slot`, and its sub-parts carry their own;
+- `className` merges with the part's classes through tailwind-merge, so a host utility wins,
+  and it may be a function of the part's state;
+- the state is also on the element as data attributes (`data-layout="narrow"`, a bare
+  `data-busy` while true), for Tailwind `data-[…]:` variants;
+- `render` swaps the element for the host's while keeping the part's props and behaviour.
+
+| Part (export)         | `data-slot`             | State attributes                          | Sub-part slots                                                                                                                                                                                           |
+| --------------------- | ----------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EditorRoot`          | `editor`                | `data-layout`, `data-docked`, `data-busy` |                                                                                                                                                                                                          |
+| `EditorTopBar`        | `editor-top-bar`        | `data-layout`                             | `editor-top-bar-title`, `editor-top-bar-name`, `editor-top-bar-actions`                                                                                                                                  |
+| `EditorWorkspace`     | `editor-workspace`      | `data-layout`                             | `editor-workspace-view` (Visual \| Source, standalone)                                                                                                                                                   |
+| `EditorAssistantDock` | `editor-assistant-dock` | `data-focused`, `data-hidden`             | `editor-assistant-dock-header`, `editor-assistant-dock-body`                                                                                                                                             |
+| `EditorDivider`       | `editor-divider`        | `data-side`, `data-dragging`              |                                                                                                                                                                                                          |
+| `EditorPaneSwitch`    | `editor-pane-switch`    | `data-pane`, `data-unseen`                |                                                                                                                                                                                                          |
+| `EditorWorkPane`      | `editor-work-pane`      | `data-tab`, `data-split`                  | `editor-work-pane-header`, `editor-work-pane-tabs`, `editor-work-pane-tab` (`data-active`), `editor-work-pane-tab-group`, `editor-work-pane-tab-close`, `editor-work-pane-add`, `editor-work-pane-panel` |
+| `EditorCanvas`        | `editor-canvas`         | `data-zoom`, `data-device`                | `editor-envelope`, `editor-preview-notice`                                                                                                                                                               |
+| `EditorPreviewBar`    | `editor-preview-bar`    | `data-busy`                               | `editor-version-picker`, `editor-fixture-select`, `editor-preview-bar-center`, `editor-preview-bar-size`, `editor-preview-bar-progress`                                                                  |
+| `EditorZoomControl`   | `editor-zoom-control`   | `data-fit`, `data-percent`                |                                                                                                                                                                                                          |
+| `EditorStatusBar`     | `editor-status-bar`     | `data-layout`, `data-save`                | `editor-status-bar-start`, `editor-status-bar-end`                                                                                                                                                       |
+
+The Design and Checks tabs render `editor-design-panel` (with `editor-layers`) and
+`editor-checks-panel`. Inside the parts, controls are the shadcn components, so they also carry
+shadcn's own slots (`button`, `tabs-trigger`, `toggle-group-item`, `dropdown-menu-content`,
+`popover-content`, `tooltip-content`, `alert-dialog-content`, `native-select`, `badge`, `kbd`).
+A host targets any of them with Tailwind's arbitrary variants, for example
+`**:data-[slot=editor-work-pane-tab]:rounded-full`.
+
 `icons` replaces any of the editor's icons by name (`EditorIconName`); the rest keep the
 defaults, the Hugeicons free set (Stroke Rounded, MIT). `<EditorGlyph name="moon" />` draws one
 of those glyphs in host chrome beside the editor, so a host's own navigation follows the same
@@ -172,12 +257,20 @@ example of a host theme.
   (`--sel-soft`, `--sel-mid`) — registered in `@theme` and defined for light +
   `.dark`; variable chips use the host's semantic `accent-teal` and `foreground`
   palette instead of maintaining a parallel color pair;
-- the **control materials** — `--editor-raised-*` (the primary action), `--editor-chip-*`
-  (a switcher's selected option), `--editor-pressed-*` (a toggle that is on) and
-  `--editor-well-*` (the source panel), defined on `.samva-editor-shell` with light and `.dark`
-  values. A host restyles a material by setting its variables on `.samva-editor-shell`;
-- the **chrome component CSS** — the workspace grid backdrop, scoped scrollbars, and
-  the agent-pulse animation, all under a `samva-editor-*` prefix.
+- `--editor-well-*`, the source panel's recessed field, defined on `.samva-editor-shell` with
+  light and `.dark` values;
+- the **chrome component CSS** — the workspace grid backdrop, scoped scrollbars, the preview
+  progress line, and the invisible 44px hit area a phone-width editor gives its own controls
+  (`[data-editor-control]`), all under a `samva-editor-*` prefix.
+
+The chrome is styled with Tailwind utilities on shadcn's token names (`background`,
+`foreground`, `card`, `popover`, `primary`, `secondary`, `muted`, `accent`, `destructive`,
+`border`, `input`, `ring` and `--radius`). Its buttons, tabs, toggle groups, selects, menus,
+popovers, tooltips, dialogs, inputs, badges and kbd are shadcn's Base UI components with the
+`base-nova` style's classes (`src/ui`), so a host on shadcn — Samva's dashboard is one — draws
+the editor in its own theme when its Tailwind compiles the editor's classes. Popups animate with
+shadcn's `tw-animate-css` utilities; a host that does not load `tw-animate-css` gets popups that
+appear without the animation.
 
 The host imports it once, after its own Tailwind import and base tokens. The standalone dev
 harness (`dev/styles.css`) imports the packaged neutral base theme so `bun run dev` renders fully.
@@ -201,7 +294,8 @@ A host with its own base tokens imports:
 @import "@samva/editor/styles.css";
 ```
 
-The editor stylesheet import covers both concerns. The `@import` (resolved through the package exports, after
+The editor stylesheet import covers both concerns (and a shadcn host that already has
+`@import "tw-animate-css";` gets the popup animations). The `@import` (resolved through the package exports, after
 `@import "tailwindcss"`) registers the `@theme` block **and** the package-owned `@source`
 glob so chrome utilities (`bg-accent-email`, `sel-*`, `chip-*`, `samva-editor-*`) generate —
 hosts do not hand-write content paths into `node_modules`.

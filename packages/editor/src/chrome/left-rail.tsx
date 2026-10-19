@@ -1,14 +1,14 @@
 import { ScrollArea } from "@base-ui/react/scroll-area";
-import { Tooltip } from "@base-ui/react/tooltip";
 import { createElement } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
+import { Button } from "../ui/button";
 import { ChevronRight, SidebarLeftHide } from "./editor-icons";
 import { selectionLabel, type EmailOutlineNode } from "./email-outline";
 import { iconForTag } from "./icons";
+import { Tip } from "./ui";
 import { cn } from "./ui-classes";
-import { useEditorPortalContainer } from "./use-editor-portal";
 
 // ---------------------------------------------------------------------------
 // Layers — the render's element tree, selectable. Every row names one rendered
@@ -34,7 +34,7 @@ function TreeRow({ node, depth }: { node: EmailOutlineNode; depth: number }) {
     <li>
       <div
         className="group relative"
-        style={{ paddingLeft: depth * 12 }}
+        style={{ paddingLeft: depth * 10 }}
         onMouseEnter={() => setHovered(node.instancePath)}
         onMouseLeave={() => setHovered(null)}
       >
@@ -116,7 +116,6 @@ export function LayersPane() {
 }
 
 export function LeftRail() {
-  const portalContainer = useEditorPortalContainer();
   const { leftCollapsed, leftWidth, layoutMode } = useEditorStore(
     useShallow((state) => ({
       leftCollapsed: state.leftCollapsed,
@@ -146,31 +145,18 @@ export function LeftRail() {
       <div className="flex h-full min-w-0 flex-col" style={{ width: leftWidth, maxWidth: "100%" }}>
         <div className="border-border-subtle flex items-center gap-0.5 border-b px-3 py-2">
           <span className="text-foreground text-[12.5px] font-medium">Layers</span>
-          <Tooltip.Root>
-            <Tooltip.Trigger
-              render={
-                <button
-                  type="button"
-                  aria-label="Collapse layers"
-                  data-testid="left-rail.collapse"
-                  onClick={toggleLeft}
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground ml-auto rounded-md p-1.5"
-                />
-              }
+          <Tip label="Collapse layers" side="bottom">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Collapse layers"
+              data-testid="left-rail.collapse"
+              onClick={toggleLeft}
+              className="text-muted-foreground ml-auto"
             >
-              <SidebarLeftHide className="size-[15px]" />
-            </Tooltip.Trigger>
-            <Tooltip.Portal container={portalContainer}>
-              <Tooltip.Positioner side="bottom" sideOffset={5} className="z-[200]">
-                <Tooltip.Popup
-                  role="tooltip"
-                  className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-                >
-                  Collapse layers
-                </Tooltip.Popup>
-              </Tooltip.Positioner>
-            </Tooltip.Portal>
-          </Tooltip.Root>
+              <SidebarLeftHide />
+            </Button>
+          </Tip>
         </div>
 
         <ScrollArea.Root data-samva-scroll-area="layers" className="relative min-h-0 flex-1">

@@ -1,33 +1,41 @@
-import { Tooltip } from "@base-ui/react/tooltip";
 import {
   Fragment,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 
 import { SmsWorkspace } from "../channels/sms-workspace";
 import { WhatsAppWorkspace } from "../channels/whatsapp-workspace";
+import { cn } from "../lib/utils";
 import { useEditorStore, useEditorStoreApi } from "../state/context";
 import type { EditorLayoutMode } from "../state/store";
+import { Button } from "../ui/button";
 import type { EditorBrandSource } from "./brand-chip";
 import {
   ContributionsProvider,
   resolveContributions,
+  useContribution,
   type EditorContribution,
 } from "./contributions";
 import { SidebarLeft, SidebarRight } from "./editor-icons";
 import { EmailWorkspace } from "./email-workspace";
 import { downloadEmailHtml } from "./export-html";
 import { LifecycleSheet } from "./lifecycle-sheet";
+import { usePart, type PartProps } from "./part";
 import { EditorPortalProvider } from "./portal-context";
+import { PreviewChromeProvider } from "./preview-context";
 import { PreviewOverlay } from "./preview-overlay";
-import { StatusBar } from "./statusbar";
+import { ShellChromeProvider, useShellChrome } from "./shell-context";
+import { StatusBar, type StatusBarProps } from "./statusbar";
 import { THEME_PATH, withDefaultBrandImport } from "./theme-brand";
-import { TopBar } from "./topbar";
+import { TopBar, type TopBarActions } from "./topbar";
+import { Tip } from "./ui";
 import { AssistantShellProvider } from "./use-assistant";
 
 export interface EditorShellProps {
@@ -49,6 +57,14 @@ export interface EditorShellProps {
   readonly renameEnabled?: boolean | undefined;
   /** Host continuation for a locked Publish capability after its explanation is shown. */
   readonly onLockedLifecycle?: (() => void) | undefined;
+  /**
+   * The host is producing a change to the email the author will see, such as an assistant turn
+   * at work. The preview bar runs a thin progress line while it is true, beside the editor's own
+   * waits (an edit on its way, a fixture switch, a refresh).
+   */
+  readonly previewBusy?: boolean | undefined;
+  /** Open the current preview in a new browser tab. Omit where the host has no page for it. */
+  readonly onOpenPreview?: (() => void) | undefined;
 }
 
 /** Lifecycle transaction controls for host chrome rendered inside the editor. */
@@ -128,7 +144,7 @@ function StorageBanner() {
 }
 
 /** Direct channel dispatch keeps channel-specific editing rules explicit and exhaustive. */
-function EditorWorkspace() {
+function ChannelWorkspace() {
   const doc = useEditorStore((state) => state.doc);
   if (doc === null || doc.channel === "email") return <EmailWorkspace />;
   if (doc.channel === "sms") return <SmsWorkspace />;
@@ -136,11 +152,12 @@ function EditorWorkspace() {
 }
 
 /**
- * The full editor chrome: dashboard sidebar slot, then a three-pane grid of
- * topbar / (left rail · canvas · inspector) / statusbar. Must be rendered inside
- * an {@link EditorProvider}.
+ * The editor's root: the host's frame start, then the parts it holds (top bar, workspace, status
+ * bar), with every context those parts read. With a docked assistant the workspace is chat beside
+ * a tabbed work pane (a Chat | Preview switch below 1280px of frame width); without one it is
+ * layers · canvas · inspector. Must be rendered inside an {@link EditorProvider}.
  */
-export function EditorShell({
+export function EditorRoot({
   height = "100dvh",
   contributions = NO_CONTRIBUTIONS,
   brand,
@@ -148,7 +165,11 @@ export function EditorShell({
   exportable,
   renameEnabled,
   onLockedLifecycle,
-}: EditorShellProps) {
+  previewBusy = false,
+  onOpenPreview,
+  children,
+  ...partProps
+}: EditorRootProps) {
   const leftCollapsed = useEditorStore((state) => state.leftCollapsed);
   const rightCollapsed = useEditorStore((state) => state.rightCollapsed);
   const layoutMode = useEditorStore((state) => state.layoutMode);
@@ -177,6 +198,8 @@ export function EditorShell({
     setLayoutMode,
     undo,
     redo,
+    openWorkTab,
+    setFocusedPane,
   } = useEditorStore((state) => state.actions);
   const versions = useEditorStore((state) => state.versionsCapability);
   const telemetry = useEditorStore((state) => state.telemetry);
@@ -199,6 +222,7 @@ export function EditorShell({
   const [materializedRevision, setMaterializedRevision] = useState<string | null>(null);
   const [hostSavedRevision, setHostSavedRevision] = useState<string | null>(null);
   const store = useEditorStoreApi();
+  const idBase = useId();
   useEffect(() => {
     if (inspectSavedRevision === undefined || documentRevision === null) return;
     let current = true;
@@ -334,6 +358,20 @@ export function EditorShell({
     exportHtml,
     canExport,
   };
+  const previewChrome = useMemo(
+    () => ({
+      hostBusy: previewBusy,
+      openInNewTab: onOpenPreview,
+      // The work pane gives checks a tab; the standalone layout keeps them in the inspector.
+      showChecks: assistantDocked
+        ? () => {
+            openWorkTab("checks");
+            setFocusedPane("preview");
+          }
+        : undefined,
+    }),
+    [assistantDocked, onOpenPreview, openWorkTab, previewBusy, setFocusedPane],
+  );
   const toolbarLeading = slots
     .all("toolbar.leading")
     .map((contribution) => <Fragment key={contribution.id}>{contribution.render()}</Fragment>);
@@ -395,6 +433,51 @@ export function EditorShell({
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [leftCollapsed, overlayOpen, rightCollapsed, toggleLeft, toggleRight]);
 
+  const topBar: TopBarActions = {
+    leading: toolbarLeading.length === 0 ? undefined : toolbarLeading,
+    extraActions: renderedToolbarActions.length === 0 ? undefined : renderedToolbarActions,
+    onBack: frameStart === undefined ? onBack : undefined,
+    onPreview: () => {
+      setPreviewOpen(true);
+      onPreview?.();
+    },
+    onLifecycle: () => setLifecycleOpen(true),
+    onUndo: undo,
+    onRedo: redo,
+    canUndo: sourceEditable && undoCount > 0,
+    canRedo: sourceEditable && redoCount > 0,
+    channelSwitcher: renderedChannelSwitcher,
+    exportEnabled: exportable,
+    renameEnabled,
+    onExport,
+    brand,
+    onUseDefaultBrand: applyDefaultBrand,
+  };
+  const keepsSaveVersion = guestStatus === undefined || guestStatus.saveVersion;
+  const statusBar: StatusBarProps = {
+    saveVersionStatus: keepsSaveVersion ? saveVersionStatusText : undefined,
+    saveVersionState: onSaveVersion === undefined ? undefined : saveVersionStatus,
+    onSaveVersion: keepsSaveVersion && onSaveVersion !== undefined ? saveVersion : undefined,
+    saveVersionBusy: saveVersionStatus === "saving",
+    saveVersionBlocked: lifecycleBusy,
+    guestHeadline: guestStatus?.headline,
+  };
+
+  const root = usePart<EditorRootState>(
+    "editor",
+    { ...partProps },
+    {
+      state: { layout: layoutMode, docked: assistantDocked, busy: lifecycleBusy },
+      className: "samva-editor-shell flex min-w-0 flex-1 flex-col overflow-hidden",
+      props: {
+        "data-samva-editor-theme": "host",
+        inert: lifecycleBusy,
+        "aria-busy": lifecycleBusy,
+        children,
+      },
+    },
+  );
+
   return (
     <ContributionsProvider value={slots}>
       <AssistantShellProvider
@@ -404,137 +487,150 @@ export function EditorShell({
           saveVersionStatus: onSaveVersion === undefined ? "unavailable" : saveVersionStatus,
         }}
       >
-        <EditorPortalProvider container={portalRef}>
-          <div ref={frameRef} className="samva-editor-frame flex" style={{ height }}>
-            {frameStart?.render()}
-            <div
-              data-samva-editor-theme="host"
-              data-layout={layoutMode}
-              inert={lifecycleBusy}
-              aria-busy={lifecycleBusy}
-              className="samva-editor-shell grid min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
-            >
-              <TopBar
-                leading={toolbarLeading.length === 0 ? undefined : toolbarLeading}
-                extraActions={
-                  renderedToolbarActions.length === 0 ? undefined : renderedToolbarActions
-                }
-                onBack={frameStart === undefined ? onBack : undefined}
-                onPreview={() => {
-                  setPreviewOpen(true);
-                  onPreview?.();
-                }}
-                onLifecycle={() => setLifecycleOpen(true)}
-                onUndo={undo}
-                onRedo={redo}
-                canUndo={sourceEditable && undoCount > 0}
-                canRedo={sourceEditable && redoCount > 0}
-                channelSwitcher={renderedChannelSwitcher}
-                exportEnabled={exportable}
-                renameEnabled={renameEnabled}
-                onExport={onExport}
-                brand={brand}
-                onUseDefaultBrand={applyDefaultBrand}
-              />
-              <div className="samva-editor-body relative flex min-h-0 min-w-0 overflow-hidden">
-                {overlayOpen && (
-                  <button
-                    type="button"
-                    aria-label="Close editor panel"
-                    className="bg-background/45 absolute inset-0 z-30 cursor-default backdrop-blur-[1px]"
-                    onClick={() => {
-                      if (!leftCollapsed) toggleLeft();
-                      if (!rightCollapsed) toggleRight();
-                    }}
-                  />
-                )}
-                {leftCollapsed && !assistantDocked && (
-                  <Tooltip.Root>
-                    <Tooltip.Trigger
-                      render={
-                        <button
-                          type="button"
-                          aria-label="Show layers and blocks"
-                          data-testid="shell.show-left"
-                          onClick={toggleLeft}
-                          className="border-border bg-background/92 text-muted-foreground hover:bg-muted hover:text-foreground absolute top-3 left-3 z-20 rounded-md border p-1.5 shadow-[var(--shadow-md)] backdrop-blur-md transition-colors"
-                        />
-                      }
-                    >
-                      <SidebarLeft className="size-[15px]" />
-                    </Tooltip.Trigger>
-                    <Tooltip.Portal container={portalRef}>
-                      <Tooltip.Positioner side="right" sideOffset={5} className="z-[200]">
-                        <Tooltip.Popup
-                          role="tooltip"
-                          className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-                        >
-                          Show layers and blocks
-                        </Tooltip.Popup>
-                      </Tooltip.Positioner>
-                    </Tooltip.Portal>
-                  </Tooltip.Root>
-                )}
-                {rightCollapsed && !assistantDocked && (
-                  <Tooltip.Root>
-                    <Tooltip.Trigger
-                      render={
-                        <button
-                          type="button"
-                          aria-label="Show inspector"
-                          data-testid="shell.show-right"
-                          onClick={toggleRight}
-                          className="border-border bg-background/92 text-muted-foreground hover:bg-muted hover:text-foreground absolute top-3 right-3 z-20 rounded-md border p-1.5 shadow-[var(--shadow-md)] backdrop-blur-md transition-colors"
-                        />
-                      }
-                    >
-                      <SidebarRight className="size-[15px]" />
-                    </Tooltip.Trigger>
-                    <Tooltip.Portal container={portalRef}>
-                      <Tooltip.Positioner side="left" sideOffset={5} className="z-[200]">
-                        <Tooltip.Popup
-                          role="tooltip"
-                          className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-                        >
-                          Show inspector
-                        </Tooltip.Popup>
-                      </Tooltip.Positioner>
-                    </Tooltip.Portal>
-                  </Tooltip.Root>
-                )}
-                <EditorWorkspace />
-                <ConflictBanner />
-                <StorageBanner />
+        <PreviewChromeProvider value={previewChrome}>
+          <ShellChromeProvider value={{ topBar, statusBar, overlayOpen, idBase }}>
+            <EditorPortalProvider container={portalRef}>
+              <div ref={frameRef} className="samva-editor-frame flex" style={{ height }}>
+                {frameStart?.render()}
+                {root}
+                <PreviewOverlay open={previewOpen} onClose={() => setPreviewOpen(false)} />
+                <LifecycleSheet
+                  open={lifecycleOpen}
+                  onClose={() => setLifecycleOpen(false)}
+                  onLockedAction={onLockedLifecycle}
+                />
+                <div ref={portalRef} data-samva-editor-portal-root className="samva-editor-shell" />
               </div>
-              <StatusBar
-                saveVersionStatus={
-                  guestStatus !== undefined && !guestStatus.saveVersion
-                    ? undefined
-                    : saveVersionStatusText
-                }
-                saveVersionState={onSaveVersion === undefined ? undefined : saveVersionStatus}
-                onSaveVersion={
-                  guestStatus !== undefined && !guestStatus.saveVersion
-                    ? undefined
-                    : onSaveVersion === undefined
-                      ? undefined
-                      : saveVersion
-                }
-                saveVersionBusy={saveVersionStatus === "saving"}
-                saveVersionBlocked={lifecycleBusy}
-                guestHeadline={guestStatus?.headline}
-              />
-            </div>
-            <PreviewOverlay open={previewOpen} onClose={() => setPreviewOpen(false)} />
-            <LifecycleSheet
-              open={lifecycleOpen}
-              onClose={() => setLifecycleOpen(false)}
-              onLockedAction={onLockedLifecycle}
-            />
-            <div ref={portalRef} data-samva-editor-portal-root className="samva-editor-shell" />
-          </div>
-        </EditorPortalProvider>
+            </EditorPortalProvider>
+          </ShellChromeProvider>
+        </PreviewChromeProvider>
       </AssistantShellProvider>
     </ContributionsProvider>
+  );
+}
+
+/** The state an {@link EditorRoot} exposes to `className` and as data attributes. */
+export interface EditorRootState extends Record<string, unknown> {
+  /** The layout the editor frame's width resolved to. */
+  readonly layout: EditorLayoutMode;
+  /** A host assistant is docked beside the work pane. */
+  readonly docked: boolean;
+  /** A lifecycle operation (publish, restore, save version) holds the draft. */
+  readonly busy: boolean;
+}
+
+export interface EditorRootProps extends EditorShellProps, PartProps<"div", EditorRootState> {
+  /** The chrome parts, in the order the host lays them out. */
+  readonly children?: ReactNode;
+}
+
+/** The workspace between the top bar and the status bar. */
+export function EditorWorkspace(props: PartProps<"div", { readonly layout: EditorLayoutMode }>) {
+  const layoutMode = useEditorStore((state) => state.layoutMode);
+  const leftCollapsed = useEditorStore((state) => state.leftCollapsed);
+  const rightCollapsed = useEditorStore((state) => state.rightCollapsed);
+  const assistantDocked = useContribution("rail.assistant") !== undefined;
+  const { toggleLeft, toggleRight } = useEditorStore((state) => state.actions);
+  const { overlayOpen } = useShellChrome();
+  return usePart(
+    "editor-workspace",
+    { ...props },
+    {
+      state: { layout: layoutMode },
+      className: "samva-editor-body relative flex min-h-0 min-w-0 flex-1 overflow-hidden",
+      props: {
+        children: (
+          <>
+            {overlayOpen && (
+              <button
+                type="button"
+                aria-label="Close editor panel"
+                className="bg-background/45 absolute inset-0 z-30 cursor-default backdrop-blur-[1px]"
+                onClick={() => {
+                  if (!leftCollapsed) toggleLeft();
+                  if (!rightCollapsed) toggleRight();
+                }}
+              />
+            )}
+            {leftCollapsed && !assistantDocked && (
+              <RailToggle
+                label="Show layers and blocks"
+                testId="shell.show-left"
+                side="left"
+                onClick={toggleLeft}
+              />
+            )}
+            {rightCollapsed && !assistantDocked && (
+              <RailToggle
+                label="Show inspector"
+                testId="shell.show-right"
+                side="right"
+                onClick={toggleRight}
+              />
+            )}
+            <ChannelWorkspace />
+            <ConflictBanner />
+            <StorageBanner />
+          </>
+        ),
+      },
+    },
+  );
+}
+
+/** A floating control that brings a collapsed standalone rail back. */
+function RailToggle({
+  label,
+  testId,
+  side,
+  onClick,
+}: {
+  readonly label: string;
+  readonly testId: string;
+  readonly side: "left" | "right";
+  readonly onClick: () => void;
+}) {
+  const Icon = side === "left" ? SidebarLeft : SidebarRight;
+  return (
+    <Tip label={label} side={side === "left" ? "right" : "left"}>
+      <Button
+        variant="outline"
+        size="icon-sm"
+        aria-label={label}
+        data-testid={testId}
+        onClick={onClick}
+        className={cn("absolute top-3 z-20 shadow-sm", side === "left" ? "left-3" : "right-3")}
+      >
+        <Icon className="size-4" />
+      </Button>
+    </Tip>
+  );
+}
+
+/** The top bar, wired to the editor around it. */
+export function EditorTopBar(props: PartProps<"header", { readonly layout: EditorLayoutMode }>) {
+  const { topBar } = useShellChrome();
+  return <TopBar {...topBar} part={props} />;
+}
+
+/** The status bar, wired to the editor around it. */
+export function EditorStatusBar(
+  props: PartProps<"footer", { readonly layout: EditorLayoutMode; readonly save: string }>,
+) {
+  const { statusBar } = useShellChrome();
+  return <StatusBar {...statusBar} part={props} />;
+}
+
+/**
+ * The full editor: {@link EditorRoot} around the top bar, the workspace and the status bar. A
+ * host that wants another arrangement composes the root and the parts itself.
+ */
+export function EditorShell(props: EditorShellProps) {
+  return (
+    <EditorRoot {...props}>
+      <EditorTopBar />
+      <EditorWorkspace />
+      <EditorStatusBar />
+    </EditorRoot>
   );
 }

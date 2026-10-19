@@ -42,10 +42,31 @@ boundaries—not compiler transforms—provide render isolation.
   stable and can be selected as one slice.
 - Keep queue, revision, and generation state in the non-rendering spine. Components reach it only
   through actions such as save flushing, retry, and reload.
-- Do not add zustand middleware. Persistence remains explicit and limited to the existing UI
-  preferences.
+- Do not add zustand middleware. Persistence remains explicit and limited to layout preferences:
+  rail and chat widths, whether the chat is collapsed, and the work pane's open and shown tabs.
 - Effect Atom owns host application and server state; zustand owns editor-internal state. Do not
   cross that boundary.
+
+## Layout
+
+- A docked assistant (`rail.assistant`) sits beside one work pane; there is no third column.
+  Every view beyond Preview (Source, Design, Review, Checks) is a work-pane tab, so each is
+  reachable at every frame width. Open a view through the store's `openWorkTab`, and reveal the
+  host's review through `openReview`, never by writing layout state from a component.
+- The split needs 1280px of editor frame width (`layoutMode === "wide"`); below it the docked
+  workspace is a Chat | Preview switch. Both layouts render one tree, so crossing the threshold
+  never remounts the host's assistant. Measure against the frame, never the window.
+- Fold chrome by its own width with container queries (`@container/preview-bar`,
+  `@container/design`), and mark the editor's own controls `data-editor-control` so a phone
+  width gives them an invisible 44px hit area; never draw a control larger to meet it.
+- Build chrome from the shadcn components in `src/ui` (Base UI with the `base-nova` classes,
+  copied, not wrapped) and Tailwind utilities on shadcn token names. Do not hand-roll a button,
+  menu, popover or tooltip, and do not edit `src/ui` away from shadcn's classes; compose instead.
+- A chrome part renders through `usePart`: one `data-slot`, its state as data attributes,
+  `className` (string or function of state) merged with tailwind-merge, and Base UI's `render`.
+  A new part or state attribute is documented in the README's parts table.
+- Secondary controls (tab close, per-row actions) use `revealOnRowHover`: shown on hover or
+  keyboard focus, always shown where the device cannot hover.
 
 ## Chrome copy
 

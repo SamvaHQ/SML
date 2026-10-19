@@ -1,8 +1,99 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "../src/base.css";
 @import "../src/styles.css";
 
-/* apps/web owns the dashboard tokens; the harness stands in the editor's neutral base theme. */
+/*
+ * apps/web owns the dashboard tokens. The harness takes the editor's neutral base theme, then
+ * overrides it with the values of Samva's dashboard (`.surface-app` in apps/web/src/styles.css,
+ * DESIGN.md): a warm hue-80 canvas with one white sheet, warm-ink primary, amber as the ring, and
+ * the warm-dark twin. Token names are the editor's contract; only the values come from the dashboard.
+ */
+@theme {
+  --color-accent-orange: var(--accent-orange);
+  --font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.969 0.004 80);
+  --foreground: #17140f;
+  --card: #ffffff;
+  --card-foreground: #17140f;
+  --popover: #ffffff;
+  --popover-foreground: #17140f;
+  --primary: #17140f;
+  --primary-foreground: #ffffff;
+  --secondary: oklch(0.948 0.005 80);
+  --secondary-foreground: #17140f;
+  --muted: oklch(0.948 0.005 80);
+  --muted-foreground: #6f675d;
+  --accent: oklch(0.948 0.005 80);
+  --accent-foreground: #17140f;
+  --border: oklch(0.905 0.007 80);
+  --input: oklch(0.905 0.007 80);
+  --border-subtle: oklch(0.932 0.006 80);
+  --ring: #df7a36;
+  --accent-orange: #df7a36;
+  --placeholder: #9b9286;
+  --surface-elevated: #ffffff;
+  --surface-inset: oklch(0.948 0.005 80);
+  --status-success: oklch(0.65 0.22 155);
+  --status-warning: oklch(0.75 0.18 75);
+  --status-error: oklch(0.577 0.245 27.325);
+  --status-info: oklch(0.62 0.25 265);
+  --shadow-xs: 0 1px 2px 0 oklch(0.2 0.02 70 / 0.05);
+  --shadow-sm: 0 1px 2px 0 oklch(0.2 0.02 70 / 0.06), 0 1px 3px 0 oklch(0.2 0.02 70 / 0.05);
+  --shadow-md: 0 2px 4px -1px oklch(0.2 0.02 70 / 0.06), 0 6px 12px -2px oklch(0.2 0.02 70 / 0.08);
+  --shadow-lg: 0 4px 8px -2px oklch(0.2 0.02 70 / 0.06), 0 14px 28px -6px oklch(0.2 0.02 70 / 0.1);
+  --shadow-xl:
+    0 12px 24px -6px oklch(0.2 0.02 70 / 0.1), 0 32px 64px -12px oklch(0.2 0.02 70 / 0.16);
+  --shadow-floating:
+    0 10px 20px -6px oklch(0.2 0.02 70 / 0.1), 0 28px 56px -10px oklch(0.2 0.02 70 / 0.16);
+  --editor-scrollbar-thumb: color-mix(in oklab, #6f675d 38%, transparent);
+  --editor-scrollbar-thumb-hover: color-mix(in oklab, #6f675d 58%, transparent);
+}
+
+.dark {
+  --background: oklch(0.158 0.006 80);
+  --foreground: oklch(0.93 0.005 80);
+  --card: oklch(0.198 0.007 80);
+  --card-foreground: oklch(0.93 0.005 80);
+  --popover: oklch(0.228 0.008 80);
+  --popover-foreground: oklch(0.93 0.005 80);
+  --primary: oklch(0.93 0.005 80);
+  --primary-foreground: oklch(0.17 0.006 80);
+  --secondary: oklch(0.25 0.008 80);
+  --secondary-foreground: oklch(0.93 0.005 80);
+  --muted: oklch(0.25 0.008 80);
+  --muted-foreground: oklch(0.69 0.012 80);
+  --accent: oklch(0.25 0.008 80);
+  --accent-foreground: oklch(0.93 0.005 80);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --border-subtle: oklch(1 0 0 / 7%);
+  --ring: #df7a36;
+  --accent-orange: #df7a36;
+  --placeholder: oklch(0.55 0.012 80);
+  --surface-elevated: oklch(0.228 0.008 80);
+  --surface-inset: oklch(0.232 0.007 80);
+  --status-success: oklch(0.7 0.22 155);
+  --status-warning: oklch(0.8 0.18 75);
+  --status-error: oklch(0.704 0.191 22.216);
+  --status-info: oklch(0.68 0.25 265);
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.4);
+  --shadow-sm: 0 1px 2px 0 oklch(0 0 0 / 0.45), 0 1px 3px 0 oklch(0 0 0 / 0.35);
+  --shadow-md: 0 2px 4px -1px oklch(0 0 0 / 0.4), 0 6px 12px -2px oklch(0 0 0 / 0.45);
+  --shadow-lg: 0 4px 8px -2px oklch(0 0 0 / 0.4), 0 14px 28px -6px oklch(0 0 0 / 0.5);
+  --shadow-xl: 0 12px 24px -6px oklch(0 0 0 / 0.5), 0 32px 64px -12px oklch(0 0 0 / 0.6);
+  --shadow-floating: 0 10px 20px -6px oklch(0 0 0 / 0.5), 0 28px 56px -10px oklch(0 0 0 / 0.6);
+  --editor-scrollbar-thumb: oklch(0.36 0.01 80);
+  --editor-scrollbar-thumb-hover: oklch(0.46 0.012 80);
+}
+
 /* Editor package `@source` rides in `../src/styles.css` (imported above). */
 @source "./**/*.{ts,tsx,html}";
 
@@ -22,7 +113,7 @@ html.dark {
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   /*
    * Match the real dashboard host body (16px), NOT the editor's own 13px base, so
    * the harness reproduces production conditions: the editor must own its type base

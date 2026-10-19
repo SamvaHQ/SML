@@ -1,22 +1,19 @@
-import { Popover } from "@base-ui/react/popover";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
+import { cn } from "../lib/utils";
 import { useEditorStore } from "../state/context";
 import { summarizeChecks } from "../state/derive";
-import { DEVICE_WIDTH } from "../state/store";
+import type { EditorLayoutMode } from "../state/store";
+import { Button } from "../ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Separator } from "../ui/separator";
 import { AttentionSummary } from "./compatibility-report";
-import { cn } from "./ui-classes";
-import { useEditorPortalContainer } from "./use-editor-portal";
+import { useContribution } from "./contributions";
+import { usePart, type PartProps } from "./part";
 
-export function StatusBar({
-  saveVersionStatus,
-  saveVersionState,
-  onSaveVersion,
-  saveVersionBusy,
-  saveVersionBlocked,
-  guestHeadline,
-}: {
+/** What the root hands the status bar about saving versions. */
+export interface StatusBarProps {
   readonly saveVersionStatus?: string | undefined;
   readonly saveVersionState?: "idle" | "saving" | "saved" | "error" | undefined;
   readonly onSaveVersion?: (() => void) | undefined;
@@ -24,17 +21,42 @@ export function StatusBar({
   /** Another lifecycle action (restore, publish, conflict resolution) holds the draft. */
   readonly saveVersionBlocked?: boolean | undefined;
   readonly guestHeadline?: string | undefined;
+}
+
+/** The state an `EditorStatusBar` exposes. */
+export interface StatusBarState extends Record<string, unknown> {
+  readonly layout: EditorLayoutMode;
+  /** Where the draft stands: idle, saving, saved, error, or unavailable without versions. */
+  readonly save: string;
+}
+
+/**
+ * The status bar. With a docked chat beside the work pane its two halves line up with the
+ * panes: the checks and the draft under the chat, the version status under the work pane.
+ */
+export function StatusBar({
+  saveVersionStatus,
+  saveVersionState,
+  onSaveVersion,
+  saveVersionBusy,
+  saveVersionBlocked,
+  guestHeadline,
+  part,
+}: StatusBarProps & {
+  /** The part's own props: `className`, `render` and attributes from the host. */
+  readonly part?: PartProps<"footer", StatusBarState> | undefined;
 }) {
-  const portalContainer = useEditorPortalContainer();
-  const { doc, checks, sizeKb, deviceWidth, layoutMode } = useEditorStore(
+  const { doc, checks, sizeKb, layoutMode, assistantWidth, chatCollapsed } = useEditorStore(
     useShallow((state) => ({
       doc: state.doc,
       checks: state.checks,
       sizeKb: state.sizeKb,
-      deviceWidth: DEVICE_WIDTH[state.previewDevice],
       layoutMode: state.layoutMode,
+      assistantWidth: state.assistantWidth,
+      chatCollapsed: state.chatCollapsed,
     })),
   );
+  const docked = useContribution("rail.assistant") !== undefined;
   const { selectDocument } = useEditorStore((state) => state.actions);
   const editable = useEditorStore((state) => state.sourceEditable);
   const pendingAuthoredSource = useEditorStore((state) => state.pendingAuthoredSource);
@@ -44,7 +66,8 @@ export function StatusBar({
   const [open, setOpen] = useState(false);
 
   const { errorCount, warnCount } = summarizeChecks(checks);
-  const compact = layoutMode === "compact" || layoutMode === "narrow";
+  const narrow = layoutMode === "narrow";
+  const split = docked && layoutMode === "wide" && !chatCollapsed;
   const pending = checks.filter((check) =>
     check.diagnostics?.some((item) => item.compatibility?.assessment === "unverified"),
   ).length;
@@ -65,105 +88,120 @@ export function StatusBar({
         ? "Saving…"
         : undefined;
 
-  return (
-    <footer className="border-border bg-background text-muted-foreground z-30 flex min-h-8 items-center gap-4 border-t px-3.5 py-1 text-[11.5px]">
-      <Popover.Root open={open} onOpenChange={setOpen}>
-        <Popover.Trigger
-          data-testid="statusbar.checks-trigger"
-          aria-label={layoutMode === "narrow" ? summary : undefined}
-          onClick={() => selectDocument()}
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground",
-            guestHeadline === undefined &&
-              (layoutMode === "narrow" ? "w-6" : "w-[clamp(96px,18vw,240px)]"),
-            open && "bg-muted text-foreground",
-          )}
-        >
-          <span
-            className={cn(
-              "size-[7px] shrink-0 rounded-full",
-              errorCount > 0
-                ? "bg-status-error"
-                : warnCount > 0
-                  ? "bg-status-warning"
-                  : "bg-muted-foreground",
-            )}
-          />
-          {guestHeadline === undefined && layoutMode !== "narrow" ? (
-            <span className="truncate">{summary}</span>
-          ) : null}
-        </Popover.Trigger>
-        <Popover.Portal container={portalContainer}>
-          <Popover.Positioner
-            side="top"
-            align="start"
-            sideOffset={8}
-            collisionPadding={12}
-            className="z-[80] outline-none"
-          >
-            <Popover.Popup
-              data-testid="statusbar.checks-popup"
-              className="samva-editor-shell border-border bg-surface-elevated max-h-[min(560px,70vh)] w-[360px] origin-[var(--transform-origin)] overflow-y-auto rounded-xl border p-3.5 shadow-[var(--shadow-xl)] transition-[transform,scale,opacity] data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
+  return usePart<StatusBarState>(
+    "editor-status-bar",
+    { ...part },
+    {
+      state: { layout: layoutMode, save: saveVersionState ?? "unavailable" },
+      tag: "footer",
+      className:
+        "border-border bg-background text-muted-foreground z-30 flex h-8 shrink-0 items-stretch border-t text-xs whitespace-nowrap",
+      props: {
+        children: (
+          <>
+            <div
+              data-slot="editor-status-bar-start"
+              style={split ? { width: assistantWidth } : undefined}
+              className={cn("flex min-w-0 shrink-0 items-center gap-3 px-2", split && "pr-3")}
             >
-              <AttentionSummary checks={checks} editable={editable} />
-            </Popover.Popup>
-          </Popover.Positioner>
-        </Popover.Portal>
-      </Popover.Root>
-
-      {guestHeadline !== undefined ? (
-        <span data-testid="statusbar.guest" className="min-w-0 truncate">
-          {guestSaveNote ?? guestHeadline}
-        </span>
-      ) : (
-        !compact && <span className="w-[52px] shrink-0">{doc === null ? "Loading…" : "Draft"}</span>
-      )}
-      {guestHeadline === undefined ? (
-        <span
-          aria-live="polite"
-          data-testid="statusbar.save-version"
-          data-save-version-state={saveVersionState ?? "unavailable"}
-          className={cn(
-            "truncate",
-            layoutMode === "narrow" ? "min-w-0 flex-1" : "w-[150px] shrink-0",
-          )}
-        >
-          {saveVersionStatus ?? "Autosaved just now"}
-        </span>
-      ) : (
-        <span
-          className="sr-only"
-          aria-live="polite"
-          data-testid="statusbar.save-version"
-          data-save-version-state={saveVersionState ?? "unavailable"}
-        >
-          {guestSaveNote ?? saveVersionStatus ?? guestHeadline}
-        </span>
-      )}
-      {onSaveVersion !== undefined && (
-        <button
-          type="button"
-          onClick={onSaveVersion}
-          disabled={saveVersionBusy === true || saveVersionBlocked === true}
-          data-testid="topbar.save-version"
-          aria-label="Save the current draft as a version"
-          title="Save this draft as a version (⌘/Ctrl+S)"
-          className="hover:bg-muted hover:text-foreground w-[82px] shrink-0 rounded-md px-1.5 py-0.5 text-left transition-colors"
-        >
-          {saveVersionBusy === true
-            ? "Saving…"
-            : saveVersionStatus === "Couldn’t save version"
-              ? "Retry"
-              : "Save version"}
-        </button>
-      )}
-      <span className="flex-1" />
-      {!compact && <span className="w-10 shrink-0 text-right">{sizeKb} KB</span>}
-      {layoutMode !== "narrow" && (
-        <span className="w-[42px] shrink-0 text-right">
-          {doc?.channel === "email" ? `${deviceWidth}px` : (doc?.channel.toUpperCase() ?? "")}
-        </span>
-      )}
-    </footer>
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      data-testid="statusbar.checks-trigger"
+                      data-editor-control=""
+                      aria-label={narrow ? summary : undefined}
+                      onClick={() => selectDocument()}
+                      className="text-muted-foreground font-normal"
+                    />
+                  }
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full",
+                      errorCount > 0
+                        ? "bg-status-error"
+                        : warnCount > 0
+                          ? "bg-status-warning"
+                          : "bg-muted-foreground",
+                    )}
+                  />
+                  {guestHeadline === undefined && !narrow ? summary : null}
+                </PopoverTrigger>
+                <PopoverContent
+                  side="top"
+                  align="start"
+                  sideOffset={8}
+                  data-testid="statusbar.checks-popup"
+                  className="max-h-[min(560px,70vh)] w-[360px] overflow-y-auto p-3.5"
+                >
+                  <AttentionSummary checks={checks} editable={editable} />
+                </PopoverContent>
+              </Popover>
+              {guestHeadline !== undefined ? (
+                <span data-testid="statusbar.guest" className="min-w-0 truncate">
+                  {guestSaveNote ?? guestHeadline}
+                </span>
+              ) : (
+                !narrow && <span>{doc === null ? "Loading…" : "Draft"}</span>
+              )}
+            </div>
+            {!split && <Separator orientation="vertical" className="my-2.5" />}
+            <div
+              data-slot="editor-status-bar-end"
+              className="flex min-w-0 flex-1 items-center gap-1 px-2"
+            >
+              {guestHeadline === undefined ? (
+                <span
+                  aria-live="polite"
+                  data-testid="statusbar.save-version"
+                  data-save-version-state={saveVersionState ?? "unavailable"}
+                  className="px-1"
+                >
+                  {saveVersionStatus ?? "Autosaved just now"}
+                </span>
+              ) : (
+                <span
+                  className="sr-only"
+                  aria-live="polite"
+                  data-testid="statusbar.save-version"
+                  data-save-version-state={saveVersionState ?? "unavailable"}
+                >
+                  {guestSaveNote ?? saveVersionStatus ?? guestHeadline}
+                </span>
+              )}
+              {onSaveVersion !== undefined && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={onSaveVersion}
+                  disabled={saveVersionBusy === true || saveVersionBlocked === true}
+                  data-testid="topbar.save-version"
+                  data-editor-control=""
+                  aria-label="Save the current draft as a version"
+                  title="Save this draft as a version (⌘/Ctrl+S)"
+                  className="text-foreground"
+                >
+                  {saveVersionBusy === true
+                    ? "Saving…"
+                    : saveVersionStatus === "Couldn’t save version"
+                      ? "Retry"
+                      : "Save version"}
+                </Button>
+              )}
+              <span className="flex-1" />
+              {/* An email's width and size sit in its preview bar; other channels report theirs here. */}
+              {!narrow && doc !== null && doc.channel !== "email" && (
+                <span className="px-1">
+                  {sizeKb} KB · {doc.channel.toUpperCase()}
+                </span>
+              )}
+            </div>
+          </>
+        ),
+      },
+    },
   );
 }

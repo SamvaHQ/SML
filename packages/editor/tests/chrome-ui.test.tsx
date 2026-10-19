@@ -1,136 +1,55 @@
 /** @vitest-environment happy-dom */
-import { afterEach, describe, expect, it, vi } from "@effect/vitest";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { describe, expect, it } from "@effect/vitest";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach } from "vitest";
 
-import { IconBtn, Segmented, Toggle } from "../src/chrome/ui";
+import { Segmented, Tip } from "../src/chrome/ui";
+import { Button } from "../src/ui/button";
 
 afterEach(cleanup);
 
-describe("IconBtn", () => {
-  it("keeps its accessible name and reveals help on focus", async () => {
+describe("Tip", () => {
+  it("keeps the trigger's own name and reveals help on focus", async () => {
     const view = render(
-      <IconBtn title="Undo" testId="chrome-ui.icon-btn">
-        U
-      </IconBtn>,
+      <Tip label="Connect a sending domain before sending a test" shortcut="⌘T">
+        <Button aria-label="Send a test" data-testid="chrome-ui.trigger">
+          S
+        </Button>
+      </Tip>,
     );
-    const button = view.getByTestId("chrome-ui.icon-btn");
-
-    // The title prop becomes the accessible name, not a native title tooltip.
-    expect(button.getAttribute("aria-label")).toBe("Undo");
-    fireEvent.focus(button);
-
-    expect(button.getAttribute("title")).toBeNull();
-    expect((await view.findByRole("tooltip")).textContent).toBe("Undo");
-  });
-
-  it("uses the Base UI trigger without duplicating native hover help", () => {
-    const view = render(
-      <IconBtn title="Redo" testId="chrome-ui.icon-btn">
-        R
-      </IconBtn>,
-    );
-    const button = view.getByTestId("chrome-ui.icon-btn");
-    expect(button.getAttribute("aria-label")).toBe("Redo");
-    expect(button.getAttribute("title")).toBeNull();
-    expect(button.hasAttribute("data-base-ui-tooltip-trigger")).toBe(true);
-  });
-
-  it("can explain an action without changing its accessible name", async () => {
-    const view = render(
-      <IconBtn
-        title="Send a test"
-        help="Connect a sending domain before sending a test"
-        testId="chrome-ui.icon-btn"
-      >
-        S
-      </IconBtn>,
-    );
-    const button = view.getByTestId("chrome-ui.icon-btn");
+    const button = view.getByTestId("chrome-ui.trigger");
     fireEvent.focus(button);
 
     expect(button.getAttribute("aria-label")).toBe("Send a test");
-    expect((await view.findByRole("tooltip")).textContent).toBe(
-      "Connect a sending domain before sending a test",
-    );
-  });
-
-  it("keeps disabled controls named without opening a tooltip", async () => {
-    const view = render(
-      <IconBtn title="Undo" testId="chrome-ui.icon-btn" disabled>
-        U
-      </IconBtn>,
-    );
-    const button = view.getByTestId("chrome-ui.icon-btn");
-    expect(button.getAttribute("aria-label")).toBe("Undo");
-
-    expect(button.hasAttribute("disabled")).toBe(true);
-    fireEvent.mouseMove(button);
-    fireEvent.focus(button);
-
-    await waitFor(() => expect(view.queryByRole("tooltip")).toBeNull());
-  });
-});
-
-describe("Toggle", () => {
-  it("exposes its name, checked state, disabled state, and change contract", () => {
-    const onChange = vi.fn();
-    const view = render(
-      <Toggle
-        label="Hide on mobile"
-        testId="chrome-ui.toggle"
-        pressed={false}
-        onChange={onChange}
-      />,
-    );
-    const control = view.getByTestId("chrome-ui.toggle");
-
-    expect(control.getAttribute("aria-label")).toBe("Hide on mobile");
-    expect(control.getAttribute("aria-checked")).toBe("false");
-    fireEvent.click(control);
-    expect(onChange.mock.calls[0]?.[0]).toBe(true);
-
-    view.rerender(
-      <Toggle
-        label="Hide on mobile"
-        testId="chrome-ui.toggle"
-        pressed
-        disabled
-        onChange={onChange}
-      />,
-    );
-    expect(control.getAttribute("aria-checked")).toBe("true");
-    expect(control.getAttribute("aria-disabled")).toBe("true");
+    expect(button.getAttribute("title")).toBeNull();
+    const tooltip = await view.findByRole("tooltip");
+    expect(tooltip.getAttribute("data-slot")).toBe("tooltip-content");
+    expect(tooltip.querySelector('[data-slot="kbd"]')?.textContent).toBe("⌘T");
   });
 });
 
 describe("Segmented", () => {
-  it("names the group and shows icon-only option help on keyboard focus", async () => {
+  it("names the group, marks the chosen option, and reports a change", async () => {
+    const changes: string[] = [];
     const view = render(
       <Segmented
         ariaLabel="Canvas preview width"
         value="desktop"
-        onChange={() => {}}
+        onChange={(value) => changes.push(value)}
         options={[
-          {
-            value: "desktop",
-            label: "D",
-            title: "Preview desktop width",
-            testId: "desktop",
-          },
-          {
-            value: "mobile",
-            label: "M",
-            title: "Preview mobile width",
-            testId: "mobile",
-          },
+          { value: "desktop", label: "D", title: "Desktop width", testId: "desktop" },
+          { value: "mobile", label: "M", title: "Phone width", testId: "mobile" },
         ]}
       />,
     );
 
     expect(view.getByRole("group").getAttribute("aria-label")).toBe("Canvas preview width");
+    expect(view.getByTestId("desktop").getAttribute("aria-pressed")).toBe("true");
     const mobile = view.getByTestId("mobile");
+    expect(mobile.getAttribute("data-slot")).toBe("toggle-group-item");
     fireEvent.focus(mobile);
-    expect(mobile.getAttribute("title")).toBeNull();
-    expect((await view.findByRole("tooltip")).textContent).toBe("Preview mobile width");
+    expect((await view.findByRole("tooltip")).textContent).toBe("Phone width");
+    fireEvent.click(mobile);
+    expect(changes).toEqual(["mobile"]);
   });
 });

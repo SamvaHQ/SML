@@ -19,7 +19,9 @@ import { Effect } from "effect";
 import { useEffect, useRef, useState } from "react";
 
 import { useEditorStore } from "../src/state/context";
+import type { CompiledHostControls } from "./compiled-host";
 import { createPromiseHost } from "./promise-host";
+import { createWorkspaceHost, WorkspaceDemoShell } from "./workspace-demo";
 
 // Representative checks so the statusbar summary + document inspector render with
 // real content; a real host supplies its compile checks instead.
@@ -111,6 +113,11 @@ const EXTENSIONS_DEMO =
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).get("demo") === "extensions";
 
+/** `?demo=workspace` docks an assistant beside the work pane, as the dashboard does. */
+const WORKSPACE_DEMO =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("demo") === "workspace";
+
 /** A replacement for the Preview icon, so the demo shows a host's icon set taking effect. */
 const DemoPreviewIcon = ({ className }: { readonly className?: string }) => (
   <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
@@ -160,15 +167,26 @@ const demoContributions = (onToggleTheme: () => void): ReadonlyArray<EditorContr
 
 export const App = () => {
   const emitRef = useRef<MockHostControls["emit"] | null>(null);
+  const [controls, setControls] = useState<CompiledHostControls | null>(null);
   const [host, setHost] = useState<AsyncEditorHost | null>(() =>
     EXTENSIONS_DEMO ? createPromiseHost() : null,
   );
   useEffect(() => {
     if (EXTENSIONS_DEMO) return;
+    if (WORKSPACE_DEMO) {
+      // The workspace demo compiles the real Nimbus template in the browser. The compiler loads
+      // only here, so `/` keeps its small, compiler-free graph.
+      void import("./compiled-host").then(async ({ createCompiledHost }) => {
+        const compiledControls = await createCompiledHost();
+        setControls(compiledControls);
+        setHost(createWorkspaceHost(compiledControls));
+      });
+      return;
+    }
     // oxlint-disable-next-line eslint/no-restricted-properties -- the dev harness root is a program edge that builds the mock host once on mount
-    void Effect.runPromise(createMockHost).then((controls) => {
-      emitRef.current = controls.emit;
-      const mock = toAsyncHost(controls.host);
+    void Effect.runPromise(createMockHost).then((mockControls) => {
+      emitRef.current = mockControls.emit;
+      const mock = toAsyncHost(mockControls.host);
       // The harness has no Git; saving a version keeps the revision it was given.
       setHost({
         ...mock,
@@ -200,22 +218,33 @@ export const App = () => {
         checks={SAMPLE_CHECKS}
         icons={EXTENSIONS_DEMO ? DEMO_ICONS : undefined}
       >
-        <EditorShell
-          // The Promise host keeps metadata read-only, so a rename would have nowhere to go.
-          renameEnabled={!EXTENSIONS_DEMO}
-          contributions={
-            EXTENSIONS_DEMO
-              ? demoContributions(toggleTheme)
-              : [
-                  {
-                    slot: "frame.start",
-                    id: "dashboard-nav",
-                    render: () => <FakeDashSidebar onToggleTheme={toggleTheme} />,
-                  },
-                ]
-          }
-          onBack={() => console.info("[harness] back to templates")}
-        />
+        {WORKSPACE_DEMO && controls !== null ? (
+          <WorkspaceDemoShell
+            controls={controls}
+            frameStart={{
+              slot: "frame.start",
+              id: "dashboard-nav",
+              render: () => <FakeDashSidebar onToggleTheme={toggleTheme} />,
+            }}
+          />
+        ) : (
+          <EditorShell
+            // The Promise host keeps metadata read-only, so a rename would have nowhere to go.
+            renameEnabled={!EXTENSIONS_DEMO}
+            contributions={
+              EXTENSIONS_DEMO
+                ? demoContributions(toggleTheme)
+                : [
+                    {
+                      slot: "frame.start",
+                      id: "dashboard-nav",
+                      render: () => <FakeDashSidebar onToggleTheme={toggleTheme} />,
+                    },
+                  ]
+            }
+            onBack={() => console.info("[harness] back to templates")}
+          />
+        )}
         <HarnessProbe />
       </EditorProvider>
     </div>

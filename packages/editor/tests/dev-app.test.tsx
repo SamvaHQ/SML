@@ -34,7 +34,7 @@ describe("dev harness App", () => {
     );
 
     // Shell chrome mounted; the local mock intentionally has no persisted lifecycle.
-    view.getByTestId("topbar.preview");
+    view.getByTestId("topbar.name");
     expect(view.queryByTestId("topbar.publish")).toBeNull();
   });
 

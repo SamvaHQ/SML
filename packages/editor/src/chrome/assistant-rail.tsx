@@ -1,49 +1,85 @@
 import { useShallow } from "zustand/react/shallow";
 
+import { cn } from "../lib/utils";
 import { useEditorStore } from "../state/context";
 import { Sparkle } from "./editor-icons";
-import { cn } from "./ui-classes";
+import { usePart, type PartProps } from "./part";
 import { useAssistant } from "./use-assistant";
 
+/** The state an `EditorAssistantDock` exposes. */
+export interface AssistantDockState extends Record<string, unknown> {
+  /** The dock fills its pane (a Chat | Preview switch) rather than a resizable column. */
+  readonly focused: boolean;
+  /** The dock is off screen: the chat is collapsed, or the switch shows the preview. */
+  readonly hidden: boolean;
+}
+
 /**
- * The `rail.assistant` region beside the email preview: no inspector toggle, no collapse. The
- * host's contribution owns scroll and composer.
+ * The `rail.assistant` region beside the work pane: a column whose width the divider sets in the
+ * split layout, and the whole pane behind the Chat | Preview switch below it. The host's
+ * contribution owns scroll and composer; the dock stays mounted while hidden, so the host's chat
+ * keeps its state.
  */
-export function AssistantColumn({ hidden = false }: { readonly hidden?: boolean }) {
+export function EditorAssistantDock({
+  hidden = false,
+  ...props
+}: PartProps<"aside", AssistantDockState> & { readonly hidden?: boolean | undefined }) {
   const assistant = useAssistant();
   const assistantWidth = useEditorStore((state) => state.assistantWidth);
   const layoutMode = useEditorStore((state) => state.layoutMode);
-  const focused = layoutMode === "compact" || layoutMode === "narrow";
-  if (assistant === null) return null;
-  return (
-    <aside
-      aria-label="Assistant"
-      hidden={hidden}
-      data-editor-rail="left"
-      data-testid="agent-column"
-      style={focused ? undefined : { width: assistantWidth }}
-      className={cn(
-        "min-h-0 min-w-0 flex-col overflow-hidden bg-background",
+  // Below the wide layout the chat is one of two switched panes and takes the full width.
+  const focused = layoutMode !== "wide";
+  const dock = usePart<AssistantDockState>(
+    "editor-assistant-dock",
+    {
+      "aria-label": "Assistant",
+      hidden,
+      "data-editor-rail": "left",
+      "data-testid": "agent-column",
+      style: focused ? undefined : { width: assistantWidth },
+      ...props,
+    },
+    {
+      state: { focused, hidden },
+      tag: "aside",
+      className: cn(
+        "bg-background min-h-0 min-w-0 flex-col overflow-hidden",
         hidden ? "hidden" : "flex",
-        focused && "h-full w-full flex-1",
-        !focused && "h-full shrink-0 border-r border-border",
-      )}
-    >
-      <div
-        className="flex h-full min-h-0 min-w-0 flex-col"
-        style={focused ? undefined : { width: assistantWidth, maxWidth: "100%" }}
-      >
-        <div className="border-border-subtle flex min-h-11 shrink-0 items-center gap-2 border-b px-3 py-2">
-          <Sparkle className="text-accent-orange size-[15px] shrink-0" />
-          <p className="text-foreground truncate text-[13px] leading-none font-semibold">
-            Assistant
-          </p>
-          {assistant.header !== null && <div className="ml-auto shrink-0">{assistant.header}</div>}
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col">{assistant.panel}</div>
-      </div>
-    </aside>
+        focused ? "h-full w-full flex-1" : "border-border h-full shrink-0 border-r",
+      ),
+      props: {
+        children:
+          assistant === null ? null : (
+            <div
+              className="flex h-full min-h-0 min-w-0 flex-col"
+              style={focused ? undefined : { width: assistantWidth, maxWidth: "100%" }}
+            >
+              <div
+                data-slot="editor-assistant-dock-header"
+                className="border-border flex h-11 shrink-0 items-center gap-2 border-b px-3"
+              >
+                <Sparkle className="text-primary size-4 shrink-0" />
+                <p className="text-foreground truncate text-sm font-medium">Assistant</p>
+                {assistant.header !== null && (
+                  <div className="ml-auto shrink-0">{assistant.header}</div>
+                )}
+              </div>
+              <div
+                data-slot="editor-assistant-dock-body"
+                // A chat that takes the whole frame keeps a readable measure.
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col",
+                  focused && "mx-auto w-full max-w-3xl",
+                )}
+              >
+                {assistant.panel}
+              </div>
+            </div>
+          ),
+      },
+    },
   );
+  return assistant === null ? null : dock;
 }
 
 /**
