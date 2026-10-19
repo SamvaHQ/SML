@@ -80,7 +80,13 @@ function VersionRow({
 }) {
   return (
     <div className="group/row relative">
-      <button type="button" data-testid={testId} onClick={onSelect} className={rowButtonClass}>
+      <button
+        type="button"
+        data-testid={testId}
+        data-editor-control=""
+        onClick={onSelect}
+        className={rowButtonClass}
+      >
         <span className="flex size-3.5 shrink-0 items-center justify-center">
           {marked ? <Check className="size-3.5" /> : null}
         </span>
@@ -173,10 +179,18 @@ export function VersionPicker() {
     if (!beginLifecycle()) return;
     setRestoring(true);
     setRestoreError(null);
+    // The draft may have moved while the confirmation was open (an assistant turn, a save
+    // elsewhere). Check again under the lifecycle lock, so a restore never replaces changes that
+    // are not in a saved version.
     void flushSaves()
-      .then((baseRev) => api.restore({ commit: pending.commit, baseRev }))
-      .then((result) => {
-        adoptLifecycleSnapshot(result);
+      .then(async (baseRev) => {
+        const current = await api.inspect();
+        if (current.dirty || current.conflicts.length > 0) {
+          setLoad({ status: "ready", state: current });
+          setPending({ ...pending, blocked: true });
+          return;
+        }
+        adoptLifecycleSnapshot(await api.restore({ commit: pending.commit, baseRev }));
         setPending(null);
       })
       .catch((cause: unknown) => setRestoreError(errorMessage(cause)))
@@ -197,6 +211,7 @@ export function VersionPicker() {
           <Popover.Trigger
             aria-label="Versions"
             data-testid="preview-bar.versions"
+            data-editor-control=""
             disabled={restoring}
             className={cn(toolbarButton, "gap-1 rounded-md px-2")}
           >
@@ -228,6 +243,7 @@ export function VersionPicker() {
                   placeholder="Search versions"
                   aria-label="Search versions"
                   data-testid="preview-bar.versions-search"
+                  data-editor-control=""
                   className="placeholder:text-muted-foreground h-6 w-full min-w-0 bg-transparent text-[13px] outline-none"
                 />
               </label>
@@ -241,6 +257,7 @@ export function VersionPicker() {
                     <button
                       type="button"
                       data-testid="preview-bar.versions-retry"
+                      data-editor-control=""
                       onClick={loadVersions}
                       className={cn(
                         softRaised,
@@ -326,6 +343,7 @@ export function VersionPicker() {
             <div className="mt-4 flex justify-end gap-2">
               <AlertDialog.Close
                 data-testid="preview-bar.restore-cancel"
+                data-editor-control=""
                 disabled={restoring}
                 className={cn(softRaised, "h-8 rounded-md px-3 text-[13px] font-medium", focusRing)}
               >
@@ -334,6 +352,7 @@ export function VersionPicker() {
               <button
                 type="button"
                 data-testid="preview-bar.restore-confirm"
+                data-editor-control=""
                 disabled={restoring || pending?.blocked === true}
                 onClick={restore}
                 className={cn(chromePrimary, "h-8 px-3 text-[13px]")}

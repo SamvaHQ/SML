@@ -201,6 +201,28 @@ describe("VersionPicker", () => {
     expect(restore).not.toHaveBeenCalled();
   });
 
+  it("checks the draft again under the lock and refuses when it moved", async () => {
+    const inspect = vi
+      .fn<AsyncLifecycleApi["inspect"]>()
+      .mockResolvedValueOnce(state())
+      .mockResolvedValue(state({ dirty: true }));
+    const { view, restore } = mount({ inspect });
+    await openPicker(view);
+    fireEvent.click(view.getByTestId(`preview-bar.version.${OLDER}`));
+    fireEvent.click(await view.findByTestId("preview-bar.restore-confirm"));
+
+    await waitFor(() =>
+      expect((view.getByTestId("preview-bar.restore-confirm") as HTMLButtonElement).disabled).toBe(
+        true,
+      ),
+    );
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(restore).not.toHaveBeenCalled();
+    expect(view.getByTestId("preview-bar.restore-dialog").textContent).toContain(
+      "Save a version first, so your unsaved changes stay in the list.",
+    );
+  });
+
   it("keeps the dialog open and shows the error when the restore fails", async () => {
     const restore = vi.fn(() => Promise.reject(new Error("Could not restore")));
     const { view } = mount({ restore });
