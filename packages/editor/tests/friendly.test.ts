@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { compileTemplate } from "@samva/markup/compiler";
-import { renderIrPreview } from "@samva/markup/render";
+import { previewEmail } from "@samva/markup/edit";
 
 import {
   NIMBUS_ENTRY_FILE,
@@ -27,9 +27,9 @@ const nimbus = async () => {
     assetBase: "https://assets.nimbus.example",
     tailwind: { css: NIMBUS_THEME_CSS, cssPath: NIMBUS_THEME_FILE },
   });
-  if (compiled.ir === undefined) throw new Error("the Nimbus template did not compile");
+  if (compiled.template === undefined) throw new Error("the Nimbus template did not compile");
   const fixture = compiled.fixtures.welcome;
-  return emailOutline(renderIrPreview(compiled.ir, fixture).selections);
+  return emailOutline(previewEmail(compiled.template, fixture).selections);
 };
 
 const names = (nodes: ReadonlyArray<AuthoredNode>): unknown =>

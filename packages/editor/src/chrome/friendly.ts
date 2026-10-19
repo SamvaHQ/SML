@@ -1,4 +1,4 @@
-import type { EmailElementSelection } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
 
 import { selectionComponentLabel, type EmailOutline } from "./email-outline";
 

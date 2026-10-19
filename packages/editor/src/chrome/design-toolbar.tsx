@@ -1,5 +1,5 @@
 import { inspectSourceElement, structuralReplacements } from "@samva/markup/edit";
-import type { EmailElementSelection } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
 import { useMemo, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 

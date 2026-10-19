@@ -9,7 +9,8 @@ import {
 } from "@samva/editor/host";
 import { compileTemplate } from "@samva/markup/compiler";
 import type { EmailDiagnostic } from "@samva/markup/diagnostics";
-import { renderIr, renderIrPreview } from "@samva/markup/render";
+import { previewEmail } from "@samva/markup/edit";
+import { render as renderMessage } from "@samva/markup/render";
 
 import {
   NIMBUS_ENTRY_FILE,
@@ -95,13 +96,13 @@ const inlineLogo = (
 };
 
 const render = (compiled: Compiled, fixture: string, revision: string): EmailRender | null => {
-  const ir = compiled.ir;
-  if (ir === undefined) return null;
+  const template = compiled.template;
+  if (template === undefined) return null;
   const input = compiled.fixtures[fixture];
   // oxlint-disable-next-line samva/no-try-catch-or-throw -- Plain library boundary: the renderer signals a refused render by throwing; the document then shows no preview.
   try {
-    const preview = renderIrPreview(ir, input);
-    const delivered = renderIr(ir, input);
+    const preview = previewEmail(template, input);
+    const delivered = renderMessage(template, input, { channel: "email" });
     return {
       revision,
       subject: preview.subject,

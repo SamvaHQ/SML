@@ -210,14 +210,17 @@ export interface LowerOptions {
 interface ExternalImage {
   readonly url: string;
   readonly host: string;
-  readonly src: IrSource | undefined;
+  readonly src: CompiledSource | undefined;
 }
 
 /** Literal absolute http(s) image sources outside the project's asset base. */
-const externalImages = (root: IrNode, assetBase: string | undefined): readonly ExternalImage[] => {
+const externalImages = (
+  root: CompiledNode,
+  assetBase: string | undefined,
+): readonly ExternalImage[] => {
   const found: ExternalImage[] = [];
   const base = assetBase === undefined ? undefined : assetBase.replace(/\/+$/, "") + "/";
-  const visit = (node: IrNode): void => {
+  const visit = (node: CompiledNode): void => {
     if (typeof node !== "object" || node === null) return;
     if ("el" in node) {
       const url = node.el === "img" ? node.attrs?.src : undefined;
