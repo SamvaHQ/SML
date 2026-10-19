@@ -30,10 +30,7 @@ test("layers list the authored blocks by name, with no compiler scaffolding", as
 
 test("a block's background is a theme color, and the change is staged", async ({ page }) => {
   await open(page);
-  await layers(page)
-    .getByRole("button", { name: /^Section/ })
-    .nth(1)
-    .click();
+  await layers(page).locator('[data-layer-name="Section"]').nth(1).click();
   await expect(page.getByTestId("inspector.element-name")).toHaveText("Section");
   await expect(page.getByTestId("design-properties.color.bg.card")).toHaveAttribute(
     "aria-pressed",
@@ -48,9 +45,7 @@ test("a block's background is a theme color, and the change is staged", async ({
 
 test("Advanced keeps the raw classes one click away", async ({ page }) => {
   await open(page);
-  await layers(page)
-    .getByRole("button", { name: /^Heading/ })
-    .click();
+  await layers(page).locator('[data-layer-name="Heading"]').click();
   await expect(page.getByTestId("source.classes")).toBeHidden();
   await page.getByTestId("source.advanced-toggle").click();
   await expect(page.getByTestId("source.classes")).toBeVisible();

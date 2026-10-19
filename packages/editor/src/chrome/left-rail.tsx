@@ -24,7 +24,7 @@ import { cn } from "./ui-classes";
  */
 const layerExcerpt = (selection: AuthoredNode["selection"], html: string): string | undefined => {
   const text = selectionTextExcerpt(selection, html)
-    ?.replace(/[\u200b\u00ad\u034f]/g, "")
+    ?.replace(/\u200b|\u00ad|\u034f/g, "")
     .trim();
   if (text === undefined || text === "") return undefined;
   const half = text.length / 2;
@@ -91,6 +91,7 @@ function TreeRow({ node, depth }: { node: AuthoredNode; depth: number }) {
           )}
           <button
             data-layer-instance-path={node.instancePath}
+            data-layer-name={name}
             data-testid={`layers.node.${node.instancePath}`}
             type="button"
             onClick={() => select(node.instancePath)}
