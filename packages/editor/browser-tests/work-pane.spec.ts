@@ -8,15 +8,24 @@ const WIDE = { width: 1440, height: 900 } as const;
 const FOCUSED = { width: 1180, height: 820 } as const;
 const PHONE = { width: 390, height: 844 } as const;
 
-const open = async (page: Page, size: { width: number; height: number }) => {
+const open = async (page: Page, size: { width: number; height: number }, url = WORKSPACE) => {
   await page.setViewportSize(size);
-  await page.goto(WORKSPACE);
+  await page.goto(url);
   await expect(page.locator("[data-editor-rendered]")).toHaveText("true");
   await expect(page.getByTestId("work-pane")).toBeAttached();
 };
 
+/**
+ * Adds a view from the tab row's "+" menu. On a phone, while Preview is the only tab, the row is
+ * hidden and the preview bar's menu offers the same rows.
+ */
 const addTab = async (page: Page, tab: string) => {
-  await page.getByTestId("work-pane.add").click();
+  const row = page.locator("[data-slot=editor-work-pane-header]");
+  await (
+    (await row.isVisible())
+      ? page.getByTestId("work-pane.add")
+      : page.getByTestId("preview-bar.more")
+  ).click();
   await page.getByTestId(`work-pane.add.${tab}`).click();
   await expect(page.getByTestId(`work-pane.tab.${tab}`)).toHaveAttribute("aria-selected", "true");
 };
@@ -102,8 +111,8 @@ test("an inactive tab's close control shows on row hover and on keyboard focus",
   await page.keyboard.press("ArrowRight");
   await expect(page.getByTestId("work-pane.tab.source")).toBeFocused();
   await expect.poll(() => closeOpacity(page, "source")).toBe(1);
-  // Focus on one tab's row reveals only that row's control.
-  expect(await closeOpacity(page, "design")).toBe(0);
+  // The shown tab keeps its own × in view whatever has focus.
+  expect(await closeOpacity(page, "design")).toBe(1);
 });
 
 test("a touch screen always shows the close control", async ({ browser }, testInfo) => {
@@ -125,13 +134,16 @@ test("a touch screen always shows the close control", async ({ browser }, testIn
     await expect.poll(() => closeOpacity(page, "source")).toBe(1);
     await expect.poll(() => closeOpacity(page, "checks")).toBe(1);
 
-    // Tabs keep their labels whole, and a close target sits beside its tab, never over it.
+    // Tabs keep their glyphs whole, and a close target sits beside its tab, never over it.
     const layout = await page.evaluate(() => {
       const box = (id: string) =>
         document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect();
-      const preview = document.querySelector<HTMLElement>('[data-testid="work-pane.tab.preview"]')!;
+      const preview = box("work-pane.tab.preview");
+      const glyph = document
+        .querySelector('[data-testid="work-pane.tab.preview"] svg')!
+        .getBoundingClientRect();
       return {
-        previewClipped: preview.scrollWidth > preview.clientWidth,
+        previewClipped: glyph.left < preview.left || glyph.right > preview.right,
         sourceRight: box("work-pane.tab.source").right,
         closeLeft: box("work-pane.close.source").left,
       };
@@ -170,11 +182,15 @@ test("collapsing the chat gives the work pane the whole frame and Show chat rest
 test("below 1280px the layout is focused and a finished turn dots the Preview switch", async ({
   page,
 }) => {
-  await open(page, FOCUSED);
+  await open(page, FOCUSED, `${WORKSPACE}&dev=1`);
   await expect(page.locator("[data-agent-workspace-layout]")).toHaveAttribute(
     "data-agent-workspace-layout",
     "focused",
   );
+  // Below 1280px the Chat | Preview switch lives in the top bar.
+  await expect(
+    page.locator("[data-slot=editor-top-bar] [data-slot=editor-pane-switch]"),
+  ).toBeVisible();
   await expect(page.getByTestId("agent-workspace.tab.assistant")).toHaveAttribute(
     "aria-selected",
     "true",
@@ -194,7 +210,7 @@ test("below 1280px the layout is focused and a finished turn dots the Preview sw
   await expect(page.getByTestId("agent-workspace.preview-updated")).toHaveCount(0);
 });
 
-test("on a phone every visible editor control is at least 44px and Design is reachable", async ({
+test("on a phone every visible editor control has a 44px hit area and Design is reachable", async ({
   browser,
 }, testInfo) => {
   const context = await browser.newContext({
@@ -205,12 +221,17 @@ test("on a phone every visible editor control is at least 44px and Design is rea
   });
   try {
     const page = await context.newPage();
-    await page.goto(WORKSPACE);
+    await page.goto(`${WORKSPACE}&dev=1`);
     await expect(page.locator("[data-editor-rendered]")).toHaveText("true");
 
-    const undersized = () =>
-      page.evaluate(() =>
-        [...document.querySelectorAll<HTMLElement>("[data-editor-control]")].flatMap((element) => {
+    // A marked control keeps the box it was designed with (never drawn 44px tall) and carries an
+    // invisible hit area, at least 44x44, centred on it.
+    const wanting = () =>
+      page.evaluate(() => {
+        const marked = [...document.querySelectorAll<HTMLElement>("[data-editor-control]")];
+        const problems: string[] = [];
+        let seen = 0;
+        for (const element of marked) {
           const rect = element.getBoundingClientRect();
           const style = getComputedStyle(element);
           const visible =
@@ -218,41 +239,62 @@ test("on a phone every visible editor control is at least 44px and Design is rea
             rect.height > 0 &&
             style.visibility !== "hidden" &&
             style.display !== "none";
-          return visible && (rect.width < 44 || rect.height < 44)
-            ? [
-                `${element.getAttribute("data-testid") ?? element.tagName} ` +
-                  `${Math.round(rect.width)}x${Math.round(rect.height)}`,
-              ]
-            : [];
-        }),
-      );
+          // A <select> draws no pseudo-element, so it has no hit area to measure.
+          if (!visible || element instanceof HTMLSelectElement) continue;
+          seen += 1;
+          const after = getComputedStyle(element, "::after");
+          const hit = {
+            width: Number.parseFloat(after.width),
+            height: Number.parseFloat(after.height),
+          };
+          const name = `${element.getAttribute("data-testid") ?? element.tagName} `;
+          // A two-line menu row is naturally taller; every other control stays under 44px.
+          const row = element.getAttribute("role") === "menuitem";
+          if (!row && rect.height >= 44)
+            problems.push(`${name}is drawn ${Math.round(rect.height)}px tall`);
+          if (!(hit.width >= 44 && hit.height >= 44))
+            problems.push(`${name}hit area ${hit.width}x${hit.height}`);
+        }
+        return { seen, problems };
+      });
+    const expectHitAreas = async () => {
+      const { seen, problems } = await wanting();
+      expect(seen).toBeGreaterThan(0);
+      expect(problems).toEqual([]);
+    };
 
     // Chat pane.
-    expect(await undersized()).toEqual([]);
+    await expectHitAreas();
 
-    // Preview pane, then each view the + menu adds.
+    // Preview pane: with Preview alone the tab row is gone and the bar's menu adds views.
     await page.getByTestId("agent-workspace.tab.preview").click();
     await expect(page.getByTestId("work-pane")).toBeVisible();
-    expect(await undersized()).toEqual([]);
+    await expect(page.locator("[data-slot=editor-work-pane-header]")).toBeHidden();
+    await expectHitAreas();
+    await page.getByTestId("preview-bar.more").click();
+    await expect(page.getByTestId("work-pane.add.design")).toBeVisible();
+    await expectHitAreas();
+    await page.keyboard.press("Escape");
+
     await addTab(page, "design");
     await expect(page.getByTestId("design-panel")).toBeVisible();
-    expect(await undersized()).toEqual([]);
+    await expectHitAreas();
     await addTab(page, "source");
-    expect(await undersized()).toEqual([]);
+    await expectHitAreas();
     await addTab(page, "checks");
-    expect(await undersized()).toEqual([]);
+    await expectHitAreas();
 
     // The "+" menu's rows and the broken-edit notice's action are controls too.
     await page.getByTestId("work-pane.add").click();
     await expect(page.getByTestId("work-pane.add-menu")).toBeVisible();
-    expect(await undersized()).toEqual([]);
+    await expectHitAreas();
     await page.keyboard.press("Escape");
     await page.getByTestId("agent-workspace.tab.assistant").click();
     await page.getByTestId("dev-app.stale-preview").click();
     await page.getByTestId("agent-workspace.tab.preview").click();
     await page.getByTestId("work-pane.tab.preview").click();
     await expect(page.getByTestId("canvas.preview-stale.checks")).toBeVisible();
-    expect(await undersized()).toEqual([]);
+    await expectHitAreas();
   } finally {
     await context.close();
   }

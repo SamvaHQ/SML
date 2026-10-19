@@ -132,12 +132,12 @@ test("refreshing the preview keeps the email rendered", async ({ page }) => {
 });
 
 test("a preview that could not be built says why and leads to the checks", async ({ page }) => {
-  await open(page);
+  await open(page, `${WORKSPACE}&dev=1`);
   await expect(page.getByTestId("canvas.preview-stale")).toHaveCount(0);
   await page.getByTestId("dev-app.stale-preview").click();
   const notice = page.getByTestId("canvas.preview-stale");
   await expect(notice).toBeVisible();
-  await expect(notice).toContainText("Unexpected token");
+  await expect(notice).toContainText("closes a tag it never opened");
   // The last preview that worked stays on screen.
   await expect(page.getByTestId("canvas.frame")).toBeVisible();
 

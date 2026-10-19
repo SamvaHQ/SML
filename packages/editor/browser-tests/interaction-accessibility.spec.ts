@@ -2,10 +2,24 @@ import { expect, test } from "@playwright/test";
 
 const PREVIEW_TOOLTIP = "Preview template";
 
-const open = async (page: import("@playwright/test").Page) => {
-  await page.goto("/");
+const open = async (page: import("@playwright/test").Page, url = "/") => {
+  await page.goto(url);
   await expect(page.locator("[data-editor-harness-ready]")).toBeAttached();
 };
+
+/** The computed value of a CSS value expression (`var(--primary)`) as the shell resolves it. */
+const resolveIn = (shell: import("@playwright/test").Locator, property: string, value: string) =>
+  shell.evaluate(
+    (element, [prop, expression]) => {
+      const probe = document.createElement("div");
+      probe.style.setProperty(prop!, expression!);
+      element.append(probe);
+      const resolved = getComputedStyle(probe).getPropertyValue(prop!);
+      probe.remove();
+      return resolved;
+    },
+    [property, value] as const,
+  );
 
 test("icon-only editor actions expose the same help to keyboard focus", async ({ page }) => {
   await open(page);
@@ -21,9 +35,18 @@ test("preview controls remain reachable in a narrow reduced-motion viewport", as
   await page.setViewportSize({ width: 480, height: 800 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await open(page);
-  const preview = page.getByTestId("topbar.preview");
-  expect((await preview.boundingBox())?.height).toBeGreaterThanOrEqual(40);
-  await preview.click();
+  // A phone-width control keeps its designed 28px box and gains an invisible 44px hit area.
+  const more = page.getByTestId("topbar.more");
+  expect((await more.boundingBox())?.height).toBe(28);
+  const hitArea = await more.evaluate((element) => {
+    const after = getComputedStyle(element, "::after");
+    return { width: Number.parseFloat(after.width), height: Number.parseFloat(after.height) };
+  });
+  expect(hitArea.width).toBeGreaterThanOrEqual(44);
+  expect(hitArea.height).toBeGreaterThanOrEqual(44);
+  // Preview template is one of the menu's rows.
+  await more.click();
+  await page.locator('[role="menuitem"][data-testid="topbar.preview"]').click();
 
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByTestId("preview-overlay.format-group")).toBeVisible();
@@ -40,12 +63,17 @@ test("preview controls remain reachable in a narrow reduced-motion viewport", as
 
 for (const mode of ["light", "dark"] as const) {
   test(`editor resolves host and canvas theme values in ${mode} mode`, async ({ page }) => {
-    await open(page);
+    await open(page, "/?demo=workspace");
     const shell = page.locator(".samva-editor-shell").first();
     const readTokens = () =>
       shell.evaluate((element) => {
         const styles = getComputedStyle(element);
         const colors = [
+          "--primary",
+          "--primary-foreground",
+          "--muted",
+          "--muted-foreground",
+          "--border",
           "--card",
           "--card-foreground",
           "--popover",
@@ -74,7 +102,9 @@ for (const mode of ["light", "dark"] as const) {
     if (mode === "dark") await page.getByTitle("Toggle theme").click();
     const tokens = await readTokens();
     for (const { token, value, valid } of tokens) {
-      if (mode === "dark" && !token.startsWith("--editor-")) {
+      // The harness gives light and dark the same focus ring colour; every other host token
+      // moves with the theme.
+      if (mode === "dark" && !token.startsWith("--editor-") && token !== "--ring") {
         expect(value, `${token} changes with the host theme`).not.toBe(
           lightTokens.find((entry) => entry.token === token)!.value,
         );
@@ -90,14 +120,24 @@ for (const mode of ["light", "dark"] as const) {
     const scroll = page.locator(".samva-editor-scroll").first();
     await expect(scroll).toHaveCSS("color-scheme", mode);
     await expect(scroll).toHaveCSS("scrollbar-width", "thin");
-    const scrollbar = await scroll.evaluate((element) => {
-      const styles = getComputedStyle(element);
-      return {
-        actual: styles.scrollbarColor,
-        thumb: styles.getPropertyValue("--editor-scrollbar-thumb").trim(),
-      };
-    });
-    expect(scrollbar.actual).toBe(`${scrollbar.thumb} rgba(0, 0, 0, 0)`);
+    const scrollbar = await scroll.evaluate((element) => ({
+      actual: getComputedStyle(element).scrollbarColor,
+    }));
+    const thumb = await resolveIn(shell, "color", "var(--editor-scrollbar-thumb)");
+    expect(scrollbar.actual).toBe(`${thumb} rgba(0, 0, 0, 0)`);
+
+    // The chrome is shadcn's: the primary button paints the host's `--primary`, and a ghost
+    // button's hover fill is the host's `--muted` (half strength on the dark scheme).
+    const primary = await resolveIn(shell, "background-color", "var(--primary)");
+    const muted = await resolveIn(
+      shell,
+      "background-color",
+      mode === "dark" ? "color-mix(in oklab, var(--muted) 50%, transparent)" : "var(--muted)",
+    );
+    await expect(page.getByTestId("topbar.publish")).toHaveCSS("background-color", primary);
+    const ghost = page.getByTestId("topbar.preview");
+    await ghost.hover();
+    await expect(ghost).toHaveCSS("background-color", muted);
   });
 }
 
