@@ -4,6 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
+import { Button } from "../ui/button";
 import { ArrowUp, ChevronDown, ChevronUp, Duplicate, Trash } from "./editor-icons";
 import { authoredAncestry, friendlyName, occurrenceNote } from "./friendly";
 
@@ -74,8 +75,11 @@ export function DesignToolbar({
     readonly onClick: () => void;
     readonly children: ReactNode;
   }) => (
-    <button
-      type="button"
+    // The shared Button, inside the email's frame: the editor's Tailwind does not reach there, so
+    // the frame's chrome sheet styles it through `.samva-tb button`.
+    <Button
+      variant="ghost"
+      size="icon-xs"
       aria-label={input.label}
       title={input.enabled ? input.label : (why ?? input.label)}
       data-testid={`design-toolbar.${input.testId}`}
@@ -83,7 +87,7 @@ export function DesignToolbar({
       onClick={input.onClick}
     >
       {input.children}
-    </button>
+    </Button>
   );
   return (
     <div
