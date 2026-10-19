@@ -5,10 +5,10 @@
     "": {
       "name": "samva-email-starter",
       "dependencies": {
-        "@samva/markup": "0.17.2",
+        "@samva/markup": "0.17.3",
       },
       "devDependencies": {
-        "@samva/vite": "0.17.2",
+        "@samva/vite": "0.17.3",
         "@types/node": "26.4.0",
         "typescript": "7.0.2",
         "vite": "8.2.2",
@@ -80,9 +80,9 @@
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
 
-    "@samva/markup": ["@samva/markup@0.17.2", "", { "dependencies": { "@babel/parser": "^8.0.4", "@cfworker/json-schema": "4.1.1", "@standard-schema/spec": "1.1.0", "better-result": "3.0.1", "caniemail": "2.0.2", "css-tree": "3.2.1", "tailwindcss": "^4.3.3" } }, "sha512-xr0YvVuDabkQ/yKTY7JQjqpQHoSEL+IboEsZ62RjMpXPFP4icn6q/Hm10SXuQbuz3A9Xvvpft0nOIv/gJ5voow=="],
+    "@samva/markup": ["@samva/markup@0.17.3", "", { "dependencies": { "@babel/parser": "^8.0.4", "@cfworker/json-schema": "4.1.1", "@standard-schema/spec": "1.1.0", "better-result": "3.0.1", "caniemail": "2.0.2", "css-tree": "3.2.1", "tailwindcss": "^4.3.3" } }, "sha512-pNV1u/FIngSVDxkPK4Rlp9hyjRe3u5th2YlxQh/0y/6h+j+z0mKXhVby9e0ZeOc4iyqGug9mIHnljMR7Nw102g=="],
 
-    "@samva/vite": ["@samva/vite@0.17.2", "", { "dependencies": { "@samva/markup": "^0.17.2" }, "peerDependencies": { "vite": "^8.2.2" } }, "sha512-WlV5e+G9pGmSzOIMQkQPyKNr+YNrScHQ06mLtDJp1N/ezXD6dIyTwXk7Koc+zi8L+rDcA2ppYoITqDHH2nvA2A=="],
+    "@samva/vite": ["@samva/vite@0.17.3", "", { "dependencies": { "@samva/markup": "^0.17.3" }, "peerDependencies": { "vite": "^8.2.2" } }, "sha512-KvwfmmunHlVKmejmbGdN+EX3XgigIDhf1bc5MJgyyo/ZnPh706GP83F6784nj1Kz1mUajnBPg2lUr7rx1qrzhw=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
