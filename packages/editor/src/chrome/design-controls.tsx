@@ -342,6 +342,7 @@ export function EditorDesignDock(props: PartProps<"div", DesignDockState>) {
               data-slot="editor-design-dock-error"
               data-testid="design-dock.error"
               className="text-destructive max-w-xs truncate text-xs"
+              title={apply.reason}
             >
               {apply.reason} Your edits are kept.
             </p>
