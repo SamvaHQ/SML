@@ -7,7 +7,7 @@ export { EditorProvider } from "./state/provider";
 export type { EditorProviderProps } from "./state/provider";
 export type { PreparedPreviewDocument } from "./canvas/preview-document";
 export type { UserSelection } from "./state/store";
-export type { CheckItem, CheckSeverity } from "./state/types";
+export type { CheckItem, CheckSeverity, EditorPin } from "./state/types";
 export {
   EditorRoot,
   EditorShell,

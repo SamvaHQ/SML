@@ -3,8 +3,8 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore, useEditorStoreApi } from "../state/context";
 import { summarizeChecks } from "../state/derive";
-import type { EditorLayoutMode } from "../state/store";
-import type { CheckItem } from "../state/types";
+import { designWaiting, pendingDesignEdits, type EditorLayoutMode } from "../state/store";
+import type { CheckItem, EditorPin } from "../state/types";
 import { useContribution } from "./contributions";
 import {
   outlineEntries,
@@ -24,6 +24,10 @@ export interface EditorAssistantControls {
    * assistant without one renders no link to it.
    */
   readonly openReview?: (() => void) | undefined;
+  /** Remove one pin, as the tray's × does. */
+  readonly removePin: (id: string) => void;
+  /** Remove every pin, such as once the message they were attached to is sent. */
+  readonly clearPins: () => void;
 }
 
 /** Read-only editor state projected into the host's assistant. */
@@ -52,6 +56,21 @@ export interface EditorAssistantWorkspace {
     readonly fixture: string;
     readonly label: string;
   } | null;
+  /**
+   * Design edits on the draft. The chat must not send while `waiting` is true: edits are staged,
+   * Apply is saving them, or an undo or reset has not reached the host yet. An assistant turn
+   * would otherwise build on edits the author has not kept, and a version it saved would carry
+   * them. `pending` counts the staged edits, `applying` is an Apply in flight, and `on` says
+   * Design is the canvas's mode.
+   */
+  readonly design: {
+    readonly on: boolean;
+    readonly pending: number;
+    readonly applying: boolean;
+    readonly waiting: boolean;
+  };
+  /** The pins on the email, in tray order, for the next message. */
+  readonly pins: ReadonlyArray<EditorPin>;
   /** Instance paths present in the render on screen. */
   readonly availableInstancePaths: ReadonlyArray<string>;
   /** Layout mode the editor chrome resolved for its frame width. */
@@ -102,6 +121,11 @@ export function useAssistant(): {
     diagnosticAssistance,
     layout,
     canFix,
+    designOn,
+    designPending,
+    designApplying,
+    designWaits,
+    pins,
   } = useEditorStore(
     useShallow((state) => ({
       doc: state.doc,
@@ -112,6 +136,11 @@ export function useAssistant(): {
       checks: state.checks,
       diagnosticAssistance: state.diagnosticAssistance,
       layout: state.layoutMode,
+      designOn: state.canvasMode === "design",
+      designPending: pendingDesignEdits(state),
+      designApplying: state.designApply.status === "applying",
+      designWaits: designWaiting(state),
+      pins: state.pins,
       canFix:
         state.sourceEditable &&
         !state.conflict &&
@@ -155,6 +184,8 @@ export function useAssistant(): {
     exportHtml: shell.exportHtml,
     canExport: shell.canExport,
     openReview: review === undefined ? undefined : () => store.getState().actions.openReview(),
+    removePin: (id) => store.getState().actions.removePin(id),
+    clearPins: () => store.getState().actions.clearPins(),
     workspace: {
       draftRevision: doc?.rev ?? null,
       saveVersionStatus: shell.saveVersionStatus,
@@ -165,6 +196,13 @@ export function useAssistant(): {
         canFix,
       },
       diagnosticAssistance,
+      design: {
+        on: designOn,
+        pending: designPending,
+        applying: designApplying,
+        waiting: designWaits,
+      },
+      pins,
       pointedElement,
       availableInstancePaths: outline === null ? [] : [...outline.index.keys()],
       layout,

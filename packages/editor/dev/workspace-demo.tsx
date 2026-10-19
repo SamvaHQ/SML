@@ -109,15 +109,39 @@ export const createWorkspaceHost = (controls: CompiledHostControls): AsyncEditab
         return { ...opened, initial: withSentSize(opened.initial) };
       },
     },
-    versions: {
-      status: "ready",
-      api: { save: async (revision) => revision, savedRevision: async () => null },
-    },
+    versions: demoVersions(),
     lifecycle: { status: "ready", api: lifecycle },
   };
 };
 
 const BUSY_FOR_MS = 2_500;
+
+/** How long the harness takes to save a version, so Apply's wait is on screen. */
+const SAVE_FOR_MS = 600;
+
+/**
+ * Versions the way the dashboard saves them: after a moment, and named. `?applyFail` makes every
+ * save fail and `?applyHold` keeps it in flight, so both states can be looked at.
+ */
+function demoVersions(): NonNullable<AsyncEditableEditorHost["versions"]> {
+  const query = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
+  return {
+    status: "ready",
+    api: {
+      save: (revision) =>
+        new Promise<string>((resolve, reject) => {
+          if (query?.has("applyHold") === true) return;
+          setTimeout(() => {
+            if (query?.has("applyFail") === true)
+              // oxlint-disable-next-line samva/no-error-constructor -- the harness stands in for a host whose save rejects with an Error
+              reject(new Error("The workspace is out of space."));
+            else resolve(revision);
+          }, SAVE_FOR_MS);
+        }),
+      savedRevision: async () => null,
+    },
+  };
+}
 
 const DEV_BUTTON = "border-border hover:bg-muted rounded-md border px-2 py-1 text-[12px]";
 
@@ -163,8 +187,9 @@ export function WorkspaceDemoShell({
         {
           slot: "rail.assistant",
           id: "demo-assistant",
-          render: ({ openReview }) => (
+          render: ({ openReview, workspace, removePin, clearPins }) => (
             <DemoChat
+              composer={{ design: workspace.design, pins: workspace.pins, removePin, clearPins }}
               developer={
                 developerControlsRequested ? (
                   <div
