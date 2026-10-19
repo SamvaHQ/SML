@@ -14,7 +14,7 @@ import { SmsWorkspace } from "../channels/sms-workspace";
 import { WhatsAppWorkspace } from "../channels/whatsapp-workspace";
 import { cn } from "../lib/utils";
 import { useEditorStore, useEditorStoreApi } from "../state/context";
-import type { EditorLayoutMode } from "../state/store";
+import { pendingDesignEdits, type EditorLayoutMode } from "../state/store";
 import { Button } from "../ui/button";
 import type { EditorBrandSource } from "./brand-chip";
 import {
@@ -174,8 +174,13 @@ export function EditorRoot({
   const rightCollapsed = useEditorStore((state) => state.rightCollapsed);
   const layoutMode = useEditorStore((state) => state.layoutMode);
   const documentRevision = useEditorStore((state) => state.doc?.rev ?? null);
-  const undoCount = useEditorStore((state) => state.undoHistory.length);
-  const redoCount = useEditorStore((state) => state.redoHistory.length);
+  // Undo and redo walk the staged Design edits while there are any, then the source history.
+  const undoCount = useEditorStore(
+    (state) => state.undoHistory.length + (state.designDraft?.edits.length ?? 0),
+  );
+  const redoCount = useEditorStore(
+    (state) => state.redoHistory.length + (state.designDraft?.undone.length ?? 0),
+  );
   const sourceEditable = useEditorStore((state) => state.sourceEditable);
   const doc = useEditorStore((state) => state.doc);
   const render = useEditorStore((state) => state.render);
@@ -200,7 +205,9 @@ export function EditorRoot({
     redo,
     openWorkTab,
     setFocusedPane,
+    setHostBusy,
   } = useEditorStore((state) => state.actions);
+  useEffect(() => setHostBusy(previewBusy), [previewBusy, setHostBusy]);
   const versions = useEditorStore((state) => state.versionsCapability);
   const telemetry = useEditorStore((state) => state.telemetry);
   // Save version comes from the host's `versions` capability; the shell holds no second path.
@@ -260,6 +267,11 @@ export function EditorRoot({
 
   const saveVersion = (): Promise<void> => {
     if (onSaveVersion === undefined) return Promise.resolve();
+    // Staged Design edits are saved by Apply, as one version named for them.
+    if (pendingDesignEdits(store.getState()) > 0) {
+      store.getState().actions.applyDesign();
+      return Promise.resolve();
+    }
     if (saveVersionInFlight.current !== null) return saveVersionInFlight.current;
     if (!beginLifecycle()) return Promise.resolve();
     let releaseInFlight: () => void = () => {};

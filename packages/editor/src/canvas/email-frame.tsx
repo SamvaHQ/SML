@@ -22,11 +22,38 @@ import { isZoomWheel, zoomKeyOf, type ZoomGesture } from "./zoom";
  */
 const FRAME_RESET_CSS = "html,body{margin:0;padding:0;overflow:hidden}";
 
+/**
+ * The editor's own chrome inside the frame (the Design toolbar and pins). The frame holds none of
+ * the editor's stylesheets, and the email's own rules must not reach the chrome, so it is styled
+ * here under the overlay's attribute and resets what an email might set on its elements.
+ */
+const OVERLAY_CSS = [
+  "[data-samva-overlay] .samva-tb-anchor{position:fixed;z-index:2147483647;pointer-events:auto}",
+  "[data-samva-overlay] .samva-tb{display:flex;align-items:center;gap:2px;padding:3px;border-radius:9px;background:var(--editor-canvas-toolbar-bg);color:var(--editor-canvas-toolbar-fg);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14),0 0 0 1px rgba(0,0,0,.08),0 6px 18px rgba(0,0,0,.22);font:500 11.5px/1 ui-sans-serif,system-ui,sans-serif;white-space:nowrap}",
+  "[data-samva-overlay] .samva-tb button{all:unset;box-sizing:border-box;display:inline-grid;place-items:center;width:26px;height:26px;border-radius:6px;cursor:pointer;color:inherit}",
+  "[data-samva-overlay] .samva-tb button:hover{background:rgba(255,255,255,.14)}",
+  "[data-samva-overlay] .samva-tb button:focus-visible{outline:2px solid var(--editor-canvas-hover);outline-offset:-2px}",
+  "[data-samva-overlay] .samva-tb button:disabled{opacity:.35;cursor:default;background:none}",
+  "[data-samva-overlay] .samva-tb svg{width:14px;height:14px}",
+  "[data-samva-overlay] .samva-tb-label{padding:0 6px 0 7px;max-width:180px;overflow:hidden;text-overflow:ellipsis}",
+  "[data-samva-overlay] .samva-tb-sep{width:1px;height:14px;margin:0 2px;background:rgba(255,255,255,.22)}",
+  "[data-samva-overlay] .samva-pin{position:fixed;z-index:2147483647;box-sizing:border-box;width:20px;height:20px;border-radius:999px;background:var(--editor-canvas-selected);color:var(--editor-canvas-selected-fg);font:700 10px/20px ui-sans-serif,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #fff,0 2px 6px rgba(0,0,0,.3);pointer-events:none}",
+].join("");
+
+/** True for an event on the editor's own chrome in the frame, which is not the email. */
+const onOverlay = (target: EventTarget | null): boolean =>
+  target !== null &&
+  "closest" in target &&
+  typeof target.closest === "function" &&
+  target.closest("[data-samva-overlay]") !== null;
+
 const CHROME_TOKENS = {
   "--editor-canvas-hover": "#93c5fd",
   "--editor-canvas-selected": "#2563eb",
   "--editor-canvas-selected-fg": "#fff",
   "--editor-canvas-generated": "#a855f7",
+  "--editor-canvas-toolbar-bg": "#18181b",
+  "--editor-canvas-toolbar-fg": "#fafafa",
 } as const;
 
 /** Serialize only editor-owned chrome variables; the email's own selectors stay untouched. */
@@ -185,7 +212,7 @@ const FrameDocument = ({
         chrome.dataset.samvaEditorChrome = "";
         idoc.head.appendChild(chrome);
       }
-      chrome.textContent = `${FRAME_RESET_CSS}${frameChromeCss(resolvedChromeTokens(iframe))}`;
+      chrome.textContent = `${FRAME_RESET_CSS}${OVERLAY_CSS}${frameChromeCss(resolvedChromeTokens(iframe))}`;
     };
 
     const wire = () => {
@@ -206,6 +233,7 @@ const FrameDocument = ({
     };
 
     const onClick = (event: MouseEvent) => {
+      if (onOverlay(event.target)) return;
       // The canvas is not a live email. A normal click selects an interactive
       // element without following its URL or submitting a form; a modified click
       // is preserved so a link can deliberately be opened in a new tab.
@@ -214,12 +242,13 @@ const FrameDocument = ({
       }
       handlers.current.onSelect?.(resolveInstancePath(event.target));
     };
-    const onMove = (event: MouseEvent) =>
-      handlers.current.onHover?.(resolveInstancePath(event.target));
+    const onMove = (event: MouseEvent) => {
+      if (!onOverlay(event.target)) handlers.current.onHover?.(resolveInstancePath(event.target));
+    };
     const onLeave = () => handlers.current.onHover?.(null);
     const onContext = (event: MouseEvent) => {
       const report = handlers.current.onContextMenu;
-      if (report === undefined) return;
+      if (report === undefined || onOverlay(event.target)) return;
       event.preventDefault();
       const frameRect = iframe.getBoundingClientRect();
       const scaleX = iframe.clientWidth === 0 ? 1 : frameRect.width / iframe.clientWidth;
