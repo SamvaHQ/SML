@@ -57,12 +57,16 @@ export interface AuthoredNode {
   readonly copies: number;
 }
 
-const originKey = (selection: EmailElementSelection): string => {
-  const origin = selection.origins[0];
-  return origin === undefined
+/**
+ * Copies a loop drew share every origin, call sites included; two uses of one partial share the
+ * partial's line but not the call that placed them, so they stay separate layers.
+ */
+const originKey = (selection: EmailElementSelection): string =>
+  selection.origins.length === 0
     ? selection.instancePath
-    : `${origin.fileName}:${origin.lineNumber}:${origin.columnNumber}`;
-};
+    : selection.origins
+        .map((origin) => `${origin.fileName}:${origin.lineNumber}:${origin.columnNumber}`)
+        .join(">");
 
 /** Neighbours a loop drew from one authored element become one layer that counts them. */
 const foldCopies = (nodes: ReadonlyArray<AuthoredNode>): AuthoredNode[] => {
