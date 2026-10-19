@@ -78,10 +78,18 @@ export function BrandChip({
   }, [revision]);
 
   const view = brandChipView(imported, source.brands);
-  if (view.kind === "pending") return source.status ?? null;
 
   let chip: ReactNode;
-  if (view.kind === "brand") {
+  if (view.kind === "pending") {
+    // The chip holds its place while the theme and brands load, so the top bar does not move
+    // when the answer lands.
+    chip = (
+      <span data-testid="topbar.brand-pending" aria-busy="true" className={chipClass}>
+        <Palette className="size-3.5 shrink-0" />
+        <span className="truncate">Brand</span>
+      </span>
+    );
+  } else if (view.kind === "brand") {
     const { name, slug } = view.brand;
     const link = source.brandLink(slug);
     chip = (

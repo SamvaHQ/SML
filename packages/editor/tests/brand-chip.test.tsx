@@ -238,6 +238,28 @@ describe("topbar brand chip", () => {
     );
   });
 
+  it("holds the chip's place while the theme loads, then names the brand", async () => {
+    stubWideShell();
+    const project = arrangeProject(`@import 'samva:brand/holiday';\n`);
+    let releaseTheme = () => {};
+    const theme = new Promise<void>((resolve) => {
+      releaseTheme = resolve;
+    });
+    const view = render(
+      <EditorProvider host={withVersions(project.host, async (revision) => revision)}>
+        <EditorShell brand={brandSource(() => theme.then(project.readTheme), [acme, holiday])} />
+      </EditorProvider>,
+    );
+
+    const pending = await view.findByTestId("topbar.brand-pending");
+    expect(pending.getAttribute("aria-busy")).toBe("true");
+    expect(view.queryByTestId("topbar.brand")).toBeNull();
+
+    releaseTheme();
+    expect((await view.findByTestId("topbar.brand")).textContent).toBe("Holiday");
+    expect(view.queryByTestId("topbar.brand-pending")).toBeNull();
+  });
+
   it("hides the one-click brand until the organization's brands load", async () => {
     stubWideShell();
     const project = arrangeProject(OVERRIDES);

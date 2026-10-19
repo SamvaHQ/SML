@@ -123,6 +123,9 @@ export function TopBar({
   const standard = layoutMode === "standard";
   // An email shows its fixture in the preview bar; the message channels have no preview bar.
   const messageChannel = doc !== null && doc.channel !== "email";
+  // The shell opens on the email workspace before the document arrives, so the email chrome is
+  // drawn from mount and the bar keeps its geometry when the document lands.
+  const emailChrome = !messageChannel;
   const handleExport = () => {
     if (!canExport || doc === null || render === null) return;
     downloadEmailHtml(render.html, doc.name);
@@ -228,7 +231,7 @@ export function TopBar({
               )}
               {narrow ? null : channelSwitcher === undefined ? (
                 <Badge variant="outline" className="text-muted-foreground font-mono uppercase">
-                  {doc?.channel ?? "Template"}
+                  {doc?.channel ?? "email"}
                 </Badge>
               ) : (
                 <div
@@ -249,12 +252,12 @@ export function TopBar({
                   Read-only
                 </Badge>
               )}
-              {brand !== undefined && doc?.channel === "email" && !narrow && (
+              {brand !== undefined && emailChrome && !narrow && (
                 <BrandChip source={brand} onUseDefault={onUseDefaultBrand} />
               )}
             </div>
 
-            {docked && layoutMode !== "wide" && doc?.channel === "email" && (
+            {docked && layoutMode !== "wide" && emailChrome && (
               <EditorPaneSwitch
                 compact={narrow}
                 className={narrow ? "shrink-0" : "w-56 shrink-0"}
