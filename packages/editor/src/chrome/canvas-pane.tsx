@@ -152,7 +152,9 @@ export function CanvasPane({ pointing = false }: { readonly pointing?: boolean |
       <div
         ref={workspaceRef}
         data-samva-canvas-viewport
-        className="samva-editor-scroll relative flex-1 overflow-auto px-10 pt-10 pb-24 [overflow-anchor:none]"
+        // Fit zoom reads this element's clientWidth; a stable gutter keeps that width
+        // from moving when the zoomed email starts or stops overflowing.
+        className="samva-editor-scroll relative flex-1 [scrollbar-gutter:stable] overflow-auto px-10 pt-10 pb-24 [overflow-anchor:none]"
         onClick={selectDocument}
       >
         {doc === null ? (
