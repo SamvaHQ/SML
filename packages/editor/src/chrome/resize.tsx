@@ -1,98 +1,147 @@
-import { useEffect, useRef } from "react";
+import {
+  type KeyboardEvent,
+  type PointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
-import { useEditorStore } from "../state/context";
-import { cn } from "./ui-classes";
+import { useEditorStore, useEditorStoreApi } from "../state/context";
+import { ASSISTANT_MAX, ASSISTANT_MIN, CHAT_COLLAPSE_BELOW } from "../state/store";
+import { cn, focusRing } from "./ui-classes";
 
-/** A draggable rail divider. Keyboard-resizable (arrow keys, Shift for a larger step). */
-export function ResizeHandle({ side }: { side: "assistant" | "assistant-end" | "left" | "right" }) {
-  const leftWidth = useEditorStore((state) => state.leftWidth);
-  const assistantWidth = useEditorStore((state) => state.assistantWidth);
-  const rightWidth = useEditorStore((state) => state.rightWidth);
-  const { setAssistantWidth, setLeftWidth, setRightWidth } = useEditorStore(
+type ResizeSide = "assistant" | "left" | "right";
+
+const KEY_STEP = 8;
+const KEY_STEP_LARGE = 24;
+// Passed to the left and right setters, which clamp to their own bounds.
+const BELOW_ANY_MINIMUM = 0;
+const ABOVE_ANY_MAXIMUM = 10_000;
+
+const LABELS: Record<ResizeSide, string> = {
+  assistant: "Resize chat",
+  left: "Resize layers panel",
+  right: "Resize inspector",
+};
+
+const TEST_IDS: Record<ResizeSide, string> = {
+  assistant: "agent-column.resize",
+  left: "left-rail.resize",
+  right: "inspector.resize",
+};
+
+const restoreBody = () => {
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+};
+
+/**
+ * A draggable divider between two panes. It measures against its own container, so it works
+ * wherever the editor is embedded, and handles mouse, touch and pen through pointer events.
+ * Keyboard: arrow keys step (Shift for a larger step), Home and End jump to the limits.
+ * Dragging the chat divider below `CHAT_COLLAPSE_BELOW` collapses the chat and keeps its width.
+ */
+export function ResizeHandle({ side }: { side: ResizeSide }) {
+  const storeApi = useEditorStoreApi();
+  const width = useEditorStore((state) =>
+    side === "assistant"
+      ? state.assistantWidth
+      : side === "left"
+        ? state.leftWidth
+        : state.rightWidth,
+  );
+  const { setAssistantWidth, setChatCollapsed, setLeftWidth, setRightWidth } = useEditorStore(
     (state) => state.actions,
   );
   const dragging = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
 
-  useEffect(() => {
-    const onMove = (event: MouseEvent) => {
-      if (!dragging.current) return;
-      if (side === "assistant") setAssistantWidth(event.clientX);
-      else if (side === "assistant-end") setAssistantWidth(window.innerWidth - event.clientX);
-      else if (side === "left") setLeftWidth(event.clientX);
-      else setRightWidth(window.innerWidth - event.clientX);
-    };
-    const onUp = () => {
-      if (!dragging.current) return;
-      dragging.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, [side, setAssistantWidth, setLeftWidth, setRightWidth]);
+  const endDrag = useCallback(() => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    setIsDragging(false);
+    restoreBody();
+  }, []);
 
-  const width =
-    side === "assistant" || side === "assistant-end"
-      ? assistantWidth
-      : side === "left"
-        ? leftWidth
-        : rightWidth;
-  const label =
-    side === "assistant" || side === "assistant-end"
-      ? "Resize Assistant"
-      : side === "left"
-        ? "Resize layers panel"
-        : "Resize inspector";
+  useEffect(
+    () => () => {
+      if (dragging.current) restoreBody();
+    },
+    [],
+  );
+
+  const resizeTo = (raw: number) => {
+    if (side === "assistant") {
+      const { chatCollapsed } = storeApi.getState();
+      if (raw < CHAT_COLLAPSE_BELOW) {
+        setChatCollapsed(true);
+        return;
+      }
+      if (chatCollapsed) setChatCollapsed(false);
+      setAssistantWidth(raw);
+    } else if (side === "left") setLeftWidth(raw);
+    else setRightWidth(raw);
+  };
+
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragging.current = true;
+    setIsDragging(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    const container = event.currentTarget.parentElement;
+    if (container === null) return;
+    const rect = container.getBoundingClientRect();
+    resizeTo(side === "right" ? rect.right - event.clientX : event.clientX - rect.left);
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
+    // Arrow direction that grows the panel: rightwards for panes anchored on the left.
+    const grow = side === "right" ? "ArrowLeft" : "ArrowRight";
+    const shrink = side === "right" ? "ArrowRight" : "ArrowLeft";
+    let next: number;
+    if (event.key === grow) next = width + step;
+    else if (event.key === shrink) next = width - step;
+    else if (event.key === "Home") next = side === "assistant" ? ASSISTANT_MIN : BELOW_ANY_MINIMUM;
+    else if (event.key === "End") next = side === "assistant" ? ASSISTANT_MAX : ABOVE_ANY_MAXIMUM;
+    else return;
+    event.preventDefault();
+    resizeTo(next);
+  };
 
   return (
     <div
       data-editor-resize={side}
+      data-dragging={isDragging ? "" : undefined}
       role="separator"
       aria-orientation="vertical"
+      aria-label={LABELS[side]}
       aria-valuenow={width}
-      aria-label={label}
-      data-testid={
-        side === "assistant" || side === "assistant-end"
-          ? "agent-column.resize"
-          : side === "left"
-            ? "left-rail.resize"
-            : "inspector.resize"
-      }
+      aria-valuemin={side === "assistant" ? ASSISTANT_MIN : undefined}
+      aria-valuemax={side === "assistant" ? ASSISTANT_MAX : undefined}
+      data-testid={TEST_IDS[side]}
       tabIndex={0}
-      onMouseDown={(event) => {
-        event.preventDefault();
-        dragging.current = true;
-        document.body.style.cursor = "col-resize";
-        document.body.style.userSelect = "none";
-      }}
-      onKeyDown={(event) => {
-        const step = event.shiftKey ? 24 : 8;
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        if (side === "assistant") {
-          if (event.key === "ArrowLeft") setAssistantWidth(assistantWidth - step);
-          if (event.key === "ArrowRight") setAssistantWidth(assistantWidth + step);
-        } else if (side === "assistant-end") {
-          if (event.key === "ArrowLeft") setAssistantWidth(assistantWidth + step);
-          if (event.key === "ArrowRight") setAssistantWidth(assistantWidth - step);
-        } else if (side === "left") {
-          if (event.key === "ArrowLeft") setLeftWidth(leftWidth - step);
-          if (event.key === "ArrowRight") setLeftWidth(leftWidth + step);
-        } else {
-          if (event.key === "ArrowLeft") setRightWidth(rightWidth + step);
-          if (event.key === "ArrowRight") setRightWidth(rightWidth - step);
-        }
-      }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onLostPointerCapture={endDrag}
+      onKeyDown={onKeyDown}
       className={cn(
-        "group relative z-10 w-2 shrink-0 cursor-col-resize",
+        "relative z-10 -mx-1.5 w-3 shrink-0 cursor-col-resize touch-none outline-none",
         "before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-border before:transition-colors",
-        "hover:before:w-0.5 hover:before:bg-accent-email active:before:bg-accent-email",
-        "after:absolute after:top-1/2 after:left-1/2 after:h-10 after:w-1 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:bg-muted-foreground/35 after:opacity-60 after:transition-opacity",
-        "hover:after:opacity-100 hover:after:bg-accent-email",
+        "hover:before:w-0.5 hover:before:bg-accent-email",
+        "data-[dragging]:before:w-0.5 data-[dragging]:before:bg-accent-email",
+        "focus-visible:before:w-0.5 focus-visible:before:bg-accent-email",
+        focusRing,
       )}
     />
   );

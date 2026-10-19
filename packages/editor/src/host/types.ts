@@ -76,6 +76,13 @@ export interface EmailRender {
   readonly preheader?: string;
   readonly html: string;
   readonly text: string;
+  /**
+   * Bytes of the HTML a recipient receives, when the host knows it. A preview can differ from
+   * the sent email (assets inlined for a sandboxed frame, editor-only attributes), so the size
+   * readout and the clipping check use this when present and say they measure the preview when
+   * it is not.
+   */
+  readonly sentBytes?: number | undefined;
   /** Every rendered element in document order, with the source span that produced it. */
   readonly selections: ReadonlyArray<EmailElementSelection>;
 }

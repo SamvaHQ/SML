@@ -13,7 +13,8 @@ export function AssistantColumn({ hidden = false }: { readonly hidden?: boolean 
   const assistant = useAssistant();
   const assistantWidth = useEditorStore((state) => state.assistantWidth);
   const layoutMode = useEditorStore((state) => state.layoutMode);
-  const focused = layoutMode === "compact" || layoutMode === "narrow";
+  // Below the wide layout the chat is one of two switched panes and takes the full width.
+  const focused = layoutMode !== "wide";
   if (assistant === null) return null;
   return (
     <aside

@@ -31,57 +31,6 @@ export interface TopBarActions {
   readonly onUseDefaultBrand?: (() => Promise<void>) | undefined;
 }
 
-/** A stable empty list, so a document with no fixtures never mints a fresh snapshot. */
-const NO_FIXTURES: ReadonlyArray<string> = [];
-
-/**
- * Which declared fixture the canvas is rendering. Switching re-renders the same
- * revision through the host, so it changes what is on screen and never the
- * template. Hidden when the host cannot re-render, or the template declares only
- * one input.
- */
-function FixturePicker() {
-  const { doc, fixtures, fixture, busy, available } = useEditorStore(
-    useShallow((state) => ({
-      doc: state.doc,
-      fixtures: state.doc?.fixtures ?? NO_FIXTURES,
-      fixture: state.doc?.fixture ?? null,
-      busy: state.fixtureBusy,
-      available: state.fixtureCapability?.status === "ready",
-    })),
-  );
-  const { viewFixture } = useEditorStore((state) => state.actions);
-  if (!available) return null;
-  const showPicker = fixture !== null && fixtures.length >= 2;
-  if (doc !== null && !showPicker) return null;
-  return (
-    <div className="w-[116px] shrink-0" data-testid="topbar.fixture-slot">
-      {showPicker && (
-        <label className="text-muted-foreground flex items-center text-[12px]">
-          <span className="sr-only">Fixture</span>
-          <select
-            data-testid="topbar.fixture"
-            value={fixture}
-            disabled={busy}
-            onChange={(event) => viewFixture(event.target.value)}
-            title="Render another declared fixture"
-            className={cn(
-              "border-border bg-background text-foreground h-[30px] w-full rounded-[7px] border px-2 text-[12px] outline-none",
-              focusRing,
-            )}
-          >
-            {fixtures.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-    </div>
-  );
-}
-
 export function TopBar({
   leading,
   extraActions,
@@ -272,7 +221,6 @@ export function TopBar({
               Redo
             </IconBtn>
           )}
-          {!compact && <FixturePicker />}
           {!compact && <div className="bg-border mx-1 h-[18px] w-px" />}
           {!compact && (
             <IconBtn
@@ -341,7 +289,6 @@ export function TopBar({
               Redo
             </IconBtn>
           )}
-          <FixturePicker />
           <IconBtn
             title="Preview template"
             testId="topbar.preview"

@@ -11,12 +11,12 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
 import { DEVICE_WIDTH } from "../state/store";
-import { AttentionSummary } from "./compatibility-report";
+import { ChecksPanel } from "./checks-panel";
 import { SidebarRightHide } from "./editor-icons";
 import { formatOrigin, selectionLabel } from "./email-outline";
 import { SourceControls, FixtureSourceControls } from "./source-controls";
 import { GroupLabel, MonoCtl, VarChip } from "./ui";
-import { cn, focusRing } from "./ui-classes";
+import { cn, focusRing, tooltipPopupClass } from "./ui-classes";
 import { useEditorPortalContainer } from "./use-editor-portal";
 
 /** Stable empty lists, so a selector that falls back never mints a fresh snapshot. */
@@ -59,23 +59,21 @@ function VariablesGroup() {
         ))}
       </div>
       <p className="text-muted-foreground mt-2.5 text-[11.5px]">
-        The canvas shows the values of the fixture selected in the toolbar.
+        The preview shows the values of the fixture selected above it.
       </p>
     </div>
   );
 }
 
 function ChecksGroup() {
-  const checks = useEditorStore((state) => state.checks);
-  const editable = useEditorStore((state) => state.sourceEditable);
   return (
     <div className="py-3">
-      <AttentionSummary checks={checks} editable={editable} />
+      <ChecksPanel />
     </div>
   );
 }
 
-function DocumentInspector() {
+function DocumentInspector({ checks }: { readonly checks: boolean }) {
   const { deviceWidth, entryFile, fixture, fixtures } = useEditorStore(
     useShallow((state) => ({
       deviceWidth: DEVICE_WIDTH[state.previewDevice],
@@ -107,7 +105,7 @@ function DocumentInspector() {
       </div>
       <FixtureSourceControls key={`${fixture}:${entryFile}`} />
       <VariablesGroup />
-      <ChecksGroup />
+      {checks && <ChecksGroup />}
     </>
   );
 }
@@ -369,7 +367,14 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
 }
 
 /** The contextual inspector: which scope is selected, and what that scope is. */
-export function Inspector({ embedded = false }: { readonly embedded?: boolean | undefined } = {}) {
+export function Inspector({
+  embedded = false,
+  checks = true,
+}: {
+  readonly embedded?: boolean | undefined;
+  /** Show the checks in document scope. Off where the layout gives checks a tab of their own. */
+  readonly checks?: boolean | undefined;
+} = {}) {
   const portalContainer = useEditorPortalContainer();
   const { outline, selection, rightCollapsed, rightWidth, layoutMode } = useEditorStore(
     useShallow((state) => ({
@@ -478,10 +483,7 @@ export function Inspector({ embedded = false }: { readonly embedded?: boolean | 
                 </Tooltip.Trigger>
                 <Tooltip.Portal container={portalContainer}>
                   <Tooltip.Positioner side="bottom" sideOffset={5} className="z-[200]">
-                    <Tooltip.Popup
-                      role="tooltip"
-                      className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-                    >
+                    <Tooltip.Popup role="tooltip" className={tooltipPopupClass}>
                       Collapse inspector
                     </Tooltip.Popup>
                   </Tooltip.Positioner>
@@ -494,7 +496,7 @@ export function Inspector({ embedded = false }: { readonly embedded?: boolean | 
         <ScrollArea.Root data-samva-scroll-area="inspector" className="relative min-h-0 flex-1">
           <ScrollArea.Viewport className="size-full">
             <div className="samva-inspector-content pb-4">
-              {scope === "document" && <DocumentInspector />}
+              {scope === "document" && <DocumentInspector checks={checks} />}
               {scope === "envelope" && <EnvelopeInspector />}
               {selected !== null && <ElementInspector selection={selected} />}
             </div>

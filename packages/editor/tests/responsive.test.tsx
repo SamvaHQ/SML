@@ -9,9 +9,10 @@ import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react
 import { useEffect } from "react";
 
 import { EditorShell } from "../src/chrome/shell";
+import { useEditorStoreApi } from "../src/state/context";
 import { EditorProvider } from "../src/state/provider";
-import { type EditorLayoutMode } from "../src/state/store";
-import { mockEditor, withVersions } from "./mock-host";
+import { type EditorLayoutMode, type EditorStore } from "../src/state/store";
+import { emitChange, mockEditor, withVersions } from "./mock-host";
 import { useEditorProbe } from "./store-probe";
 
 afterEach(() => {
@@ -22,6 +23,53 @@ afterEach(() => {
 });
 
 const host = async () => (await mockEditor()).host;
+
+/** Every element measures as a frame of `width`, so the shell resolves that layout on mount. */
+const stubFrame = (width: number) =>
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+    width,
+    height: 900,
+    top: 0,
+    right: width,
+    bottom: 900,
+    left: 0,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  });
+
+/** Capture every ResizeObserver the editor builds; the returned function resizes them all. */
+const observeResizes = () => {
+  const callbacks: Array<(entries: Array<{ contentRect: { width: number } }>) => void> = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: (entries: Array<{ contentRect: { width: number } }>) => void) {
+        callbacks.push(callback);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  return (width: number) => {
+    for (const callback of [...callbacks]) callback([{ contentRect: { width } }]);
+  };
+};
+
+let capturedStore: EditorStore | null = null;
+
+/** Renders nothing; hands the test the store of the editor it is mounted in. */
+function StoreCapture() {
+  capturedStore = useEditorStoreApi();
+  return null;
+}
+
+/** The store of the editor mounted last. */
+const storeOf = (): EditorStore => {
+  if (capturedStore === null) throw new Error("No editor store captured");
+  return capturedStore;
+};
 
 function CollapseProbe({ mode }: { mode: EditorLayoutMode }) {
   const { leftCollapsed, rightCollapsed, layoutMode, setLayoutMode, toggleLeft } = useEditorProbe();
@@ -143,32 +191,9 @@ describe("container-responsive rail policy", () => {
     await waitFor(() => expect(revisions).toEqual(["rev_1", "rev_2"]));
   });
 
-  it("keeps the canonical workspace split above 980px and uses focused tablet panes", async () => {
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
-      width: 1440,
-      height: 900,
-      top: 0,
-      right: 1440,
-      bottom: 900,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-    const callbacks: Array<(entries: Array<{ contentRect: { width: number } }>) => void> = [];
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        constructor(callback: (entries: Array<{ contentRect: { width: number } }>) => void) {
-          callbacks.push(callback);
-        }
-        observe() {}
-        disconnect() {}
-      },
-    );
-    const notify = (width: number) => {
-      for (const callback of [...callbacks]) callback([{ contentRect: { width } }]);
-    };
+  it("splits chat and a tabbed work pane from 1280px and switches Chat | Preview below it", async () => {
+    stubFrame(1440);
+    const notify = observeResizes();
     const view = render(
       <EditorProvider host={await host()}>
         <EditorShell
@@ -180,49 +205,39 @@ describe("container-responsive rail policy", () => {
             },
           ]}
         />
+        <StoreCapture />
       </EditorProvider>,
     );
 
-    const workspace = await waitFor(() =>
-      view.container.querySelector('[data-agent-workspace-layout="split"]'),
+    await waitFor(() =>
+      expect(view.container.querySelector('[data-agent-workspace-layout="split"]')).toBeTruthy(),
     );
-    expect(workspace).toBeTruthy();
     expect(view.getByTestId("agent-column.resize")).toBeTruthy();
-    expect(view.getByTestId("design-rail")).toBeTruthy();
-    expect(
-      view.container.querySelector('[role="tablist"][aria-label="Workspace view"]'),
-    ).toBeTruthy();
-    const visualTab = view.getByTestId("workspace.tab.visual");
-    expect(visualTab.getAttribute("role")).toBe("tab");
-    expect(visualTab.getAttribute("aria-selected")).toBe("true");
-    expect(visualTab.getAttribute("aria-pressed")).toBeNull();
-    const previewPane = document.getElementById(visualTab.getAttribute("aria-controls") ?? "");
-    expect(previewPane?.getAttribute("role")).toBe("tabpanel");
-    // The view panel is named by the tab that opens it, so the two cannot drift.
-    expect(previewPane?.getAttribute("aria-labelledby")).toBe(visualTab.id);
-    fireEvent.click(view.getByTestId("workspace.tab.source"));
-    expect(view.getByTestId("workspace.tab.source").getAttribute("aria-selected")).toBe("true");
-    expect(view.getByTestId("source-workspace.authored-tsx")).toBeTruthy();
-    fireEvent.click(view.getByTestId("workspace.tab.visual"));
-    const layersTab = view.getByTestId("design.tab.layers");
-    expect(layersTab.getAttribute("aria-selected")).toBe("true");
-    const designPanel = document.getElementById(layersTab.getAttribute("aria-controls") ?? "");
-    expect(designPanel?.getAttribute("role")).toBe("tabpanel");
-    fireEvent.click(view.getByTestId("design.tab.inspector"));
-    const inspectorTab = view.getByTestId("design.tab.inspector");
-    expect(inspectorTab.getAttribute("aria-selected")).toBe("true");
-    expect(document.getElementById(inspectorTab.getAttribute("aria-controls") ?? "")).toBeTruthy();
-    expect(designPanel?.getAttribute("aria-labelledby")).toBe(inspectorTab.id);
-    expect(view.getByTestId("inspector")).toBeTruthy();
+    expect(view.getByTestId("work-pane")).toBeTruthy();
+    // No third column: Layers, Inspector, Review and Checks are tabs of the work pane.
+    expect(view.queryByTestId("design-rail")).toBeNull();
+    expect(view.queryByTestId("workspace.tab.visual")).toBeNull();
+    const previewTab = view.getByTestId("work-pane.tab.preview");
+    expect(previewTab.getAttribute("role")).toBe("tab");
+    expect(previewTab.getAttribute("aria-selected")).toBe("true");
+    // Preview is always open and never closable.
+    expect(view.queryByTestId("work-pane.close.preview")).toBeNull();
 
-    act(() => notify(800));
+    const store = storeOf();
+    act(() => store.getState().actions.openWorkTab("source"));
+    expect(view.getByTestId("work-pane.tab.source").getAttribute("aria-selected")).toBe("true");
+    expect(view.getByTestId("source-workspace.authored-tsx")).toBeTruthy();
+    fireEvent.click(view.getByTestId("work-pane.close.source"));
+    expect(view.queryByTestId("work-pane.tab.source")).toBeNull();
+    expect(view.getByTestId("work-pane.tab.preview").getAttribute("aria-selected")).toBe("true");
+
+    act(() => notify(1180));
     await waitFor(() =>
       expect(view.container.querySelector('[data-agent-workspace-layout="focused"]')).toBeTruthy(),
     );
     expect(view.queryByTestId("agent-column.resize")).toBeNull();
-    expect(view.getByTestId("agent-workspace.tab.design")).toBeTruthy();
     expect(view.container.querySelector('[role="tablist"][aria-label="Editor pane"]')).toBeTruthy();
-    for (const pane of ["assistant", "preview", "design"] as const) {
+    for (const pane of ["assistant", "preview"] as const) {
       const tab = view.getByTestId(`agent-workspace.tab.${pane}`);
       expect(tab.getAttribute("role")).toBe("tab");
       const paneNode = document.getElementById(tab.getAttribute("aria-controls") ?? "");
@@ -230,70 +245,136 @@ describe("container-responsive rail policy", () => {
       // The panel takes its name from the tab that opens it, never a restated literal.
       expect(paneNode?.getAttribute("aria-labelledby")).toBe(tab.id);
       expect(tab.querySelector("svg")).not.toBeNull();
-      expect(tab.getAttribute("title")).toBeTruthy();
     }
-    expect(view.getByTestId("agent-workspace.tab.assistant").textContent).toContain("Assistant");
-    // Selecting a workspace view tab reveals the pane that hosts its panel.
-    fireEvent.click(view.getByTestId("workspace.tab.source"));
-    expect(view.getByTestId("agent-workspace.tab.preview").getAttribute("aria-selected")).toBe(
-      "true",
-    );
-    expect(
-      document
-        .getElementById(
-          view.getByTestId("workspace.tab.source").getAttribute("aria-controls") ?? "",
-        )
-        ?.closest("[hidden]"),
-    ).toBeNull();
-    fireEvent.click(view.getByTestId("agent-workspace.tab.design"));
-    expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(true);
-    expect(view.getByTestId("design-rail").closest("[hidden]")).toBeNull();
-
-    act(() => notify(600));
-    await waitFor(() =>
-      expect(view.container.querySelector('[data-agent-workspace-layout="focused"]')).toBeTruthy(),
-    );
-    expect(view.getByTestId("agent-workspace.tab.assistant").getAttribute("aria-selected")).toBe(
-      "true",
-    );
-    expect(view.queryByTestId("agent-workspace.tab.design")).toBeNull();
-    // Narrow drops the Design tab, so its pane must not claim a tabpanel no tab controls.
-    expect(
-      view.container.querySelectorAll('[role="tabpanel"][aria-labelledby$="-tab-design"]'),
-    ).toHaveLength(0);
+    expect(view.getByTestId("agent-workspace.tab.assistant").textContent).toContain("Chat");
     expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(false);
 
     fireEvent.click(view.getByTestId("agent-workspace.tab.preview"));
     await waitFor(() => expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(true));
+    // The host's assistant stays mounted while the preview is shown.
     expect(view.getByTestId("test.agent-panel")).toBeTruthy();
+    expect(view.getByTestId("work-pane").closest("[hidden]")).toBeNull();
+
+    // Design is reachable at every width, down to a phone.
+    act(() => notify(390));
+    act(() => store.getState().actions.openWorkTab("design"));
+    expect(view.getByTestId("design-panel")).toBeTruthy();
+    expect(view.getByTestId("inspector")).toBeTruthy();
+    expect(view.getByTestId("design-panel").closest("[hidden]")).toBeNull();
+
+    // Growing back to 1280px restores both panes without remounting the assistant.
+    const panel = view.getByTestId("test.agent-panel");
+    act(() => notify(1300));
+    await waitFor(() =>
+      expect(view.container.querySelector('[data-agent-workspace-layout="split"]')).toBeTruthy(),
+    );
+    expect(view.getByTestId("test.agent-panel")).toBe(panel);
+    expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(false);
+  });
+
+  it("collapses the chat so the work pane takes the full width, and remembers it", async () => {
+    stubFrame(1440);
+    observeResizes();
+    const contributions = [
+      {
+        slot: "rail.assistant" as const,
+        id: "assistant",
+        render: () => <div data-testid="test.agent-panel">Assistant content</div>,
+      },
+    ];
+    const view = render(
+      <EditorProvider host={await host()}>
+        <EditorShell contributions={contributions} />
+      </EditorProvider>,
+    );
+    const toggle = await view.findByTestId("work-pane.toggle-chat");
+    expect(toggle.getAttribute("aria-label")).toBe("Collapse chat");
+    fireEvent.click(toggle);
+    expect(view.getByTestId("agent-column").closest("[hidden]")).not.toBeNull();
+    expect(view.queryByTestId("agent-column.resize")).toBeNull();
+    expect(view.getByTestId("work-pane.toggle-chat").getAttribute("aria-label")).toBe("Show chat");
+    view.unmount();
+
+    const again = render(
+      <EditorProvider host={await host()}>
+        <EditorShell contributions={contributions} />
+      </EditorProvider>,
+    );
+    const restored = await again.findByTestId("work-pane.toggle-chat");
+    expect(restored.getAttribute("aria-label")).toBe("Show chat");
+    fireEvent.click(restored);
+    expect(again.getByTestId("agent-column").closest("[hidden]")).toBeNull();
+    expect(again.getByTestId("agent-column.resize")).toBeTruthy();
+  });
+
+  it("marks Preview when the host changes the email while the chat is shown", async () => {
+    stubFrame(1440);
+    const notify = observeResizes();
+    const editor = await mockEditor();
+    const view = render(
+      <EditorProvider host={editor.host}>
+        <EditorShell
+          contributions={[
+            { slot: "rail.assistant", id: "assistant", render: () => <div>Assistant</div> },
+          ]}
+        />
+      </EditorProvider>,
+    );
+    await waitFor(() => expect(view.getByTestId("work-pane")).toBeTruthy());
+    act(() => notify(1000));
+    await waitFor(() => expect(view.getByTestId("agent-workspace.tab.assistant")).toBeTruthy());
+    expect(view.queryByTestId("agent-workspace.preview-updated")).toBeNull();
+
+    await act(() => emitChange(editor, { origin: "agent" }));
+    expect(await view.findByTestId("agent-workspace.preview-updated")).toBeTruthy();
+
+    fireEvent.click(view.getByTestId("agent-workspace.tab.preview"));
+    await waitFor(() => expect(view.queryByTestId("agent-workspace.preview-updated")).toBeNull());
+    // A change that lands while the preview is on screen is already seen.
+    await act(() => emitChange(editor, { origin: "agent" }));
+    fireEvent.click(view.getByTestId("agent-workspace.tab.assistant"));
+    expect(view.queryByTestId("agent-workspace.preview-updated")).toBeNull();
+  });
+
+  it("keeps the work pane's tabs across mounts of the same editor", async () => {
+    stubFrame(1440);
+    observeResizes();
+    const contributions = [
+      { slot: "rail.assistant" as const, id: "assistant", render: () => <div>Assistant</div> },
+    ];
+    const view = render(
+      <EditorProvider host={await host()}>
+        <EditorShell contributions={contributions} />
+        <StoreCapture />
+      </EditorProvider>,
+    );
+    await waitFor(() => expect(view.getByTestId("work-pane")).toBeTruthy());
+    const store = storeOf();
+    act(() => store.getState().actions.openWorkTab("checks"));
+    act(() => store.getState().actions.openWorkTab("source"));
+    view.unmount();
+
+    const again = render(
+      <EditorProvider host={await host()}>
+        <EditorShell contributions={contributions} />
+      </EditorProvider>,
+    );
+    await waitFor(() => expect(again.getByTestId("work-pane.tab.checks")).toBeTruthy());
+    // Tabs keep the menu's order, and the last one shown is shown again.
+    const order = [...again.container.querySelectorAll('[data-testid^="work-pane.tab."]')].map(
+      (node) => node.getAttribute("data-testid"),
+    );
+    expect(order).toEqual([
+      "work-pane.tab.preview",
+      "work-pane.tab.source",
+      "work-pane.tab.checks",
+    ]);
+    expect(again.getByTestId("work-pane.tab.source").getAttribute("aria-selected")).toBe("true");
   });
 
   it("reveals the host's review surface from the panel's deep-link in every layout", async () => {
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
-      width: 1440,
-      height: 900,
-      top: 0,
-      right: 1440,
-      bottom: 900,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-    const callbacks: Array<(entries: Array<{ contentRect: { width: number } }>) => void> = [];
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        constructor(callback: (entries: Array<{ contentRect: { width: number } }>) => void) {
-          callbacks.push(callback);
-        }
-        observe() {}
-        disconnect() {}
-      },
-    );
-    const notify = (width: number) => {
-      for (const callback of [...callbacks]) callback([{ contentRect: { width } }]);
-    };
+    stubFrame(1440);
+    const notify = observeResizes();
     const view = render(
       <EditorProvider host={await host()}>
         <EditorShell
@@ -317,50 +398,35 @@ describe("container-responsive rail policy", () => {
             },
           ]}
         />
+        <StoreCapture />
       </EditorProvider>,
     );
 
     await waitFor(() => expect(view.getByTestId("test.open-review")).toBeTruthy());
-    // A diff arriving on its own never moves the reader; the rail stays on Layers.
-    expect(view.getByTestId("design.tab.layers").getAttribute("aria-selected")).toBe("true");
-    expect(view.getByTestId("design.tab.review").textContent).toContain("3");
+    // A diff arriving on its own never moves the reader; Review is not even open.
+    expect(view.queryByTestId("work-pane.tab.review")).toBeNull();
     fireEvent.click(view.getByTestId("test.open-review"));
-    expect(view.getByTestId("design.tab.review").getAttribute("aria-selected")).toBe("true");
+    const reviewTab = view.getByTestId("work-pane.tab.review");
+    expect(reviewTab.getAttribute("aria-selected")).toBe("true");
+    expect(reviewTab.textContent).toContain("3");
     expect(view.getByTestId("test.review-content")).toBeTruthy();
 
-    // The focused layouts open the pane that carries the rail, with Review selected.
-    act(() => notify(800));
-    await waitFor(() =>
-      expect(view.container.querySelector('[data-agent-workspace-layout="focused"]')).toBeTruthy(),
-    );
-    // The wide deep-link left Review selected, so the focused workspace opens on Design.
-    expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(true);
-    // The pane toggle carries the host's one badge.
-    expect(view.getByTestId("agent-workspace.tab.design").textContent).toContain("3");
-    fireEvent.click(view.getByTestId("agent-workspace.tab.preview"));
-    await waitFor(() => expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(true));
-    fireEvent.click(view.getByTestId("test.open-review"));
-    await waitFor(() => expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(true));
-    expect(view.getByTestId("design.tab.review").getAttribute("aria-selected")).toBe("true");
-    expect(view.getByTestId("test.review-content")).toBeTruthy();
-
-    // Narrow has no Design rail: the deep-link opens no pane the layout lacks.
-    act(() => notify(600));
-    await waitFor(() => expect(view.queryByTestId("agent-workspace.tab.design")).toBeNull());
-    fireEvent.click(view.getByTestId("agent-workspace.tab.preview"));
-    await waitFor(() => expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(true));
-    fireEvent.click(view.getByTestId("test.open-review"));
-    await waitFor(() =>
-      expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(false),
-    );
-    expect(view.queryByTestId("test.review-content")).toBeNull();
-
-    // The narrow deep-link focused the Assistant, the pane that carries the
-    // review there. Growing back to compact keeps the reader on it rather than
-    // dropping them onto a Design pane they never opened.
-    act(() => notify(800));
-    await waitFor(() => expect(view.getByTestId("agent-workspace.tab.design")).toBeTruthy());
-    expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(false);
+    // Below 1280px the deep-link switches to the work pane, where the Review tab lives.
+    for (const width of [1000, 600]) {
+      act(() => notify(width));
+      await waitFor(() => expect(view.getByTestId("agent-workspace.tab.assistant")).toBeTruthy());
+      fireEvent.click(view.getByTestId("agent-workspace.tab.assistant"));
+      act(() => storeOf().getState().actions.openWorkTab("preview"));
+      await waitFor(() =>
+        expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(false),
+      );
+      fireEvent.click(view.getByTestId("test.open-review"));
+      await waitFor(() =>
+        expect(view.getByTestId("agent-column").hasAttribute("hidden")).toBe(true),
+      );
+      expect(view.getByTestId("work-pane.tab.review").getAttribute("aria-selected")).toBe("true");
+      expect(view.getByTestId("test.review-content")).toBeTruthy();
+    }
   });
 
   it("keeps both rails docked in wide mode", async () => {
@@ -411,10 +477,10 @@ describe("container-responsive rail policy", () => {
 
   it("measures the full editor frame when a dashboard rail is present", async () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
-      width: 980,
+      width: 1280,
       height: 900,
       top: 0,
-      right: 980,
+      right: 1280,
       bottom: 900,
       left: 0,
       x: 0,

@@ -15,6 +15,8 @@ export interface DerivedDocument {
   /** The tree of the current render; null for a non-email document or an unbuilt entry. */
   readonly outline: EmailOutline | null;
   readonly sizeKb: number;
+  /** Whether {@link sizeKb} measures the email as sent (host-reported) or the preview HTML. */
+  readonly sizeSource: SizeSource;
   /** Host findings for the build, plus the checks the editor derives from the render. */
   readonly checks: ReadonlyArray<CheckItem>;
 }
@@ -23,10 +25,19 @@ const byteLength = (text: string): number => new TextEncoder().encode(text).leng
 
 const kilobytes = (bytes: number): number => Math.max(1, Math.round(bytes / 1024));
 
+/** What a size readout measured: the email as the host sends it, or the preview the editor holds. */
+export type SizeSource = "sent" | "preview";
+
+/** The bytes an email weighs: the host's sent size when it reports one, else the preview HTML. */
+const emailBytes = (render: EmailRender): number => render.sentBytes ?? byteLength(render.html);
+
+const sizeSourceOf = (document: EditorDocument): SizeSource =>
+  document.channel === "email" && document.render?.sentBytes !== undefined ? "sent" : "preview";
+
 /** Payload size in KB (min 1), from whichever body the channel carries. */
 export const documentSizeKb = (document: EditorDocument): number => {
   if (document.render === null) return 0;
-  if (document.channel === "email") return kilobytes(byteLength(document.render.html));
+  if (document.channel === "email") return kilobytes(emailBytes(document.render));
   if (document.channel === "sms") return kilobytes(byteLength(document.render.text));
   return kilobytes(byteLength(JSON.stringify(document.render)));
 };
@@ -41,6 +52,7 @@ export const deriveDocumentState = (
       ? emailOutline(document.render.selections)
       : null,
   sizeKb: documentSizeKb(document),
+  sizeSource: sizeSourceOf(document),
   checks: documentChecks(document, hostChecks),
 });
 
@@ -229,19 +241,20 @@ export const projectDiagnosticCheck = (
 };
 
 const clippingCheck = (render: EmailRender): CheckItem => {
-  const bytes = byteLength(render.html);
+  const bytes = emailBytes(render);
+  const measured = render.sentBytes === undefined ? "The preview HTML is" : "The email as sent is";
   return bytes <= GMAIL_CLIP_BYTES
     ? {
         id: "size:gmail-clip",
         severity: "ok",
         label: "Gmail clipping",
-        detail: `HTML is ${Math.ceil(bytes / 1024)} KB, under Gmail's 102 KB clipping threshold.`,
+        detail: `${measured} ${Math.ceil(bytes / 1024)} KB, under Gmail's 102 KB clipping threshold.`,
       }
     : {
         id: "size:gmail-clip",
         severity: "warn",
         label: "Gmail clipping risk",
-        detail: `HTML is ${Math.ceil(bytes / 1024)} KB, above Gmail's 102 KB clipping threshold.`,
+        detail: `${measured} ${Math.ceil(bytes / 1024)} KB, above Gmail's 102 KB clipping threshold.`,
       };
 };
 

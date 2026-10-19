@@ -24,10 +24,12 @@ import { EmailWorkspace } from "./email-workspace";
 import { downloadEmailHtml } from "./export-html";
 import { LifecycleSheet } from "./lifecycle-sheet";
 import { EditorPortalProvider } from "./portal-context";
+import { PreviewChromeProvider } from "./preview-context";
 import { PreviewOverlay } from "./preview-overlay";
 import { StatusBar } from "./statusbar";
 import { THEME_PATH, withDefaultBrandImport } from "./theme-brand";
 import { TopBar } from "./topbar";
+import { tooltipPopupClass } from "./ui-classes";
 import { AssistantShellProvider } from "./use-assistant";
 
 export interface EditorShellProps {
@@ -49,6 +51,14 @@ export interface EditorShellProps {
   readonly renameEnabled?: boolean | undefined;
   /** Host continuation for a locked Publish capability after its explanation is shown. */
   readonly onLockedLifecycle?: (() => void) | undefined;
+  /**
+   * The host is producing a change to the email the author will see, such as an assistant turn
+   * at work. The preview bar runs a thin progress line while it is true, beside the editor's own
+   * waits (an edit on its way, a fixture switch, a refresh).
+   */
+  readonly previewBusy?: boolean | undefined;
+  /** Open the current preview in a new browser tab. Omit where the host has no page for it. */
+  readonly onOpenPreview?: (() => void) | undefined;
 }
 
 /** Lifecycle transaction controls for host chrome rendered inside the editor. */
@@ -136,9 +146,10 @@ function EditorWorkspace() {
 }
 
 /**
- * The full editor chrome: dashboard sidebar slot, then a three-pane grid of
- * topbar / (left rail · canvas · inspector) / statusbar. Must be rendered inside
- * an {@link EditorProvider}.
+ * The full editor chrome: the host's frame start, then topbar / workspace / statusbar. With a
+ * docked assistant the workspace is chat beside a tabbed work pane (a Chat | Preview switch
+ * below 1280px of frame width); without one it is layers · canvas · inspector. Must be rendered
+ * inside an {@link EditorProvider}.
  */
 export function EditorShell({
   height = "100dvh",
@@ -148,6 +159,8 @@ export function EditorShell({
   exportable,
   renameEnabled,
   onLockedLifecycle,
+  previewBusy = false,
+  onOpenPreview,
 }: EditorShellProps) {
   const leftCollapsed = useEditorStore((state) => state.leftCollapsed);
   const rightCollapsed = useEditorStore((state) => state.rightCollapsed);
@@ -177,6 +190,8 @@ export function EditorShell({
     setLayoutMode,
     undo,
     redo,
+    openWorkTab,
+    setFocusedPane,
   } = useEditorStore((state) => state.actions);
   const versions = useEditorStore((state) => state.versionsCapability);
   const telemetry = useEditorStore((state) => state.telemetry);
@@ -334,6 +349,20 @@ export function EditorShell({
     exportHtml,
     canExport,
   };
+  const previewChrome = useMemo(
+    () => ({
+      hostBusy: previewBusy,
+      openInNewTab: onOpenPreview,
+      // The work pane gives checks a tab; the standalone layout keeps them in the inspector.
+      showChecks: assistantDocked
+        ? () => {
+            openWorkTab("checks");
+            setFocusedPane("preview");
+          }
+        : undefined,
+    }),
+    [assistantDocked, onOpenPreview, openWorkTab, previewBusy, setFocusedPane],
+  );
   const toolbarLeading = slots
     .all("toolbar.leading")
     .map((contribution) => <Fragment key={contribution.id}>{contribution.render()}</Fragment>);
@@ -404,136 +433,132 @@ export function EditorShell({
           saveVersionStatus: onSaveVersion === undefined ? "unavailable" : saveVersionStatus,
         }}
       >
-        <EditorPortalProvider container={portalRef}>
-          <div ref={frameRef} className="samva-editor-frame flex" style={{ height }}>
-            {frameStart?.render()}
-            <div
-              data-samva-editor-theme="host"
-              data-layout={layoutMode}
-              inert={lifecycleBusy}
-              aria-busy={lifecycleBusy}
-              className="samva-editor-shell grid min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
-            >
-              <TopBar
-                leading={toolbarLeading.length === 0 ? undefined : toolbarLeading}
-                extraActions={
-                  renderedToolbarActions.length === 0 ? undefined : renderedToolbarActions
-                }
-                onBack={frameStart === undefined ? onBack : undefined}
-                onPreview={() => {
-                  setPreviewOpen(true);
-                  onPreview?.();
-                }}
-                onLifecycle={() => setLifecycleOpen(true)}
-                onUndo={undo}
-                onRedo={redo}
-                canUndo={sourceEditable && undoCount > 0}
-                canRedo={sourceEditable && redoCount > 0}
-                channelSwitcher={renderedChannelSwitcher}
-                exportEnabled={exportable}
-                renameEnabled={renameEnabled}
-                onExport={onExport}
-                brand={brand}
-                onUseDefaultBrand={applyDefaultBrand}
-              />
-              <div className="samva-editor-body relative flex min-h-0 min-w-0 overflow-hidden">
-                {overlayOpen && (
-                  <button
-                    type="button"
-                    aria-label="Close editor panel"
-                    className="bg-background/45 absolute inset-0 z-30 cursor-default backdrop-blur-[1px]"
-                    onClick={() => {
-                      if (!leftCollapsed) toggleLeft();
-                      if (!rightCollapsed) toggleRight();
-                    }}
-                  />
-                )}
-                {leftCollapsed && !assistantDocked && (
-                  <Tooltip.Root>
-                    <Tooltip.Trigger
-                      render={
-                        <button
-                          type="button"
-                          aria-label="Show layers and blocks"
-                          data-testid="shell.show-left"
-                          onClick={toggleLeft}
-                          className="border-border bg-background/92 text-muted-foreground hover:bg-muted hover:text-foreground absolute top-3 left-3 z-20 rounded-md border p-1.5 shadow-[var(--shadow-md)] backdrop-blur-md transition-colors"
-                        />
-                      }
-                    >
-                      <SidebarLeft className="size-[15px]" />
-                    </Tooltip.Trigger>
-                    <Tooltip.Portal container={portalRef}>
-                      <Tooltip.Positioner side="right" sideOffset={5} className="z-[200]">
-                        <Tooltip.Popup
-                          role="tooltip"
-                          className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-                        >
-                          Show layers and blocks
-                        </Tooltip.Popup>
-                      </Tooltip.Positioner>
-                    </Tooltip.Portal>
-                  </Tooltip.Root>
-                )}
-                {rightCollapsed && !assistantDocked && (
-                  <Tooltip.Root>
-                    <Tooltip.Trigger
-                      render={
-                        <button
-                          type="button"
-                          aria-label="Show inspector"
-                          data-testid="shell.show-right"
-                          onClick={toggleRight}
-                          className="border-border bg-background/92 text-muted-foreground hover:bg-muted hover:text-foreground absolute top-3 right-3 z-20 rounded-md border p-1.5 shadow-[var(--shadow-md)] backdrop-blur-md transition-colors"
-                        />
-                      }
-                    >
-                      <SidebarRight className="size-[15px]" />
-                    </Tooltip.Trigger>
-                    <Tooltip.Portal container={portalRef}>
-                      <Tooltip.Positioner side="left" sideOffset={5} className="z-[200]">
-                        <Tooltip.Popup
-                          role="tooltip"
-                          className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-                        >
-                          Show inspector
-                        </Tooltip.Popup>
-                      </Tooltip.Positioner>
-                    </Tooltip.Portal>
-                  </Tooltip.Root>
-                )}
-                <EditorWorkspace />
-                <ConflictBanner />
-                <StorageBanner />
-              </div>
-              <StatusBar
-                saveVersionStatus={
-                  guestStatus !== undefined && !guestStatus.saveVersion
-                    ? undefined
-                    : saveVersionStatusText
-                }
-                saveVersionState={onSaveVersion === undefined ? undefined : saveVersionStatus}
-                onSaveVersion={
-                  guestStatus !== undefined && !guestStatus.saveVersion
-                    ? undefined
-                    : onSaveVersion === undefined
+        <PreviewChromeProvider value={previewChrome}>
+          <EditorPortalProvider container={portalRef}>
+            <div ref={frameRef} className="samva-editor-frame flex" style={{ height }}>
+              {frameStart?.render()}
+              <div
+                data-samva-editor-theme="host"
+                data-layout={layoutMode}
+                inert={lifecycleBusy}
+                aria-busy={lifecycleBusy}
+                className="samva-editor-shell grid min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
+              >
+                <TopBar
+                  leading={toolbarLeading.length === 0 ? undefined : toolbarLeading}
+                  extraActions={
+                    renderedToolbarActions.length === 0 ? undefined : renderedToolbarActions
+                  }
+                  onBack={frameStart === undefined ? onBack : undefined}
+                  onPreview={() => {
+                    setPreviewOpen(true);
+                    onPreview?.();
+                  }}
+                  onLifecycle={() => setLifecycleOpen(true)}
+                  onUndo={undo}
+                  onRedo={redo}
+                  canUndo={sourceEditable && undoCount > 0}
+                  canRedo={sourceEditable && redoCount > 0}
+                  channelSwitcher={renderedChannelSwitcher}
+                  exportEnabled={exportable}
+                  renameEnabled={renameEnabled}
+                  onExport={onExport}
+                  brand={brand}
+                  onUseDefaultBrand={applyDefaultBrand}
+                />
+                <div className="samva-editor-body relative flex min-h-0 min-w-0 overflow-hidden">
+                  {overlayOpen && (
+                    <button
+                      type="button"
+                      aria-label="Close editor panel"
+                      className="bg-background/45 absolute inset-0 z-30 cursor-default backdrop-blur-[1px]"
+                      onClick={() => {
+                        if (!leftCollapsed) toggleLeft();
+                        if (!rightCollapsed) toggleRight();
+                      }}
+                    />
+                  )}
+                  {leftCollapsed && !assistantDocked && (
+                    <Tooltip.Root>
+                      <Tooltip.Trigger
+                        render={
+                          <button
+                            type="button"
+                            aria-label="Show layers and blocks"
+                            data-testid="shell.show-left"
+                            onClick={toggleLeft}
+                            className="border-border bg-background/92 text-muted-foreground hover:bg-muted hover:text-foreground absolute top-3 left-3 z-20 rounded-md border p-1.5 shadow-[var(--shadow-md)] backdrop-blur-md transition-colors"
+                          />
+                        }
+                      >
+                        <SidebarLeft className="size-[15px]" />
+                      </Tooltip.Trigger>
+                      <Tooltip.Portal container={portalRef}>
+                        <Tooltip.Positioner side="right" sideOffset={5} className="z-[200]">
+                          <Tooltip.Popup role="tooltip" className={tooltipPopupClass}>
+                            Show layers and blocks
+                          </Tooltip.Popup>
+                        </Tooltip.Positioner>
+                      </Tooltip.Portal>
+                    </Tooltip.Root>
+                  )}
+                  {rightCollapsed && !assistantDocked && (
+                    <Tooltip.Root>
+                      <Tooltip.Trigger
+                        render={
+                          <button
+                            type="button"
+                            aria-label="Show inspector"
+                            data-testid="shell.show-right"
+                            onClick={toggleRight}
+                            className="border-border bg-background/92 text-muted-foreground hover:bg-muted hover:text-foreground absolute top-3 right-3 z-20 rounded-md border p-1.5 shadow-[var(--shadow-md)] backdrop-blur-md transition-colors"
+                          />
+                        }
+                      >
+                        <SidebarRight className="size-[15px]" />
+                      </Tooltip.Trigger>
+                      <Tooltip.Portal container={portalRef}>
+                        <Tooltip.Positioner side="left" sideOffset={5} className="z-[200]">
+                          <Tooltip.Popup role="tooltip" className={tooltipPopupClass}>
+                            Show inspector
+                          </Tooltip.Popup>
+                        </Tooltip.Positioner>
+                      </Tooltip.Portal>
+                    </Tooltip.Root>
+                  )}
+                  <EditorWorkspace />
+                  <ConflictBanner />
+                  <StorageBanner />
+                </div>
+                <StatusBar
+                  saveVersionStatus={
+                    guestStatus !== undefined && !guestStatus.saveVersion
                       ? undefined
-                      : saveVersion
-                }
-                saveVersionBusy={saveVersionStatus === "saving"}
-                saveVersionBlocked={lifecycleBusy}
-                guestHeadline={guestStatus?.headline}
+                      : saveVersionStatusText
+                  }
+                  saveVersionState={onSaveVersion === undefined ? undefined : saveVersionStatus}
+                  onSaveVersion={
+                    guestStatus !== undefined && !guestStatus.saveVersion
+                      ? undefined
+                      : onSaveVersion === undefined
+                        ? undefined
+                        : saveVersion
+                  }
+                  saveVersionBusy={saveVersionStatus === "saving"}
+                  saveVersionBlocked={lifecycleBusy}
+                  guestHeadline={guestStatus?.headline}
+                />
+              </div>
+              <PreviewOverlay open={previewOpen} onClose={() => setPreviewOpen(false)} />
+              <LifecycleSheet
+                open={lifecycleOpen}
+                onClose={() => setLifecycleOpen(false)}
+                onLockedAction={onLockedLifecycle}
               />
+              <div ref={portalRef} data-samva-editor-portal-root className="samva-editor-shell" />
             </div>
-            <PreviewOverlay open={previewOpen} onClose={() => setPreviewOpen(false)} />
-            <LifecycleSheet
-              open={lifecycleOpen}
-              onClose={() => setLifecycleOpen(false)}
-              onLockedAction={onLockedLifecycle}
-            />
-            <div ref={portalRef} data-samva-editor-portal-root className="samva-editor-shell" />
-          </div>
-        </EditorPortalProvider>
+          </EditorPortalProvider>
+        </PreviewChromeProvider>
       </AssistantShellProvider>
     </ContributionsProvider>
   );

@@ -125,6 +125,9 @@
     0 0 0 1px oklch(0 0 0 / 0.4), inset 0 2px 4px 0 oklch(0 0 0 / 0.25);
   --editor-pressed-bg: color-mix(in oklab, var(--accent), white 12%);
   --editor-pressed-shadow: inset 0 1px 3px 0 oklch(0 0 0 / 0.45);
+  /* The design system's dark chip: a translucent input fill on an input hairline, no lift. */
+  --editor-chip-bg: color-mix(in oklab, var(--input) 30%, transparent);
+  --editor-chip-border: var(--input);
   --editor-well-bg: color-mix(in oklab, var(--input) 20%, transparent);
   --editor-well-shadow: inset 0 1px 2px 0 oklch(0 0 0 / 0.35);
   color-scheme: dark;
@@ -136,7 +139,8 @@
  * hydration measures the full frame: progressively remove rails at the same
  * thresholds the client state applies. The selector is intentionally limited to
  * the SSR-wide state; measured standard/compact/narrow layouts retain their
- * interactive, store-controlled overlays.
+ * interactive, store-controlled overlays. A docked chat has no rail attribute:
+ * below 1280px the first measured frame switches it to Chat | Preview.
  */
 @container samva-editor (max-width: 1279px) {
   .samva-editor-shell[data-layout="wide"] [data-editor-rail="right"],
@@ -226,6 +230,39 @@
   .samva-editor-shell button {
     touch-action: manipulation;
   }
+
+  /*
+   * A phone-width editor gives its own controls a 44px touch target. The chrome marks them with
+   * `data-editor-control`; host contributions keep their own sizing.
+   */
+  .samva-editor-shell [data-editor-control] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* A tab row that scrolls sideways without drawing a scrollbar across its tabs. */
+.samva-editor-scroll-hidden {
+  scrollbar-width: none;
+}
+
+.samva-editor-scroll-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* The thin line along the preview bar while a new preview is on its way. */
+.samva-editor-progress {
+  animation: samva-editor-progress 1.4s ease-in-out infinite;
+}
+
+@keyframes samva-editor-progress {
+  from {
+    left: -40%;
+  }
+
+  to {
+    left: 100%;
+  }
 }
 
 /* The recessed workspace behind the email artifact — a faint square grid. */
@@ -271,6 +308,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* A still line still says the preview is on its way. */
+  .samva-editor-progress {
+    left: 0;
+    width: 100%;
+    animation: none;
+    opacity: 0.6;
+  }
+
   .samva-editor-shell,
   .samva-editor-shell *,
   .samva-editor-shell *::before,

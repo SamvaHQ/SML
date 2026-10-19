@@ -1,39 +1,56 @@
-import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { DESKTOP_WIDTH, MOBILE_WIDTH, type DeviceMode } from "../canvas/device";
+import { DESKTOP_WIDTH, MOBILE_WIDTH } from "../canvas/device";
 import { EmailFrame } from "../canvas/email-frame";
 import { SelectionOverlay } from "../canvas/selection-overlay";
+import {
+  isZoomWheel,
+  zoomFromWheel,
+  zoomInFrom,
+  zoomKeyOf,
+  zoomOutFrom,
+  type ZoomGesture,
+} from "../canvas/zoom";
 import { useEditorStore } from "../state/context";
 import { CheckActions } from "./check-actions";
 import { CheckDetails } from "./check-details";
 import { useContributions } from "./contributions";
-import { ArrowsToCenter, Mobile, Monitor } from "./editor-icons";
 import { outlineAncestry, selectionLabel } from "./email-outline";
 import { EnvelopeCard } from "./envelope-card";
 import { NodeContextMenu, type AncestorEntry } from "./node-context-menu";
-import { Segmented } from "./ui";
-import { cn } from "./ui-classes";
+import { PreviewBar, PreviewNotice } from "./preview-bar";
 import { useEditorPortalContainer } from "./use-editor-portal";
+import { ZoomControl } from "./zoom-control";
 
 /**
- * The center workspace: the host's rendered email on the recessed grid backdrop.
- * The frame owns click resolution against `data-samva-instance`; this pane
- * centers it at the device width, forwards selection to the store, and drops to
- * document scope when the backdrop outside the email is clicked.
+ * The center workspace: the preview bar, then the host's rendered email on the recessed grid
+ * backdrop with a floating zoom control. The frame owns click resolution against
+ * `data-samva-instance`; this pane centers it at the device width, forwards selection to the
+ * store, and drops to document scope when the backdrop outside the email is clicked. While
+ * `active`, a pinch or ⌘/Ctrl with +, − or 0 zooms the canvas rather than the page.
  */
-export function CanvasPane({ pointing = false }: { readonly pointing?: boolean | undefined }) {
-  const { doc, render, outline, selection, previewDevice, canvasZoom } = useEditorStore(
-    useShallow((state) => ({
-      doc: state.doc,
-      render: state.render,
-      outline: state.outline,
-      selection: state.selection,
-      previewDevice: state.previewDevice,
-      canvasZoom: state.canvasZoom,
-    })),
-  );
-  const { select, selectDocument, setHovered, setPreviewDevice, setCanvasZoom } = useEditorStore(
+export function CanvasPane({
+  pointing = false,
+  active = true,
+}: {
+  readonly pointing?: boolean | undefined;
+  /** The pane is on screen; a hidden pane leaves zoom chords to the page. */
+  readonly active?: boolean | undefined;
+}) {
+  const { doc, render, outline, selection, previewDevice, canvasZoom, previewEpoch } =
+    useEditorStore(
+      useShallow((state) => ({
+        doc: state.doc,
+        render: state.render,
+        outline: state.outline,
+        selection: state.selection,
+        previewDevice: state.previewDevice,
+        canvasZoom: state.canvasZoom,
+        previewEpoch: state.previewEpoch,
+      })),
+    );
+  const { select, selectDocument, setHovered, setCanvasZoom } = useEditorStore(
     (state) => state.actions,
   );
   // Validity is derived in the selector: a candidate that left the render reads
@@ -69,7 +86,56 @@ export function CanvasPane({ pointing = false }: { readonly pointing?: boolean |
     observer.observe(workspace);
     return () => observer.disconnect();
   }, [deviceWidth]);
-  const scale = canvasZoom === "fit" ? fitScale : 1;
+  const scale = canvasZoom === "fit" ? fitScale : canvasZoom / 100;
+  const percent = scale * 100;
+  // Gesture handlers read the zoom on screen at event time, so neither the frame's listeners
+  // nor the window's are re-attached as the zoom moves.
+  const percentRef = useRef(percent);
+  useLayoutEffect(() => {
+    percentRef.current = percent;
+  }, [percent]);
+
+  const onZoomGesture = useCallback(
+    (gesture: ZoomGesture) => {
+      const current = percentRef.current;
+      if (gesture.kind === "wheel") setCanvasZoom(zoomFromWheel(current, gesture.deltaY));
+      else if (gesture.direction === "in") setCanvasZoom(zoomInFrom(current));
+      else if (gesture.direction === "out") setCanvasZoom(zoomOutFrom(current));
+      else setCanvasZoom(100);
+    },
+    [setCanvasZoom],
+  );
+
+  // A pinch over the backdrop arrives as a wheel event with ctrlKey. React's wheel listener is
+  // passive, so the page zoom can only be refused from a listener registered here.
+  useEffect(() => {
+    const workspace = workspaceRef.current;
+    if (workspace === null || !active) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!isZoomWheel(event)) return;
+      event.preventDefault();
+      onZoomGesture({ kind: "wheel", deltaY: event.deltaY });
+    };
+    workspace.addEventListener("wheel", onWheel, { passive: false });
+    return () => workspace.removeEventListener("wheel", onWheel);
+  }, [active, onZoomGesture]);
+
+  // Zoom chords anywhere in this editor zoom its canvas while the canvas is on screen. Chords
+  // typed inside the email arrive through the frame instead.
+  useEffect(() => {
+    if (!active) return;
+    const frame = workspaceRef.current?.closest("[data-samva-editor-theme]");
+    if (frame === null || frame === undefined) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const direction = zoomKeyOf(event);
+      if (direction === null || !(event.target instanceof Node) || !frame.contains(event.target))
+        return;
+      event.preventDefault();
+      onZoomGesture({ kind: "key", direction });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active, onZoomGesture]);
 
   const openContextMenu = useCallback(
     (input: {
@@ -115,8 +181,10 @@ export function CanvasPane({ pointing = false }: { readonly pointing?: boolean |
       <EmailFrame
         html={render.html}
         width={deviceWidth}
+        epoch={previewEpoch}
         onSelect={select}
         onHover={setHovered}
+        onZoomGesture={active ? onZoomGesture : undefined}
         onContextMenu={pointing ? undefined : openContextMenu}
         overlay={
           <SelectionOverlay
@@ -129,9 +197,16 @@ export function CanvasPane({ pointing = false }: { readonly pointing?: boolean |
     );
 
   return (
-    <div className="samva-editor-workspace relative flex min-w-0 flex-1 flex-col">
-      {canvasOverlays.length > 0 && (
-        /*
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {doc !== null && doc.channel === "email" && (
+        <>
+          <PreviewBar />
+          <PreviewNotice />
+        </>
+      )}
+      <div className="samva-editor-workspace relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {canvasOverlays.length > 0 && (
+          /*
           The slot is placement only, never chrome. A host status is a live
           component — it renders nothing most of the time and something during
           a wait — so a truthy element says nothing about whether there is
@@ -140,104 +215,59 @@ export function CanvasPane({ pointing = false }: { readonly pointing?: boolean |
           Pointer events pass through: a wait names itself without taking the
           canvas away from the hands that are already working in it.
         */
-        <div
-          data-samva-canvas-status
-          className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"
-        >
-          {canvasOverlays.map((contribution) => (
-            <Fragment key={contribution.id}>{contribution.render()}</Fragment>
-          ))}
-        </div>
-      )}
-      <div
-        ref={workspaceRef}
-        data-samva-canvas-viewport
-        // Fit zoom reads this element's clientWidth; a stable gutter keeps that width
-        // from moving when the zoomed email starts or stops overflowing.
-        className="samva-editor-scroll relative flex-1 [scrollbar-gutter:stable] overflow-auto px-10 pt-10 pb-24 [overflow-anchor:none]"
-        onClick={selectDocument}
-      >
-        {doc === null ? (
-          <div className="text-muted-foreground grid h-full place-items-center text-[12.5px]">
-            Loading document…
-          </div>
-        ) : (
           <div
-            className="mx-auto"
-            data-canvas-zoom={canvasZoom}
-            style={{ width: deviceWidth, zoom: scale }}
-            // Stop the workspace's deselect handler so clicks inside the column keep
-            // their resolved selection (the envelope card and frame report their own
-            // target); only the bare backdrop drops to document scope.
-            onClick={(event) => event.stopPropagation()}
+            data-samva-canvas-status
+            className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"
           >
-            {doc.channel === "email" && doc.preview.status === "stale" && (
-              <div
-                data-testid="canvas.preview-stale"
-                className="border-warning/35 bg-warning/10 text-foreground mb-3 rounded-[9px] border px-3 py-2 text-[12px] shadow-sm"
-              >
-                Showing the last preview that worked. Your latest edit has a problem:{" "}
-                {doc.preview.reason}
-              </div>
-            )}
-            <EnvelopeCard />
-            {frame === null ? (
-              <UnbuiltCanvas />
-            ) : pointing ? (
-              frame
-            ) : (
-              <NodeContextMenu
-                ancestors={contextAncestors}
-                onSelect={select}
-                portalContainer={portalContainer}
-                anchor={contextAnchor ?? undefined}
-                open={contextOpen}
-                onOpenChange={(open) => setContextOpen(open && contextAncestors.length > 0)}
-              >
-                {frame}
-              </NodeContextMenu>
-            )}
+            {canvasOverlays.map((contribution) => (
+              <Fragment key={contribution.id}>{contribution.render()}</Fragment>
+            ))}
           </div>
         )}
-      </div>
-      {doc !== null && (
-        <div className="border-border bg-background/95 absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-[9px] border p-1 shadow-[var(--shadow-lg)] backdrop-blur-md">
-          <Segmented
-            ariaLabel="Canvas preview width"
-            value={previewDevice}
-            onChange={(value) => setPreviewDevice(value as DeviceMode)}
-            size="sm"
-            options={[
-              {
-                value: "desktop",
-                title: "Preview desktop width",
-                testId: "canvas.device.desktop",
-                label: <Monitor className="size-[13px]" />,
-              },
-              {
-                value: "mobile",
-                title: "Preview mobile width",
-                testId: "canvas.device.mobile",
-                label: <Mobile className="size-[13px]" />,
-              },
-            ]}
-          />
-          <button
-            type="button"
-            data-testid="canvas.zoom"
-            title={canvasZoom === "fit" ? "Show canvas at 100%" : "Fit canvas to workspace"}
-            aria-label={canvasZoom === "fit" ? "Show canvas at 100%" : "Fit canvas to workspace"}
-            onClick={() => setCanvasZoom(canvasZoom === "fit" ? "100" : "fit")}
-            className={cn(
-              "text-muted-foreground hover:bg-muted hover:text-foreground inline-flex h-7 items-center gap-1.5 rounded-[6px] px-2 text-[11.5px] transition-colors",
-              canvasZoom === "fit" && "bg-sel-soft text-accent-email",
-            )}
-          >
-            <ArrowsToCenter className="size-[14px]" />
-            {canvasZoom === "fit" ? "Fit" : "100%"}
-          </button>
+        <div
+          ref={workspaceRef}
+          data-samva-canvas-viewport
+          // Fit zoom reads this element's clientWidth; a stable gutter keeps that width
+          // from moving when the zoomed email starts or stops overflowing.
+          className="samva-editor-scroll relative flex-1 [scrollbar-gutter:stable] overflow-auto px-10 pt-10 pb-24 [overflow-anchor:none]"
+          onClick={selectDocument}
+        >
+          {doc === null ? (
+            <div className="text-muted-foreground grid h-full place-items-center text-[12.5px]">
+              Loading document…
+            </div>
+          ) : (
+            <div
+              className="mx-auto"
+              data-canvas-zoom={canvasZoom === "fit" ? "fit" : String(canvasZoom)}
+              style={{ width: deviceWidth, zoom: scale }}
+              // Stop the workspace's deselect handler so clicks inside the column keep
+              // their resolved selection (the envelope card and frame report their own
+              // target); only the bare backdrop drops to document scope.
+              onClick={(event) => event.stopPropagation()}
+            >
+              <EnvelopeCard />
+              {frame === null ? (
+                <UnbuiltCanvas />
+              ) : pointing ? (
+                frame
+              ) : (
+                <NodeContextMenu
+                  ancestors={contextAncestors}
+                  onSelect={select}
+                  portalContainer={portalContainer}
+                  anchor={contextAnchor ?? undefined}
+                  open={contextOpen}
+                  onOpenChange={(open) => setContextOpen(open && contextAncestors.length > 0)}
+                >
+                  {frame}
+                </NodeContextMenu>
+              )}
+            </div>
+          )}
         </div>
-      )}
+        {doc !== null && <ZoomControl percent={percent} />}
+      </div>
     </div>
   );
 }

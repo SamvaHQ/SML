@@ -4,7 +4,6 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
 import { summarizeChecks } from "../state/derive";
-import { DEVICE_WIDTH } from "../state/store";
 import { AttentionSummary } from "./compatibility-report";
 import { cn } from "./ui-classes";
 import { useEditorPortalContainer } from "./use-editor-portal";
@@ -26,12 +25,11 @@ export function StatusBar({
   readonly guestHeadline?: string | undefined;
 }) {
   const portalContainer = useEditorPortalContainer();
-  const { doc, checks, sizeKb, deviceWidth, layoutMode } = useEditorStore(
+  const { doc, checks, sizeKb, layoutMode } = useEditorStore(
     useShallow((state) => ({
       doc: state.doc,
       checks: state.checks,
       sizeKb: state.sizeKb,
-      deviceWidth: DEVICE_WIDTH[state.previewDevice],
       layoutMode: state.layoutMode,
     })),
   );
@@ -158,10 +156,10 @@ export function StatusBar({
         </button>
       )}
       <span className="flex-1" />
-      {!compact && <span className="w-10 shrink-0 text-right">{sizeKb} KB</span>}
-      {layoutMode !== "narrow" && (
-        <span className="w-[42px] shrink-0 text-right">
-          {doc?.channel === "email" ? `${deviceWidth}px` : (doc?.channel.toUpperCase() ?? "")}
+      {/* An email's width and size sit in its preview bar; other channels report theirs here. */}
+      {!compact && doc !== null && doc.channel !== "email" && (
+        <span className="shrink-0 text-right">
+          {sizeKb} KB · {doc.channel.toUpperCase()}
         </span>
       )}
     </footer>
