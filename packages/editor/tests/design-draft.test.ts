@@ -303,6 +303,38 @@ describe("Design draft around Apply and Reset", () => {
   });
 });
 
+describe("Design draft and source history together", () => {
+  it("redoes a source edit and then a Design edit in the order they were made", async () => {
+    const editor = await mockEditor();
+    const { bundle, original } = await start(editor.host);
+    const { actions } = bundle.store.getState();
+    actions.replaceAuthoredSource(`// source\n${original}`);
+    await flushed(bundle);
+    stage(bundle, "// design");
+    await flushed(bundle);
+    actions.undo();
+    await flushed(bundle);
+    actions.undo();
+    await flushed(bundle);
+    expect(source(bundle)).toBe(original);
+    actions.redo();
+    await flushed(bundle);
+    expect(source(bundle)).toBe(`// source\n${original}`);
+    expect(bundle.store.getState().sourceEditError).toBeNull();
+  });
+
+  it("keeps the chat waiting through Apply without versions until the draft holds the edits", async () => {
+    const editor = await mockEditor();
+    const { bundle } = await start(editor.host);
+    stage(bundle, "// one");
+    bundle.store.getState().actions.applyDesign();
+    expect(designWaiting(bundle.store.getState())).toBe(true);
+    await settle(30);
+    expect(bundle.store.getState().designDraft).toBeNull();
+    expect(designWaiting(bundle.store.getState())).toBe(false);
+  });
+});
+
 describe("pins", () => {
   it("numbers pins, renumbers on removal, clears, and reports every change", async () => {
     const editor = await mockEditor();

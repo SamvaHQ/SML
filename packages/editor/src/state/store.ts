@@ -639,6 +639,8 @@ export const createEditorBundle = (
       set(
         direction === "undo"
           ? {
+              // Stepping back past a draft's start leaves its undone edits nothing to redo onto.
+              designDraft: null,
               undoHistory: entries.slice(0, -1),
               redoHistory: [...state.redoHistory, entry],
             }
@@ -1156,22 +1158,9 @@ export const createEditorBundle = (
         )
           return;
         const count = draft.edits.length;
-        const versions = state.versionsCapability;
-        // Without saved versions the edits are already the draft: applying keeps them.
-        if (versions?.status !== "ready") {
-          set({
-            designDraft: null,
-            designCompare: false,
-            designApply: DESIGN_IDLE,
-            undoHistory: [
-              ...state.undoHistory,
-              { before: draft.baseSource, after: draft.edits.at(-1)?.after ?? draft.baseSource },
-            ],
-            redoHistory: [],
-          });
-          state.telemetry?.({ name: "design.apply", data: { edits: count } });
-          return;
-        }
+        // Without saved versions the edits stay in the draft once it holds them: Apply keeps them.
+        const versions =
+          state.versionsCapability?.status === "ready" ? state.versionsCapability.api : undefined;
         if (!actions.beginLifecycle()) return;
         set({ designApply: { status: "applying" }, designCompare: false });
         void spine
@@ -1195,12 +1184,14 @@ export const createEditorBundle = (
               return;
             }
             const snapshot = settled.doc;
-            const saved = await versions.api.save(revision, {
-              message: designVersionMessage(count),
-            });
+            const saved =
+              versions === undefined
+                ? revision
+                : await versions.save(revision, { message: designVersionMessage(count) });
             const current = get().doc;
             // Adopt the saved revision only when nothing moved under the save.
             if (
+              versions !== undefined &&
               (current?.rev === revision || current?.rev === saved) &&
               current.origin.authoredSource === snapshot.origin.authoredSource
             ) {
