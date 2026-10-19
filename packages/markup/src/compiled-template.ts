@@ -1,18 +1,18 @@
-// The SML intermediate representation: what compiling a template produces, what a publication
-// pins, what the editor and agents read, and what every send renders. It is JSON, versioned, and
-// carries no code. Rendering it is a pure function of the IR and the input (see `./render-ir`).
+// The compiled template: what compiling a template produces, what a publication pins, what the
+// editor and agents read, and what every send renders. It is JSON, versioned, and carries no code.
+// Rendering it is a pure function of the template and the input (see `./render-template`).
 
-import type { BrandPlugin } from "./email/brand-plugin";
+import type { SmsSegmentInfo } from "./sms-segments";
 
-/** The IR version this package writes. A publication pins the version it was built with. */
-export const SML_IR_VERSION = 1;
+/** The version this package writes. A publication pins the version it was built with. */
+export const COMPILED_TEMPLATE_VERSION = 1;
 
 /**
  * Where a node came from: `[line, column]` in the entry file, or `[line, column, file]` with an
- * index into `TemplateIr.sources` when the node came from an imported project file. Published
+ * index into `CompiledTemplate.sources` when the node came from an imported project file. Published
  * sends strip these.
  */
-export type IrSource = readonly [line: number, column: number, file?: number];
+export type CompiledSource = readonly [line: number, column: number, file?: number];
 
 /**
  * A value read at render time.
@@ -29,70 +29,73 @@ export type IrSource = readonly [line: number, column: number, file?: number];
  * - `length` is `.length` of a bound array or string;
  * - `count` is `.filter(...).length`: the items of an array that satisfy a condition.
  */
-export type IrValue =
+export type CompiledValue =
   | string
   | number
   | boolean
   | null
   | { readonly bind: string }
   | { readonly lit: unknown }
-  | { readonly concat: readonly IrValue[] }
-  | { readonly format: IrFormatter; readonly args: readonly IrValue[] }
-  | { readonly if: IrPredicate; readonly then: IrValue; readonly else: IrValue }
-  | { readonly op: IrArithmetic; readonly args: readonly [IrValue, IrValue] }
-  | { readonly length: IrValue }
+  | { readonly concat: readonly CompiledValue[] }
+  | { readonly format: CompiledFormatter; readonly args: readonly CompiledValue[] }
+  | { readonly if: CompiledPredicate; readonly then: CompiledValue; readonly else: CompiledValue }
+  | { readonly op: CompiledArithmetic; readonly args: readonly [CompiledValue, CompiledValue] }
+  | { readonly length: CompiledValue }
   /** How many items of a bound array satisfy `where`, with each item bound as `$as` while it runs. */
-  | { readonly count: IrValue; readonly as: string; readonly where: IrPredicate };
+  | { readonly count: CompiledValue; readonly as: string; readonly where: CompiledPredicate };
 
-export type IrFormatter = "money" | "number" | "date" | "time" | "plural" | "list";
+export type CompiledFormatter = "money" | "number" | "date" | "time" | "plural" | "list";
 
-export type IrArithmetic = "+" | "-" | "*" | "/" | "%";
+export type CompiledArithmetic = "+" | "-" | "*" | "/" | "%";
 
-export type IrComparison = "eq" | "ne" | "lt" | "gt" | "le" | "ge";
+export type CompiledComparison = "eq" | "ne" | "lt" | "gt" | "le" | "ge";
 
 /** A condition over the input. Truthiness follows JavaScript: `""`, `0`, `null` and absent are false. */
-export type IrPredicate =
+export type CompiledPredicate =
   /** The bound value at this path is truthy. */
   | { readonly present: string }
   /** Any value is truthy. */
-  | { readonly truthy: IrValue }
-  | { readonly not: IrPredicate }
-  | { readonly and: readonly IrPredicate[] }
-  | { readonly or: readonly IrPredicate[] }
-  | { readonly cmp: IrComparison; readonly args: readonly [IrValue, IrValue] };
+  | { readonly truthy: CompiledValue }
+  | { readonly not: CompiledPredicate }
+  | { readonly and: readonly CompiledPredicate[] }
+  | { readonly or: readonly CompiledPredicate[] }
+  | { readonly cmp: CompiledComparison; readonly args: readonly [CompiledValue, CompiledValue] };
 
 /**
  * An element's inline style. A string is fully static and was checked at compile time; a list
  * carries declarations whose values are read at render time; `if` selects between two styles.
  */
-export type IrStyle =
+export type CompiledStyle =
   | string
-  | readonly (readonly [property: string, value: IrValue])[]
-  | { readonly if: IrPredicate; readonly then: IrStyle; readonly else: IrStyle };
+  | readonly (readonly [property: string, value: CompiledValue])[]
+  | { readonly if: CompiledPredicate; readonly then: CompiledStyle; readonly else: CompiledStyle };
 
 /** A part of compatibility markup the primitives emit verbatim. */
-export type IrRawPart = string | { readonly attr: IrValue } | { readonly text: IrValue };
+export type CompiledRawPart =
+  | string
+  | { readonly attr: CompiledValue }
+  | { readonly text: CompiledValue };
 
-export interface IrElement {
+export interface CompiledElement {
   readonly el: string;
-  readonly attrs?: Readonly<Record<string, IrValue>>;
-  readonly style?: IrStyle;
-  readonly children?: readonly IrNode[];
+  readonly attrs?: Readonly<Record<string, CompiledValue>>;
+  readonly style?: CompiledStyle;
+  readonly children?: readonly CompiledNode[];
   /**
    * Set by the compiler on the elements `BrandFooter` writes: only they may carry the reserved
    * footer markers, so an element the author wrote cannot claim a footer the send path would
    * then not append.
    */
   readonly reserved?: true;
-  readonly src?: IrSource;
+  readonly src?: CompiledSource;
 }
 
 /** Content that appears when the predicate holds, or else `else`. */
-export interface IrIf {
-  readonly if: IrPredicate;
-  readonly then: readonly IrNode[];
-  readonly else?: readonly IrNode[];
-  readonly src?: IrSource;
+export interface CompiledIf {
+  readonly if: CompiledPredicate;
+  readonly then: readonly CompiledNode[];
+  readonly else?: readonly CompiledNode[];
+  readonly src?: CompiledSource;
 }
 
 /**
@@ -102,56 +105,62 @@ export interface IrIf {
  * `chunk` groups the items into consecutive slices of that size instead: the loop variable `$as`
  * then holds one slice, an array, and the last slice may be shorter. Filtering applies first.
  */
-export interface IrEach {
-  readonly each: IrValue;
+export interface CompiledEach {
+  readonly each: CompiledValue;
   /** The loop variable, referenced as `$as.field`. */
   readonly as: string;
   /** The zero-based index variable, referenced as `$index`. */
   readonly index?: string;
-  readonly where?: IrPredicate;
+  readonly where?: CompiledPredicate;
   readonly chunk?: number;
-  readonly children: readonly IrNode[];
-  readonly src?: IrSource;
+  readonly children: readonly CompiledNode[];
+  readonly src?: CompiledSource;
 }
 
 /**
  * Compatibility markup the email primitives emit verbatim (conditional comments, VML). Bound
  * parts are escaped for the context they sit in. `text` is what the plain-text part reads.
  */
-export interface IrRaw {
-  readonly raw: readonly IrRawPart[];
-  readonly text?: IrValue;
-  readonly src?: IrSource;
+export interface CompiledRaw {
+  readonly raw: readonly CompiledRawPart[];
+  readonly text?: CompiledValue;
+  readonly src?: CompiledSource;
 }
 
 /** Where the hidden inbox-preview block goes; it renders the channel's `preheader`. */
-export interface IrPreheader {
+export interface CompiledPreheader {
   readonly preheader: true;
 }
 
 /** A node in an email body. A bare value in child position is rendered as escaped text. */
-export type IrNode = IrValue | IrElement | IrIf | IrEach | IrRaw | IrPreheader;
+export type CompiledNode =
+  | CompiledValue
+  | CompiledElement
+  | CompiledIf
+  | CompiledEach
+  | CompiledRaw
+  | CompiledPreheader;
 
-export interface IrEmail {
-  readonly subject: IrValue;
-  readonly preheader?: IrValue;
-  readonly body: IrNode;
+export interface CompiledEmail {
+  readonly subject: CompiledValue;
+  readonly preheader?: CompiledValue;
+  readonly body: CompiledNode;
 }
 
 /** A plain-text channel body: text pieces, conditionals and loops. */
-export interface IrSms {
+export interface CompiledSms {
   readonly category?: string;
-  readonly body: readonly IrNode[];
+  readonly body: readonly CompiledNode[];
 }
 
-export type IrWhatsAppButton =
-  | { readonly type: "quick-reply"; readonly text: IrValue }
-  | { readonly type: "url"; readonly text: IrValue; readonly url: IrValue }
-  | { readonly type: "phone"; readonly text: IrValue; readonly phone: IrValue }
-  | { readonly type: "copy-code"; readonly code: IrValue }
+export type CompiledWhatsAppButton =
+  | { readonly type: "quick-reply"; readonly text: CompiledValue }
+  | { readonly type: "url"; readonly text: CompiledValue; readonly url: CompiledValue }
+  | { readonly type: "phone"; readonly text: CompiledValue; readonly phone: CompiledValue }
+  | { readonly type: "copy-code"; readonly code: CompiledValue }
   | {
       readonly type: "flow";
-      readonly text: IrValue;
+      readonly text: CompiledValue;
       /** The Samva flow handle, resolved to Meta's flow id when the template is registered. */
       readonly flow: string;
       readonly action: "navigate" | "data_exchange";
@@ -160,72 +169,55 @@ export type IrWhatsAppButton =
     };
 
 /** A button, or buttons that appear when a condition over the input holds. */
-export type IrWhatsAppButtonNode =
-  | IrWhatsAppButton
+export type CompiledWhatsAppButtonNode =
+  | CompiledWhatsAppButton
   | {
-      readonly if: IrPredicate;
-      readonly then: readonly IrWhatsAppButtonNode[];
-      readonly else?: readonly IrWhatsAppButtonNode[];
-      readonly src?: IrSource;
+      readonly if: CompiledPredicate;
+      readonly then: readonly CompiledWhatsAppButtonNode[];
+      readonly else?: readonly CompiledWhatsAppButtonNode[];
+      readonly src?: CompiledSource;
     };
 
-export interface IrWhatsApp {
+export interface CompiledWhatsApp {
   readonly category: string;
   readonly language: string;
   /** For a media header, `content` is the media URL. */
   readonly header?: {
     readonly type: "text" | "image" | "video" | "document";
-    readonly content: readonly IrNode[];
+    readonly content: readonly CompiledNode[];
   };
-  readonly body: readonly IrNode[];
-  readonly footer?: readonly IrNode[];
-  readonly buttons?: readonly IrWhatsAppButtonNode[];
+  readonly body: readonly CompiledNode[];
+  readonly footer?: readonly CompiledNode[];
+  readonly buttons?: readonly CompiledWhatsAppButtonNode[];
 }
 
-export interface TemplateIr {
-  readonly sml: typeof SML_IR_VERSION;
+export interface CompiledTemplate {
+  readonly sml: typeof COMPILED_TEMPLATE_VERSION;
   readonly template: string;
   readonly locale?: string;
-  /** Project paths that `IrSource` file indexes name; index 0 is the entry. */
+  /** Project paths that `CompiledSource` file indexes name; index 0 is the entry. */
   readonly sources?: readonly string[];
-  readonly email?: IrEmail;
-  readonly sms?: IrSms;
-  readonly whatsapp?: IrWhatsApp;
+  readonly email?: CompiledEmail;
+  readonly sms?: CompiledSms;
+  readonly whatsapp?: CompiledWhatsApp;
   /** The portable JSON Schema every send's input is validated against. */
   readonly schema: Readonly<Record<string, unknown>>;
 }
 
-/** How the renderer resolves formatters that take no explicit locale or time zone. */
-export interface RenderOptions {
-  /** Overrides the template's `locale`. */
-  readonly locale?: string;
-  /** IANA time zone; defaults to UTC. */
-  readonly timeZone?: string;
-  /** Also return where each element landed in the HTML, for mapping findings back to source. */
-  readonly positions?: boolean;
-  /**
-   * The brand plugin the template compiled against: its unsubscribe placeholder gets the
-   * no-track marker, and only the elements `BrandFooter` wrote may carry its footer markers.
-   * `samvaBrandPlugin` when omitted.
-   */
-  readonly brandPlugin?: BrandPlugin;
-}
+/** The channels a template can declare and `render` can render. */
+export type Channel = "email" | "sms" | "whatsapp";
 
-/** One rendered element's offset range in the HTML, and the source it was lowered from. */
-export interface RenderedPosition {
-  readonly start: number;
-  readonly end: number;
-  readonly tag: string;
-  readonly src?: IrSource;
-}
-
-export interface RenderedIrEmail {
+export interface RenderedEmail {
   readonly subject: string;
   readonly preheader: string | undefined;
   readonly html: string;
   readonly text: string;
-  /** Present when the render asked for `positions`. */
-  readonly positions?: readonly RenderedPosition[];
+}
+
+/** An SMS message: its text and what it costs in segments. */
+export interface RenderedSms {
+  readonly text: string;
+  readonly segments: SmsSegmentInfo;
 }
 
 export type RenderedWhatsAppButton =
@@ -242,7 +234,7 @@ export type RenderedWhatsAppButton =
     };
 
 /** A WhatsApp message with every text rendered and every conditional button resolved. */
-export interface RenderedIrWhatsApp {
+export interface RenderedWhatsApp {
   readonly language: string;
   readonly category: string;
   /** For a media header, `text` is the media URL. */
@@ -253,4 +245,11 @@ export interface RenderedIrWhatsApp {
   readonly body: string;
   readonly footer?: string;
   readonly buttons: readonly RenderedWhatsAppButton[];
+}
+
+/** What `render` returns for each channel. */
+export interface RenderedMessage {
+  readonly email: RenderedEmail;
+  readonly sms: RenderedSms;
+  readonly whatsapp: RenderedWhatsApp;
 }

@@ -7,7 +7,7 @@ description: Author, check, render and repair Samva email templates written as s
 
 A template is one `.tsx` file that default-exports `defineTemplate` from `@samva/markup`. It is
 ordinary JSX, HTML and Tailwind written in a static profile: the compiler reads it without running
-it and produces a JSON IR. Every preview and every send renders that IR against the input, so
+it and produces a compiled template: JSON. Every preview and every send renders that template against the input, so
 nothing you write executes at send time.
 
 ## The loop
@@ -23,7 +23,7 @@ samva templates dev                         # local editor with every fixture re
 
 Add `--json` for diagnostics as data: each has a `code`, a location, a severity and a `fix`. Apply
 the fix the diagnostic names rather than rewriting around it. Without the CLI, call
-`compileTemplate` from `@samva/markup/compiler` and `renderIr` from `@samva/markup/render`.
+`compileTemplate` from `@samva/markup/compiler` and `render` from `@samva/markup/render`.
 
 ## Upgrades
 

@@ -4,7 +4,7 @@ import {
   emailDefinitionInstances,
   emailSelectionSiblings,
   type EmailElementSelection,
-} from "@samva/markup/render";
+} from "@samva/markup/edit";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 

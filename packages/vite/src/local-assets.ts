@@ -1,5 +1,5 @@
 // A local page points its images at a path (the dev server's asset route, or a
-// relative directory beside an export), but the IR renderer refuses everything
+// relative directory beside an export), but the renderer refuses everything
 // except absolute https URLs, because a delivered message can resolve nothing
 // else. A local render therefore compiles against a placeholder https origin
 // and swaps that origin for the real base in the rendered output.

@@ -1,7 +1,7 @@
 # @samva/editor
 
 An embeddable template editor for Git-backed email template projects. The canonical value is
-the TSX entry, editable when the host grants source access. The host compiles that entry to IR
+the TSX entry, editable when the host grants source access. The host compiles that entry to a compiled template
 and hands the editor one rendered fixture per channel, so the workspace shows the message a
 recipient receives.
 

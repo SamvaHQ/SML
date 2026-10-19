@@ -11,12 +11,12 @@ import {
   WHATSAPP_CATEGORIES,
   WHATSAPP_HEADER_TYPES,
 } from "../src/channel-specs";
+import { COMPILED_TEMPLATE_VERSION } from "../src/compiled-template";
 import { DIAGNOSTIC_CODE_FAMILIES, DIAGNOSTIC_CODES } from "../src/diagnostic-codes";
 import { CONTRAST_THRESHOLDS } from "../src/email/contrast";
 import { EMAIL_ELEMENTS, EMAIL_GLOBAL_ATTRIBUTES } from "../src/email/elements";
 import { PRIMITIVE_CLASSES, STACK_BREAKPOINT_PX } from "../src/email/primitive-css";
 import { FORMATTER_NAMES } from "../src/fmt";
-import { SML_IR_VERSION } from "../src/ir";
 import { PROFILE_FORMS, PROFILE_REJECTED } from "../src/sml/profile";
 import { TEMPLATE_ID_PATTERN } from "../src/template";
 import {
@@ -176,7 +176,7 @@ const diagnosticFamilies = Object.entries(DIAGNOSTIC_CODE_FAMILIES).map(([prefix
 
 const contract = {
   contract: 1,
-  irVersion: SML_IR_VERSION,
+  compiledTemplateVersion: COMPILED_TEMPLATE_VERSION,
   template: {
     extension: ".tsx",
     directories: ["templates", "emails"],
@@ -190,7 +190,7 @@ const contract = {
     fixtures:
       "Named payloads that must validate. At least one. Each is a preview and a publish check.",
     execution:
-      "Nothing runs at send time. A template compiles to IR and the send path renders the IR against the input. Locale and time zone are send options.",
+      "Nothing runs at send time. A template compiles to a compiled template and the send path renders it against the input. Locale and time zone are send options.",
   },
   profile: { forms: PROFILE_FORMS, rejected: PROFILE_REJECTED },
   formatters,
@@ -265,8 +265,8 @@ const reference = `# Template authoring reference
 A template is one TSX file that default-exports \`defineTemplate({ id, schema, fixtures, email })\`
 from \`@samva/markup\`, in \`templates/\` (\`emails/\` is also recognized). Set
 \`jsxImportSource: "@samva/markup/email"\`. \`email\` is \`{ subject, preheader?, body }\`; each is a
-function of the validated input that the compiler reads without running. The IR it produces is what
-every preview and send renders (IR version ${SML_IR_VERSION}).
+function of the validated input that the compiler reads without running. The compiled template it
+produces is what every preview and send renders (compiled template version ${COMPILED_TEMPLATE_VERSION}).
 
 ## Static profile
 

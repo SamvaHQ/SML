@@ -22,7 +22,7 @@ import { isProjectFile, projectPath, SAMVA_DIR } from "./layout";
 // one TSX file compiled without running it, so the plugin owns the catalog, the
 // renders, the file watching and the transport, and evaluates nothing. The
 // compile is `compileTemplate` from `@samva/markup/compiler` and the render is
-// `renderIr`, the calls the hosted build makes, so a local render cannot drift
+// `render`, the calls the hosted build makes, so a local render cannot drift
 // from a published one. Source saves are privileged local-development
 // operations: the server binds to loopback by default and accepts them only
 // from a loopback client plus a strict localhost Origin, independent of the

@@ -1,5 +1,5 @@
 import type { EmailDiagnostic } from "@samva/markup/diagnostics";
-import type { EmailElementSelection } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
 import { Data } from "effect";
 
 // The host contract is plain TypeScript over markup's own types, and the host an embedder

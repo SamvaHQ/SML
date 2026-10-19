@@ -33,19 +33,39 @@ const settle = (diagnostics: readonly EmailDiagnostic[]): readonly EmailDiagnost
   return diagnostics;
 };
 
-/** Lower the derived tree to HTML and its plain-text alternative. */
+/**
+ * Lower the derived tree to HTML and its plain-text alternative. A blocking finding leaves no
+ * output; every finding comes back in `diagnostics`.
+ */
+export const lowerEmail = (
+  node: EmailNode,
+  options: SerializeEmailOptions = {},
+): {
+  readonly output: EmailCompileOutput | undefined;
+  readonly diagnostics: readonly EmailDiagnostic[];
+} => {
+  const serialized = serializeEmailHtml(node, options);
+  const diagnostics = [...collectEmailDiagnostics(node), ...serialized.diagnostics];
+  if (hasBlockingDiagnostic(diagnostics)) return { output: undefined, diagnostics };
+  return {
+    output: {
+      html: serialized.html,
+      text: deriveEmailText(node),
+      diagnostics,
+      positions: serialized.positions,
+    },
+    diagnostics,
+  };
+};
+
+/** `lowerEmail`, throwing an `EmailCompileError` where it would return a blocking finding. */
 export const compileEmail = (
   node: EmailNode,
   options: SerializeEmailOptions = {},
 ): EmailCompileOutput => {
-  const serialized = serializeEmailHtml(node, options);
-  const diagnostics = settle([...collectEmailDiagnostics(node), ...serialized.diagnostics]);
-  return {
-    html: serialized.html,
-    text: deriveEmailText(node),
-    diagnostics,
-    positions: serialized.positions,
-  };
+  const { output, diagnostics } = lowerEmail(node, options);
+  if (output === undefined) throw new EmailCompileError({ diagnostics });
+  return output;
 };
 
 /** Put the hidden preview block first inside `<body>`, or first overall when there is no shell. */

@@ -85,7 +85,7 @@ export const resolveThemeImports = (
         );
         continue;
       }
-      if (parseBrandSpecifier(target, brandPlugin) !== undefined) {
+      if (parseBrandSpecifier(target, { brandPlugin }) !== undefined) {
         brandSpecifiers.add(target);
         continue;
       }

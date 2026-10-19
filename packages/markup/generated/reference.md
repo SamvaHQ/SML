@@ -3,8 +3,8 @@
 A template is one TSX file that default-exports `defineTemplate({ id, schema, fixtures, email })`
 from `@samva/markup`, in `templates/` (`emails/` is also recognized). Set
 `jsxImportSource: "@samva/markup/email"`. `email` is `{ subject, preheader?, body }`; each is a
-function of the validated input that the compiler reads without running. The IR it produces is what
-every preview and send renders (IR version 1).
+function of the validated input that the compiler reads without running. The compiled template it
+produces is what every preview and send renders (compiled template version 1).
 
 ## Static profile
 

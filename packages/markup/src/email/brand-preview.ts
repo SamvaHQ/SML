@@ -1,4 +1,4 @@
-import { renderIr } from "../render-ir";
+import { render } from "../render-template";
 import { compileTemplate } from "../sml/compile";
 import type { EmailBrand } from "./brand";
 import type { BrandPlugin } from "./brand-plugin";
@@ -72,9 +72,10 @@ export const previewBrand = async (
     brand,
     brandPlugin: plugin,
   });
-  if (compiled.ir === undefined) return { html: undefined, diagnostics: compiled.diagnostics };
+  if (compiled.template === undefined)
+    return { html: undefined, diagnostics: compiled.diagnostics };
   return {
-    html: renderIr(compiled.ir, {}, { brandPlugin: plugin }).html,
+    html: render(compiled.template, {}, { channel: "email", brandPlugin: plugin }).html,
     diagnostics: compiled.diagnostics,
   };
 };

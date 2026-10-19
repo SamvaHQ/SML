@@ -5,17 +5,17 @@ import {
   WHATSAPP_CATEGORIES,
   WHATSAPP_HEADER_TYPES,
 } from "../channel-specs";
-import type { DiagnosticCode } from "../diagnostic-codes";
 // oxlint-disable samva/no-hand-rolled-object-guard -- IR nodes and Babel nodes are this package's own typed data, discriminated structurally; nothing here validates external input.
 import type {
-  IrNode,
-  IrPredicate,
-  IrSms,
-  IrValue,
-  IrWhatsApp,
-  IrWhatsAppButton,
-  IrWhatsAppButtonNode,
-} from "../ir";
+  CompiledNode,
+  CompiledPredicate,
+  CompiledSms,
+  CompiledValue,
+  CompiledWhatsApp,
+  CompiledWhatsAppButton,
+  CompiledWhatsAppButtonNode,
+} from "../compiled-template";
+import type { DiagnosticCode } from "../diagnostic-codes";
 import { whatsappTemplate } from "../whatsapp-template";
 import { child, children, text, unwrap, type Node } from "./ast";
 import { bindingValue, isValueNode } from "./bindings";
@@ -202,12 +202,12 @@ const oneOf = (
   return false;
 };
 
-const valueOnly = (nodes: readonly IrNode[]): nodes is readonly IrValue[] =>
+const valueOnly = (nodes: readonly CompiledNode[]): nodes is readonly CompiledValue[] =>
   nodes.every((node) => isValueNode(node));
 
 // ── SMS ──────────────────────────────────────────────────────────────────────
 
-const containsElement = (nodes: readonly IrNode[]): boolean =>
+const containsElement = (nodes: readonly CompiledNode[]): boolean =>
   nodes.some((node) => {
     if (isValueNode(node)) return false;
     if ("el" in node || "raw" in node) return true;
@@ -216,7 +216,7 @@ const containsElement = (nodes: readonly IrNode[]): boolean =>
     return false;
   });
 
-const smsChannel = (input: ChannelInput, field: Node): IrSms | undefined => {
+const smsChannel = (input: ChannelInput, field: Node): CompiledSms | undefined => {
   const root = readRoot(input, field, "Sms", "@samva/markup/sms");
   if (root === undefined) return undefined;
   const attributes = readAttributes(input, root, SMS_ATTRIBUTES);
@@ -245,7 +245,7 @@ const smsChannel = (input: ChannelInput, field: Node): IrSms | undefined => {
 
 // ── WhatsApp ─────────────────────────────────────────────────────────────────
 
-const staticLength = (value: IrValue): number => {
+const staticLength = (value: CompiledValue): number => {
   if (typeof value === "string") return value.length;
   if (typeof value === "number") return String(value).length;
   if (typeof value === "object" && value !== null && "concat" in value)
@@ -264,7 +264,7 @@ interface ButtonCounts {
 const ZERO: ButtonCounts = { url: 0, phone: 0, quickReply: 0, flow: 0, total: 0 };
 
 /** The most buttons of each kind any combination of the conditions can produce. */
-const maximalCounts = (nodes: readonly IrWhatsAppButtonNode[]): ButtonCounts => {
+const maximalCounts = (nodes: readonly CompiledWhatsAppButtonNode[]): ButtonCounts => {
   let counts = ZERO;
   for (const node of nodes) {
     let add: ButtonCounts;
@@ -297,8 +297,8 @@ const maximalCounts = (nodes: readonly IrWhatsAppButtonNode[]): ButtonCounts => 
   return counts;
 };
 
-const buttonNodes = (buttons: readonly IrWhatsAppButtonNode[]): IrNode[] =>
-  buttons.flatMap((button): IrNode[] => {
+const buttonNodes = (buttons: readonly CompiledWhatsAppButtonNode[]): CompiledNode[] =>
+  buttons.flatMap((button): CompiledNode[] => {
     if ("if" in button)
       return [
         {
@@ -322,7 +322,7 @@ const buttonNodes = (buttons: readonly IrWhatsAppButtonNode[]): IrNode[] =>
     }
   });
 
-const whatsappChannel = (input: ChannelInput, field: Node): IrWhatsApp | undefined => {
+const whatsappChannel = (input: ChannelInput, field: Node): CompiledWhatsApp | undefined => {
   const root = readRoot(input, field, "WhatsApp", "@samva/markup/whatsapp");
   if (root === undefined) return undefined;
   const { lowerer } = input;
@@ -388,7 +388,7 @@ const whatsappChannel = (input: ChannelInput, field: Node): IrWhatsApp | undefin
     parts.set(part, item);
   }
 
-  const roots: IrNode[] = [];
+  const roots: CompiledNode[] = [];
   const lengthWarning = (part: string, node: Node, length: number, limit: number): void => {
     if (length > limit)
       lowerer.findings.add(
@@ -401,7 +401,11 @@ const whatsappChannel = (input: ChannelInput, field: Node): IrWhatsApp | undefin
       );
   };
   /** A text part: literal text and values, no branching. */
-  const textPart = (name: string, node: Node, limit: number): readonly IrNode[] | undefined => {
+  const textPart = (
+    name: string,
+    node: Node,
+    limit: number,
+  ): readonly CompiledNode[] | undefined => {
     const nodes = lowerer.jsxChildren(ctx, node);
     if (!valueOnly(nodes)) {
       lowerer.error(
@@ -426,7 +430,7 @@ const whatsappChannel = (input: ChannelInput, field: Node): IrWhatsApp | undefin
     return nodes;
   };
 
-  let header: IrWhatsApp["header"];
+  let header: CompiledWhatsApp["header"];
   const headerNode = parts.get("Header");
   if (headerNode !== undefined) {
     const typeAttribute = attributesOf(headerNode).find(
@@ -455,7 +459,7 @@ const whatsappChannel = (input: ChannelInput, field: Node): IrWhatsApp | undefin
         `Use one of ${WHATSAPP_HEADER_TYPES.join(", ")}.`,
       );
     else {
-      const type = typeValue as NonNullable<IrWhatsApp["header"]>["type"];
+      const type = typeValue as NonNullable<CompiledWhatsApp["header"]>["type"];
       const content = textPart("header", headerNode, type === "text" ? HEADER_LIMIT : Infinity);
       if (content !== undefined) {
         if (type === "text") {
@@ -480,7 +484,7 @@ const whatsappChannel = (input: ChannelInput, field: Node): IrWhatsApp | undefin
     }
   }
 
-  let body: readonly IrNode[] = [];
+  let body: readonly CompiledNode[] = [];
   const bodyNode = parts.get("Body");
   if (bodyNode === undefined)
     lowerer.error(
@@ -555,9 +559,9 @@ const buttonList = (
   ctx: Ctx,
   local: string,
   parent: Node,
-): readonly IrWhatsAppButtonNode[] => {
+): readonly CompiledWhatsAppButtonNode[] => {
   const { lowerer } = input;
-  const label = (element: Node, what: string): IrValue | undefined => {
+  const label = (element: Node, what: string): CompiledValue | undefined => {
     const nodes = lowerer.jsxChildren(ctx, element);
     if (!valueOnly(nodes) || nodes.length === 0) {
       lowerer.error(
@@ -583,7 +587,7 @@ const buttonList = (
       );
     return value;
   };
-  const attribute = (element: Node, name: string | undefined): IrValue | undefined => {
+  const attribute = (element: Node, name: string | undefined): CompiledValue | undefined => {
     const bindings = lowerer.attributeBindings(ctx, attributesOf(element));
     if (bindings === undefined) return undefined;
     const known = attributesOf(element).map((item) => text(child(item, "name") ?? item, "name"));
@@ -610,7 +614,7 @@ const buttonList = (
     return value;
   };
   // Samva resolves the flow handle when it registers the template, so these are string literals.
-  const flowButton = (element: Node): IrWhatsAppButton | undefined => {
+  const flowButton = (element: Node): CompiledWhatsAppButton | undefined => {
     const label_ = label(element, "label");
     const values = new Map<string, string>();
     let valid = true;
@@ -703,7 +707,7 @@ const buttonList = (
       ...(screen === undefined ? {} : { screen }),
     };
   };
-  const single = (element: Node): IrWhatsAppButton | undefined => {
+  const single = (element: Node): CompiledWhatsAppButton | undefined => {
     const tag = tagOf(element);
     const kind = tag.startsWith(`${local}.`) ? tag.slice(local.length + 1) : "";
     switch (kind) {
@@ -743,7 +747,7 @@ const buttonList = (
         return undefined;
     }
   };
-  const expression = (node: Node): IrWhatsAppButtonNode[] => {
+  const expression = (node: Node): CompiledWhatsAppButtonNode[] => {
     const inner = unwrap(node);
     switch (inner.type) {
       case "JSXElement": {
@@ -772,7 +776,7 @@ const buttonList = (
         const consequent = child(inner, "consequent");
         const alternate = child(inner, "alternate");
         if (test === undefined || consequent === undefined || alternate === undefined) return [];
-        const predicate: IrPredicate | undefined = lowerer.predicate(ctx, test);
+        const predicate: CompiledPredicate | undefined = lowerer.predicate(ctx, test);
         const then = expression(consequent);
         const otherwise = expression(alternate);
         return predicate === undefined
@@ -798,8 +802,8 @@ const buttonList = (
     );
     return [];
   };
-  const fragment = (node: Node): IrWhatsAppButtonNode[] => {
-    const output: IrWhatsAppButtonNode[] = [];
+  const fragment = (node: Node): CompiledWhatsAppButtonNode[] => {
+    const output: CompiledWhatsAppButtonNode[] = [];
     for (const item of children(node, "children")) {
       if (item.type === "JSXText") {
         if ((text(item, "value") ?? "").trim() !== "")
@@ -823,7 +827,7 @@ const buttonList = (
 
 export const channelBodies = (
   input: ChannelInput,
-): { readonly sms?: IrSms; readonly whatsapp?: IrWhatsApp } => {
+): { readonly sms?: CompiledSms; readonly whatsapp?: CompiledWhatsApp } => {
   const smsField = input.fields.get("sms");
   const whatsappField = input.fields.get("whatsapp");
   const sms = smsField === undefined ? undefined : smsChannel(input, smsField);

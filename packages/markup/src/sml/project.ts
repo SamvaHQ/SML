@@ -205,7 +205,9 @@ export const loadProject = (
             }
             break;
           }
-          if (parseBrandSpecifier(specifier, loadOptions.brandPlugin) !== undefined) {
+          if (
+            parseBrandSpecifier(specifier, { brandPlugin: loadOptions.brandPlugin }) !== undefined
+          ) {
             for (const item of specifiers)
               if (text(item, "importKind") !== "type")
                 imports.set(local(item), {

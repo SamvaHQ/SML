@@ -3,7 +3,7 @@
 // `./compiler` lets the compiler load in a browser.
 
 export {
-  checkEmailCompatibility,
+  checkHtmlCompatibility,
   COMPATIBILITY_PROVENANCE,
   EMAIL_CLIENT_MATRIX,
   ESSENTIAL_CONSTRUCTS,
@@ -13,4 +13,4 @@ export {
   type CompatibilityProvenance,
   type EmailClientTarget,
 } from "./email/compatibility";
-export { checkTemplateCompatibility } from "./sml/compatibility";
+export { checkCompatibility } from "./sml/compatibility";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { renderIr } from "../src/render-ir";
+import { render as renderTemplate } from "../src/render-template";
 import { compileTemplate } from "../src/sml/compile";
 
 // The design layer through the static compiler: the default theme every project compiles
@@ -39,7 +39,7 @@ const build = async (body: string, theme?: string) => {
     compiled,
     failures,
     render: (fixture: "vip" | "plain" = "vip") =>
-      renderIr(compiled.ir!, compiled.fixtures[fixture]).html,
+      renderTemplate(compiled.template!, compiled.fixtures[fixture], { channel: "email" }).html,
   };
 };
 

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { checkEmailCompatibility } from "../src/email/compatibility";
+import { checkHtmlCompatibility } from "../src/email/compatibility";
 
 const findings = (style: string, title: string) =>
-  checkEmailCompatibility({
+  checkHtmlCompatibility({
     html: `<html><body><p style="${style}">Hello</p></body></html>`,
   }).filter((finding) => finding.code === `caniemail/${title}`);
 
@@ -15,7 +15,7 @@ describe("compatibility applicability", () => {
     expect(
       findings("font-size:1rem", "font-size").some((item) => item.severity === "warning"),
     ).toBe(true);
-    const mixed = checkEmailCompatibility({
+    const mixed = checkHtmlCompatibility({
       html: '<p style="font-size:14px">One</p><p style="font-size:1rem">Two</p>',
     });
     expect(mixed.find((item) => item.code === "caniemail/font-size")?.severity).toBe("warning");
@@ -29,13 +29,12 @@ describe("compatibility applicability", () => {
       { html: '<p style="font-size:14px">Hello</p>', css: "p{font-size:1rem}" },
     ])
       expect(
-        checkEmailCompatibility(input).find((item) => item.code === "caniemail/font-size")
-          ?.severity,
+        checkHtmlCompatibility(input).find((item) => item.code === "caniemail/font-size")?.severity,
       ).toBe("warning");
   });
 
   it("checks features present only in separately supplied retained CSS", () => {
-    const result = checkEmailCompatibility({ html: "<p>Hello</p>", css: "p{font-size:1rem}" });
+    const result = checkHtmlCompatibility({ html: "<p>Hello</p>", css: "p{font-size:1rem}" });
     expect(result.find((item) => item.code === "caniemail/font-size")?.severity).toBe("warning");
   });
 
@@ -71,7 +70,7 @@ describe("compatibility applicability", () => {
       ["_blank", "info"],
       ["_self", "warning"],
     ]) {
-      const result = checkEmailCompatibility({
+      const result = checkHtmlCompatibility({
         html: `<a href="https://example.com" target="${target}">Open</a>`,
       });
       const targets = result.filter((item) => item.code === "caniemail/target-attribute");
@@ -102,7 +101,7 @@ describe("compatibility applicability", () => {
       lineNumber,
       columnNumber: 3,
     });
-    const result = checkEmailCompatibility({
+    const result = checkHtmlCompatibility({
       html,
       fixture: "long-content",
       positions: [

@@ -1,5 +1,6 @@
-import type { RenderedIrEmail, RenderOptions, TemplateIr } from "./ir";
-import { renderIr } from "./render-ir";
+import type { CompiledTemplate } from "./compiled-template";
+import type { BrandPlugin } from "./email/brand-plugin";
+import { renderEmail } from "./render-template";
 import type { JsxSourceLocation } from "./source-locations";
 
 // A rendered email is what a visual editor points at, and source is what it edits. These are the
@@ -66,7 +67,7 @@ export interface EmailElementSelection {
 }
 
 /** A render of one fixture for an editor: the delivered content plus the identity of every element. */
-export interface IrPreview {
+export interface EmailPreview {
   readonly subject: string;
   readonly preheader: string | undefined;
   /** Carries `INSTANCE_PATH_ATTRIBUTE` on every element. Preview-only. */
@@ -139,13 +140,17 @@ interface Placed {
  * resolves to. The selections come from the spans the compiler recorded, so a click on the canvas
  * lands on the exact node of the source that produced it.
  */
-export const renderIrPreview = (
-  ir: TemplateIr,
+export const previewEmail = (
+  template: CompiledTemplate,
   input: unknown,
-  options: Omit<RenderOptions, "positions"> = {},
-): IrPreview => {
-  const rendered: RenderedIrEmail = renderIr(ir, input, { ...options, positions: true });
-  const sources = ir.sources ?? [];
+  options: {
+    readonly locale?: string | undefined;
+    readonly timeZone?: string | undefined;
+    readonly brandPlugin?: BrandPlugin | undefined;
+  } = {},
+): EmailPreview => {
+  const rendered = renderEmail(template, input, { ...options, positions: true });
+  const sources = template.sources ?? [];
   const ordered = (rendered.positions ?? [])
     .map((position): Placed => {
       const src = position.src;

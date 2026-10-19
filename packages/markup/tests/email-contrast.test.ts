@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { checkEmailCompatibility } from "../src/email/compatibility";
+import { checkHtmlCompatibility } from "../src/email/compatibility";
 import { checkEmailContrast } from "../src/email/contrast";
 
 const DARK = (rules: string): string =>
@@ -122,7 +122,7 @@ describe("email contrast", () => {
       DARK(".card{background-color:#1d1a14!important}"),
       `<div class="card" style="background-color:#ffffff"><p style="color:#17140f">Hello</p></div>`,
     );
-    const found = checkEmailCompatibility({ html }).filter(
+    const found = checkHtmlCompatibility({ html }).filter(
       (finding) => finding.code === "email-contrast",
     );
     expect(found).toHaveLength(1);

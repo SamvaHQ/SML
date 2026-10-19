@@ -3,7 +3,7 @@
  * @jsxImportSource react
  */
 import { afterEach, describe, expect, it } from "@effect/vitest";
-import { INSTANCE_PATH_ATTRIBUTE } from "@samva/markup/render";
+import { INSTANCE_PATH_ATTRIBUTE } from "@samva/markup/edit";
 import { cleanup, render, waitFor } from "@testing-library/react";
 
 import { App } from "../dev/App";

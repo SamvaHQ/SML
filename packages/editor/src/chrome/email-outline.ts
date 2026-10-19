@@ -1,6 +1,6 @@
 import type { JsxSourceLocation } from "@samva/markup/edit";
-import type { EmailElementSelection } from "@samva/markup/render";
-import { emailSelectionIndex } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
+import { emailSelectionIndex } from "@samva/markup/edit";
 
 /**
  * The editor's tree view of one render. It is built from the render's own

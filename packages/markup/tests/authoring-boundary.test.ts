@@ -248,9 +248,9 @@ describe("SML authoring public boundary", () => {
     for (const specifier of [
       "@samva/core",
       "@nucleo/ui/outline",
-      "@samva/markup/src/ir",
-      "@samva/markup/render/../src/ir",
-      "../../markup/src/ir",
+      "@samva/markup/src/compiled-template",
+      "@samva/markup/render/../src/compiled-template",
+      "../../markup/src/compiled-template",
       "/absolute/module",
       "undeclared-library",
       "reactive/unlisted",

@@ -38,8 +38,9 @@ export const brandSpecifierPattern = (plugin: BrandPlugin): string =>
 /** The brand a specifier names: `undefined` slug means the default brand; `undefined` when it names none. */
 export const parseBrandSpecifier = (
   specifier: string,
-  plugin: BrandPlugin = samvaBrandPlugin,
+  options: { readonly brandPlugin?: BrandPlugin | undefined } = {},
 ): { readonly slug: string | undefined } | undefined => {
+  const plugin = options.brandPlugin ?? samvaBrandPlugin;
   const match = new RegExp(`^${escapeRegExp(plugin.specifier)}(?:\\/(${SLUG}))?$`).exec(specifier);
   return match === null ? undefined : { slug: match[1] };
 };

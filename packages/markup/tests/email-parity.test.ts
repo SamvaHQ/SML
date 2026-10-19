@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 
 import { compileTemplate } from "../src/compiler";
-import { renderIr } from "../src/render-ir";
+import { render } from "../src/render-template";
 import {
   PARITY_COMPILE_DIGEST,
   PARITY_COMPILE_OPTIONS,
@@ -24,12 +24,10 @@ it("compiles and renders the parity corpus to the golden digests", async () => {
     ...PARITY_COMPILE_OPTIONS,
   });
   expect(compiled.diagnostics).toEqual([]);
-  expect(compiled.ir).toBeDefined();
-  if (compiled.ir === undefined) return;
-  expect(await parityDigest(parityCompileText({ ...compiled, ir: compiled.ir }))).toBe(
-    PARITY_COMPILE_DIGEST,
-  );
-  expect(await parityDigests(renderIr(compiled.ir, compiled.fixtures.basic))).toEqual(
-    PARITY_DIGESTS,
-  );
+  expect(compiled.template).toBeDefined();
+  if (compiled.template === undefined) return;
+  expect(await parityDigest(parityCompileText(compiled))).toBe(PARITY_COMPILE_DIGEST);
+  expect(
+    await parityDigests(render(compiled.template, compiled.fixtures.basic, { channel: "email" })),
+  ).toEqual(PARITY_DIGESTS);
 });

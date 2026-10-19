@@ -1,7 +1,14 @@
+import type {
+  CompiledElement,
+  CompiledNode,
+  CompiledPredicate,
+  CompiledSource,
+  CompiledStyle,
+  CompiledValue,
+} from "../compiled-template";
 // oxlint-disable samva/no-hand-rolled-object-guard -- IR nodes and Babel nodes are this package's own typed data, discriminated structurally; nothing here validates external input.
 import type { DiagnosticCode } from "../diagnostic-codes";
 import { emailElement } from "../email/elements";
-import type { IrElement, IrNode, IrPredicate, IrSource, IrStyle, IrValue } from "../ir";
 import { isValueNode } from "./bindings";
 import { didYouMean } from "./suggest";
 
@@ -15,7 +22,7 @@ export interface CheckFinding {
   readonly code: DiagnosticCode;
   readonly message: string;
   readonly fix?: string;
-  readonly src: IrSource | undefined;
+  readonly src: CompiledSource | undefined;
 }
 
 type ValueType = "string" | "number" | "boolean" | "array" | "object" | "unknown";
@@ -142,10 +149,10 @@ const prefixes = (path: string): string[] => {
   return segments.map((_, index) => segments.slice(0, index + 1).join("."));
 };
 
-const bindPath = (value: IrValue): string | undefined =>
+const bindPath = (value: CompiledValue): string | undefined =>
   typeof value === "object" && value !== null && "bind" in value ? value.bind : undefined;
 
-const guardsOf = (predicate: IrPredicate, positive: boolean): ReadonlySet<string> => {
+const guardsOf = (predicate: CompiledPredicate, positive: boolean): ReadonlySet<string> => {
   const own = (path: string | undefined): ReadonlySet<string> =>
     path === undefined ? new Set() : new Set(prefixes(path));
   if ("present" in predicate) return positive ? own(predicate.present) : new Set();
@@ -190,8 +197,8 @@ const guardsOf = (predicate: IrPredicate, positive: boolean): ReadonlySet<string
 /** Check every binding in a lowered email or channel body against the input schema. */
 export const checkBindings = (
   schema: Schema,
-  roots: readonly IrNode[],
-  values: readonly IrValue[],
+  roots: readonly CompiledNode[],
+  values: readonly CompiledValue[],
 ): readonly CheckFinding[] => {
   const findings: CheckFinding[] = [];
   const reported = new Set<string>();
@@ -206,7 +213,11 @@ export const checkBindings = (
     path.startsWith("$") ? path.slice(1) : `input.${path}`;
 
   /** Resolve a bound path, reporting unknown and unguarded fields. Returns its schema when known. */
-  const walk = (path: string, scope: Scope, src: IrSource | undefined): Schema | undefined => {
+  const walk = (
+    path: string,
+    scope: Scope,
+    src: CompiledSource | undefined,
+  ): Schema | undefined => {
     const segments = path.split(".");
     const head = segments[0]!;
     let current: Schema | undefined;
@@ -239,7 +250,7 @@ export const checkBindings = (
     segment: string,
     stepResult: Step,
     prefix: string,
-    src: IrSource | undefined,
+    src: CompiledSource | undefined,
     full: string,
   ): undefined => {
     if (stepResult.open) return undefined;
@@ -257,7 +268,7 @@ export const checkBindings = (
     return undefined;
   };
 
-  const unguarded = (path: string, src: IrSource | undefined): void => {
+  const unguarded = (path: string, src: CompiledSource | undefined): void => {
     report({
       code: "unguarded-optional",
       message: `\`${display(path)}\` is optional and is read outside a guard, so a send without it would render a blank.`,
@@ -266,7 +277,11 @@ export const checkBindings = (
     });
   };
 
-  const valueType = (value: IrValue, scope: Scope, src: IrSource | undefined): ValueType => {
+  const valueType = (
+    value: CompiledValue,
+    scope: Scope,
+    src: CompiledSource | undefined,
+  ): ValueType => {
     if (typeof value === "string") return "string";
     if (typeof value === "number") return "number";
     if (typeof value === "boolean") return "boolean";
@@ -313,10 +328,10 @@ export const checkBindings = (
   };
 
   const requireType = (
-    value: IrValue,
+    value: CompiledValue,
     expected: ValueType,
     scope: Scope,
-    src: IrSource | undefined,
+    src: CompiledSource | undefined,
     where: string,
   ): void => {
     const actual = valueType(value, scope, src);
@@ -335,9 +350,9 @@ export const checkBindings = (
 
   const checkFormat = (
     name: string,
-    args: readonly IrValue[],
+    args: readonly CompiledValue[],
     scope: Scope,
-    src: IrSource | undefined,
+    src: CompiledSource | undefined,
   ): void => {
     const expected: Record<string, readonly (ValueType | undefined)[]> = {
       money: ["number", "string", "string"],
@@ -355,9 +370,9 @@ export const checkBindings = (
   };
 
   const visitPredicate = (
-    predicate: IrPredicate,
+    predicate: CompiledPredicate,
     scope: Scope,
-    src: IrSource | undefined,
+    src: CompiledSource | undefined,
   ): void => {
     if ("present" in predicate) {
       // A guard reads the field, so it is exempt from the guard requirement itself.
@@ -409,11 +424,15 @@ export const checkBindings = (
   };
 
   /** Reading a field to test it is what a guard is; only the field itself must exist. */
-  const walkGuard = (path: string, scope: Scope, src: IrSource | undefined): void => {
+  const walkGuard = (path: string, scope: Scope, src: CompiledSource | undefined): void => {
     walk(path, { ...scope, guards: new Set([...scope.guards, ...prefixes(path)]) }, src);
   };
 
-  const valueTypeGuard = (value: IrValue, scope: Scope, src: IrSource | undefined): void => {
+  const valueTypeGuard = (
+    value: CompiledValue,
+    scope: Scope,
+    src: CompiledSource | undefined,
+  ): void => {
     if (typeof value === "object" && value !== null && "length" in value) {
       const path = bindPath(value.length);
       if (path !== undefined) {
@@ -424,7 +443,12 @@ export const checkBindings = (
     valueType(value, scope, src);
   };
 
-  const scalar = (value: IrValue, scope: Scope, src: IrSource | undefined, where: string): void => {
+  const scalar = (
+    value: CompiledValue,
+    scope: Scope,
+    src: CompiledSource | undefined,
+    where: string,
+  ): void => {
     const type = valueType(value, scope, src);
     if (type === "array" || type === "object") {
       const path = bindPath(value);
@@ -441,23 +465,27 @@ export const checkBindings = (
   };
 
   const visitStyle = (
-    style: IrStyle | undefined,
+    style: CompiledStyle | undefined,
     scope: Scope,
-    src: IrSource | undefined,
+    src: CompiledSource | undefined,
   ): void => {
     if (style === undefined || typeof style === "string") return;
     if (Array.isArray(style)) {
-      for (const [, value] of style as readonly (readonly [string, IrValue])[])
+      for (const [, value] of style as readonly (readonly [string, CompiledValue])[])
         scalar(value, scope, src, "a style value");
       return;
     }
-    const conditional = style as { if: IrPredicate; then: IrStyle; else: IrStyle };
+    const conditional = style as {
+      if: CompiledPredicate;
+      then: CompiledStyle;
+      else: CompiledStyle;
+    };
     visitPredicate(conditional.if, scope, src);
     visitStyle(conditional.then, withGuards(scope, guardsOf(conditional.if, true)), src);
     visitStyle(conditional.else, withGuards(scope, guardsOf(conditional.if, false)), src);
   };
 
-  const visit = (nodes: readonly IrNode[], scope: Scope, parent?: IrSource): void => {
+  const visit = (nodes: readonly CompiledNode[], scope: Scope, parent?: CompiledSource): void => {
     for (const node of nodes) {
       if (isValueNode(node)) {
         scalar(node, scope, parent, "text");
@@ -525,17 +553,17 @@ export const checkBindings = (
 
 /** The element content rules the serializer enforces, checked before any send. */
 export const checkStructure = (
-  roots: readonly IrNode[],
+  roots: readonly CompiledNode[],
   report: (finding: CheckFinding) => void,
 ): void => {
-  const flat = (nodes: readonly IrNode[]): readonly IrNode[] =>
+  const flat = (nodes: readonly CompiledNode[]): readonly CompiledNode[] =>
     nodes.flatMap((node) => {
       if (isValueNode(node)) return [node];
       if ("if" in node) return [...flat(node.then), ...flat(node.else ?? [])];
       if ("each" in node) return flat(node.children);
       return [node];
     });
-  const visit = (nodes: readonly IrNode[]): void => {
+  const visit = (nodes: readonly CompiledNode[]): void => {
     for (const node of nodes) {
       if (isValueNode(node)) continue;
       if ("el" in node) checkElement(node);
@@ -545,7 +573,7 @@ export const checkStructure = (
       } else if ("each" in node) visit(node.children);
     }
   };
-  const checkElement = (element: IrElement): void => {
+  const checkElement = (element: CompiledElement): void => {
     const spec = emailElement(element.el);
     const kids = flat(element.children ?? []);
     if (spec === undefined) return;

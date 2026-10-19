@@ -53,7 +53,7 @@ describe("browser entries without process", () => {
 
   it("compiles and renders through ./compiler and ./render", async () => {
     const html = await withoutProcess(async () => {
-      const [{ compileTemplate }, { renderIr }] = await Promise.all([
+      const [{ compileTemplate }, { render }] = await Promise.all([
         import("../src/compiler"),
         import("../src/render"),
       ]);
@@ -65,7 +65,7 @@ describe("browser entries without process", () => {
         brand: BRAND,
       });
       expect(compiled.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
-      return renderIr(compiled.ir!, {}).html;
+      return render(compiled.template!, {}, { channel: "email" }).html;
     });
     expect(html).toContain("background-color:#e11d48");
     expect(html).toContain("#fb7185");

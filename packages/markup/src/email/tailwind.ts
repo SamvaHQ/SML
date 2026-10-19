@@ -217,7 +217,7 @@ export const compileTailwind = async (
     loadStylesheet: (id: string, base: string) => {
       const builtIn = STYLESHEETS[id];
       if (builtIn !== undefined) return Promise.resolve({ path: id, base, content: builtIn });
-      if (parseBrandSpecifier(id, imports.brandPlugin) !== undefined) {
+      if (parseBrandSpecifier(id, { brandPlugin: imports.brandPlugin }) !== undefined) {
         if (imports.brandCss === undefined)
           // oxlint-disable-next-line samva/no-try-catch-or-throw, samva/no-error-constructor -- Unreachable after resolveThemeImports; a brand import without a brand is refused before Tailwind runs.
           throw new TypeError(`${id} has no brand in this build`);

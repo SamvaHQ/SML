@@ -1,7 +1,15 @@
+import type {
+  CompiledElement,
+  CompiledNode,
+  CompiledRaw,
+  CompiledRawPart,
+  CompiledSource,
+  CompiledStyle,
+  CompiledValue,
+} from "../compiled-template";
 import type { EmailNode } from "../email/jsx-runtime";
 import { isObject } from "../internal/guards";
 import { BRAND_FOOTER_MARKER } from "../internal/unsubscribe-link";
-import type { IrElement, IrNode, IrRaw, IrRawPart, IrSource, IrStyle, IrValue } from "../ir";
 import { isStaticScalar } from "./bindings";
 
 // The email primitives are ordinary functions from props to a tree, and they know things (the
@@ -16,19 +24,19 @@ const OPEN = "";
 const CLOSE = "";
 const TOKEN = /(\d+)/g;
 
-type Entry = { readonly value: IrValue } | { readonly nodes: readonly IrNode[] };
+type Entry = { readonly value: CompiledValue } | { readonly nodes: readonly CompiledNode[] };
 
 /** Values and node lists a component call reads at render time, addressable from inside a string. */
 export class Tokens {
   private readonly entries: Entry[] = [];
 
-  value(value: IrValue): string {
+  value(value: CompiledValue): string {
     if (typeof value === "string") return value;
     this.entries.push({ value });
     return `${OPEN}${this.entries.length - 1}${CLOSE}`;
   }
 
-  nodes(nodes: readonly IrNode[]): string {
+  nodes(nodes: readonly CompiledNode[]): string {
     this.entries.push({ nodes });
     return `${OPEN}${this.entries.length - 1}${CLOSE}`;
   }
@@ -48,10 +56,10 @@ export class Tokens {
   }
 
   /** The value a string with tokens stands for: itself, one entry's value, or their concatenation. */
-  toValue(input: string): IrValue | undefined {
+  toValue(input: string): CompiledValue | undefined {
     const parts = this.parse(input);
     if (parts.length === 0) return "";
-    const values: IrValue[] = [];
+    const values: CompiledValue[] = [];
     for (const part of parts) {
       if (typeof part === "string") values.push(part);
       else if ("value" in part) values.push(part.value);
@@ -62,14 +70,15 @@ export class Tokens {
 }
 
 /** A prop value for a primitive: a literal stays itself and anything else becomes a token. */
-export const propFor = (tokens: Tokens, value: IrValue): unknown =>
+export const propFor = (tokens: Tokens, value: CompiledValue): unknown =>
   isStaticScalar(value) ? value : tokens.value(value);
 
-const SOURCE = (source: IrSource | undefined) => (source === undefined ? {} : { src: source });
+const SOURCE = (source: CompiledSource | undefined) =>
+  source === undefined ? {} : { src: source };
 
 /** Split compatibility markup into parts, deciding by position whether a token is in a tag. */
-export const rawParts = (tokens: Tokens, html: string): readonly IrRawPart[] => {
-  const parts: IrRawPart[] = [];
+export const rawParts = (tokens: Tokens, html: string): readonly CompiledRawPart[] => {
+  const parts: CompiledRawPart[] = [];
   let inTag = false;
   let quote: string | undefined;
   let buffer = "";
@@ -100,9 +109,9 @@ export const rawParts = (tokens: Tokens, html: string): readonly IrRawPart[] => 
   return parts;
 };
 
-const styleList = (tokens: Tokens, style: unknown): IrStyle | undefined => {
+const styleList = (tokens: Tokens, style: unknown): CompiledStyle | undefined => {
   if (!isObject(style)) return undefined;
-  const entries: (readonly [string, IrValue])[] = [];
+  const entries: (readonly [string, CompiledValue])[] = [];
   for (const [property, value] of Object.entries(style)) {
     if (value === undefined || value === null) continue;
     if (typeof value === "number") entries.push([property, value]);
@@ -118,12 +127,12 @@ const styleList = (tokens: Tokens, style: unknown): IrStyle | undefined => {
 export const emailNodeToIr = (
   node: EmailNode | null,
   tokens: Tokens,
-  source: IrSource | undefined,
-): readonly IrNode[] => {
+  source: CompiledSource | undefined,
+): readonly CompiledNode[] => {
   if (node === null) return [];
   switch (node.type) {
     case "Text": {
-      const output: IrNode[] = [];
+      const output: CompiledNode[] = [];
       for (const part of tokens.parse(node.value)) {
         if (typeof part === "string") output.push(part);
         else if ("value" in part) output.push(part.value);
@@ -139,11 +148,11 @@ export const emailNodeToIr = (
           raw: rawParts(tokens, node.html),
           ...(node.text === "" ? {} : { text: node.text }),
           ...SOURCE(source),
-        } satisfies IrRaw,
+        } satisfies CompiledRaw,
       ];
     case "Element": {
-      const attrs: Record<string, IrValue> = {};
-      let style: IrStyle | undefined;
+      const attrs: Record<string, CompiledValue> = {};
+      let style: CompiledStyle | undefined;
       for (const [key, value] of Object.entries(node.props)) {
         if (key === "key" || value === undefined || value === null || value === false) continue;
         if (key === "style") {
@@ -156,7 +165,7 @@ export const emailNodeToIr = (
       }
       const reserved =
         (node.props as Readonly<Record<PropertyKey, unknown>>)[BRAND_FOOTER_MARKER] === true;
-      const element: IrElement = {
+      const element: CompiledElement = {
         el: node.tag,
         ...(Object.keys(attrs).length === 0 ? {} : { attrs }),
         ...(style === undefined || (Array.isArray(style) && style.length === 0) ? {} : { style }),

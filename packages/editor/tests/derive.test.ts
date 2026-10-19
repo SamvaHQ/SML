@@ -8,7 +8,7 @@ import type {
 } from "@samva/editor/host";
 import type { EmailDiagnostic } from "@samva/markup/diagnostics";
 import type { JsxSourceLocation } from "@samva/markup/edit";
-import type { EmailElementSelection } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
 
 import { emailOutline } from "../src/chrome/email-outline";
 import {

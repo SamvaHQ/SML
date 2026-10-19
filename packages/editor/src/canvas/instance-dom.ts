@@ -1,4 +1,4 @@
-import { INSTANCE_PATH_ATTRIBUTE } from "@samva/markup/render";
+import { INSTANCE_PATH_ATTRIBUTE } from "@samva/markup/edit";
 
 export interface Box {
   readonly top: number;

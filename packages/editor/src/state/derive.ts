@@ -1,6 +1,6 @@
 import type { DocumentChange, EditorDocument, EmailRender } from "@samva/editor/host";
 import type { EmailDiagnostic } from "@samva/markup/diagnostics";
-import type { EmailElementSelection } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
 
 import { emailOutline, type EmailOutline } from "../chrome/email-outline";
 import { DOCUMENT_SELECTION, type CheckItem, type EditorSelection } from "./types";

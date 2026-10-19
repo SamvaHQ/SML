@@ -28,11 +28,15 @@ const asFiles = (
  * and the entry's path. Imports of files that are absent are trusted to exist, and the brand,
  * Tailwind and theme are not resolved, so the result holds only findings the source itself owns.
  */
-export const checkStaticProfile = (
+export const checkTemplate = (
   files: string | Readonly<Record<string, string | Uint8Array>>,
-  entry: string = DEFAULT_ENTRY,
-  brandPlugin: BrandPlugin = samvaBrandPlugin,
+  options: {
+    readonly entry?: string | undefined;
+    readonly brandPlugin?: BrandPlugin | undefined;
+  } = {},
 ): readonly TemplateDiagnostic[] => {
+  const entry = options.entry ?? DEFAULT_ENTRY;
+  const brandPlugin = options.brandPlugin ?? samvaBrandPlugin;
   const findings = new Findings();
   const project = loadProject(asFiles(files, entry), entry, findings, {
     brandPlugin,
@@ -62,7 +66,7 @@ const key = (item: TemplateDiagnostic): string => `${item.code}\0${item.message}
  * The errors in `after` that `before` did not already have, compared by code and message so a
  * finding that only moved does not count as new.
  */
-export const introducedProfileErrors = (
+export const introducedErrors = (
   before: readonly TemplateDiagnostic[],
   after: readonly TemplateDiagnostic[],
 ): readonly TemplateDiagnostic[] => {

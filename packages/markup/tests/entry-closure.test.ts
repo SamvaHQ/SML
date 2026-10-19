@@ -7,6 +7,9 @@ import { describe, expect, it } from "@effect/vitest";
 // the compiler's libraries so the send path never bundles Tailwind, css-tree, caniemail or Babel.
 // `./brand` is imported by the send path and the dashboard as well. It parses `theme.css` with
 // css-tree, but compiling (Tailwind, Babel, caniemail) stays behind `./compiler`.
+// `./edit` runs in the editor's browser bundle: Babel's parser reads the source it edits, and the
+// profile guard it applies (`sml/profile`) reads theme imports with css-tree. Tailwind and
+// caniemail never load.
 // `./compiler` runs in the browser too (the dashboard's brand preview). caniemail's glob dependency
 // reads Node's `process` when it loads, so caniemail lives behind `./compatibility` alone
 // (`browser-entries.test.ts` evaluates `./compiler` without `process`).
@@ -42,6 +45,7 @@ const closure = (entry: string) => {
 describe("entry import closure", () => {
   it.each([
     { entry: "render.ts", allowed: [] },
+    { entry: "edit.ts", allowed: ["@babel/parser", "css-tree"] },
     { entry: "brand.ts", allowed: ["css-tree"] },
     { entry: "compiler.ts", allowed: ["@babel/parser", "css-tree", "tailwindcss"] },
   ])("keeps $entry free of the compiler's libraries", ({ entry, allowed }) => {

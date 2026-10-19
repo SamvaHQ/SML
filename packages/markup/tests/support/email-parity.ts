@@ -145,10 +145,10 @@ export const parityDigest = async (value: string): Promise<string> =>
 
 /** Canonical text for a whole project compile, so both hosts digest one thing. */
 export const parityCompileText = (compiled: {
-  readonly ir: unknown;
+  readonly template: unknown;
   readonly assets: readonly { readonly path: string; readonly digest: string }[];
 }): string =>
-  JSON.stringify([compiled.ir, compiled.assets.map((asset) => [asset.path, asset.digest])]);
+  JSON.stringify([compiled.template, compiled.assets.map((asset) => [asset.path, asset.digest])]);
 
 /** Every part of a render, digested, ready to compare against the golden values. */
 export const parityDigests = async (rendered: {

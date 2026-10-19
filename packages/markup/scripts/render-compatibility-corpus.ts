@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { assetEntry, assetUrl } from "../src/email/assets";
 import {
-  checkEmailCompatibility,
+  checkHtmlCompatibility,
   COMPATIBILITY_PROVENANCE,
   EMAIL_CLIENT_MATRIX,
 } from "../src/email/compatibility";
@@ -56,7 +56,7 @@ const render = async (entry: CorpusCase, logoUrl: string) => {
     relativeUrls: !entry.emailable,
   });
   const emitted = serializeEmailHtml(rendered.tree);
-  const findings = checkEmailCompatibility({
+  const findings = checkHtmlCompatibility({
     html: emitted.html,
     positions: emitted.positions,
   });

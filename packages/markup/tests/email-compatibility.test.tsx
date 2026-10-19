@@ -2,7 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 
 import {
-  checkEmailCompatibility,
+  checkHtmlCompatibility,
   COMPATIBILITY_PROVENANCE,
   EMAIL_CLIENT_MATRIX,
   unknownCoverage,
@@ -16,7 +16,7 @@ const check = (tree: Parameters<typeof serializeEmailHtml>[0]) => {
   const emitted = serializeEmailHtml(tree);
   return {
     emitted,
-    findings: checkEmailCompatibility({ html: emitted.html, positions: emitted.positions }),
+    findings: checkHtmlCompatibility({ html: emitted.html, positions: emitted.positions }),
   };
 };
 
@@ -112,7 +112,7 @@ describe("findings map back to the authoring element", () => {
     // still sees them, because it reads what the compiler produced.
     const rendered = renderEmail(receipt, receiptFixtures.typical);
     const emitted = serializeEmailHtml(rendered.tree);
-    const findings = checkEmailCompatibility({
+    const findings = checkHtmlCompatibility({
       html: emitted.html,
       positions: emitted.positions,
     });

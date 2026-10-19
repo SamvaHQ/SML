@@ -8,9 +8,9 @@ import {
   withoutUnsubscribeRow,
   type EmailBrand,
 } from "../src/email/brand";
-import { renderBrandFooter } from "../src/email/brand-footer";
 import { samvaBrandPlugin } from "../src/email/brand-plugin";
 import { EmailCompileError } from "../src/email/diagnostics";
+import { compileFooter } from "../src/email/footer";
 import { compileEmail } from "../src/email/render";
 import { transformProject } from "../src/email/transform";
 import { diagnosticCodes } from "./fixtures/email-compile";
@@ -153,8 +153,10 @@ describe("samva:brand in TSX", () => {
 });
 
 describe("the send path's view of a footer", () => {
-  it("renders the fallback footer from the brand, with or without the unsubscribe row", async () => {
-    const withLink = await renderBrandFooter(BRAND, { unsubscribe: true });
+  it("compiles the fallback footer from the brand, which a send strips of its unsubscribe row", async () => {
+    const compiled = await compileFooter(BRAND);
+    expect(compiled.diagnostics).toEqual([]);
+    const withLink = compiled.footer!;
     expect(withLink.html).toContain(`${FOOTER_ATTRIBUTE}=""`);
     expect(withLink.html).toContain("Acme Inc.");
     // Styled by the compiled utilities, inline.
@@ -164,8 +166,8 @@ describe("the send path's view of a footer", () => {
     expect(renderedFooterMarkers(withLink.html)).toEqual({ footer: true, unsubscribeLink: true });
     expect(withLink.text).toContain(`Unsubscribe (${UNSUBSCRIBE_URL_PLACEHOLDER})`);
 
-    const withoutLink = await renderBrandFooter(BRAND, { unsubscribe: false });
-    expect(renderedFooterMarkers(withoutLink.html)).toEqual({
+    const withoutLink = withoutUnsubscribeRow(withLink);
+    expect(renderedFooterMarkers(withoutLink.html ?? "")).toEqual({
       footer: true,
       unsubscribeLink: false,
     });
@@ -174,11 +176,21 @@ describe("the send path's view of a footer", () => {
   });
 
   it("lets a brand's theme restyle the footer's own utilities", async () => {
-    const themed = await renderBrandFooter(
-      { ...BRAND, css: "@theme {\n  --color-muted-foreground: #123456;\n}" },
-      { unsubscribe: true },
-    );
-    expect(themed.html).toContain("color:#123456");
+    const themed = await compileFooter({
+      ...BRAND,
+      css: "@theme {\n  --color-muted-foreground: #123456;\n}",
+    });
+    expect(themed.footer?.html).toContain("color:#123456");
+  });
+
+  it("returns diagnostics, and no footer, for a brand theme outside the grammar", async () => {
+    const compiled = await compileFooter({ ...BRAND, css: ".brand { color: red; }" });
+    expect(compiled.footer).toBeUndefined();
+    expect(compiled.diagnostics.length).toBeGreaterThan(0);
+    for (const diagnostic of compiled.diagnostics) {
+      expect(diagnostic.severity).toBe("error");
+      expect(diagnostic.message).toContain("samva:brand");
+    }
   });
 
   it("strips the unsubscribe row from a rendered template when no group resolved", () => {

@@ -1,6 +1,6 @@
 {
   "contract": 1,
-  "irVersion": 1,
+  "compiledTemplateVersion": 1,
   "template": {
     "extension": ".tsx",
     "directories": ["templates", "emails"],
@@ -14,7 +14,7 @@
     "emailBody": "{ subject, preheader?, body }, each a function of the validated input",
     "schema": "Any Standard JSON Schema converter, or a literal jsonSchema<Input>({ ... }); portable JSON Schema 2020-12. It validates every send and drives the binding checker. No coercion and no inserted defaults.",
     "fixtures": "Named payloads that must validate. At least one. Each is a preview and a publish check.",
-    "execution": "Nothing runs at send time. A template compiles to IR and the send path renders the IR against the input. Locale and time zone are send options."
+    "execution": "Nothing runs at send time. A template compiles to a compiled template and the send path renders it against the input. Locale and time zone are send options."
   },
   "profile": {
     "forms": [

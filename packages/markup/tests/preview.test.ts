@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { INSTANCE_PATH_ATTRIBUTE, renderIrPreview } from "../src/preview";
-import { renderIr } from "../src/render-ir";
+import { INSTANCE_PATH_ATTRIBUTE, previewEmail } from "../src/preview";
+import { render } from "../src/render-template";
 import { compileTemplate } from "../src/sml/compile";
 
 const THEME = "@theme { --color-brand: #123456; }";
@@ -63,12 +63,12 @@ const compile = async () => {
   return compiled;
 };
 
-describe("renderIrPreview", () => {
-  it("delivers the same document as renderIr, plus an instance path on every element", async () => {
-    const { ir, fixtures } = await compile();
+describe("previewEmail", () => {
+  it("delivers the same document as render, plus an instance path on every element", async () => {
+    const { template, fixtures } = await compile();
     const input = fixtures.vip;
-    const plain = renderIr(ir!, input);
-    const preview = renderIrPreview(ir!, input);
+    const plain = render(template!, input, { channel: "email" });
+    const preview = previewEmail(template!, input);
     expect(preview.subject).toBe(plain.subject);
     expect(preview.text).toBe(plain.text);
     const stripped = preview.html.replaceAll(
@@ -79,8 +79,8 @@ describe("renderIrPreview", () => {
   });
 
   it("resolves each stamped element to a selection at its rendered range", async () => {
-    const { ir, fixtures } = await compile();
-    const preview = renderIrPreview(ir!, fixtures.vip);
+    const { template, fixtures } = await compile();
+    const preview = previewEmail(template!, fixtures.vip);
     const paths = [
       ...preview.html.matchAll(new RegExp(`${INSTANCE_PATH_ATTRIBUTE}="([^"]*)"`, "g")),
     ].map((match) => match[1]);
@@ -95,8 +95,8 @@ describe("renderIrPreview", () => {
   });
 
   it("points the heading at its span in the entry and a partial's element at its own file", async () => {
-    const { ir, fixtures } = await compile();
-    const preview = renderIrPreview(ir!, fixtures.vip);
+    const { template, fixtures } = await compile();
+    const preview = previewEmail(template!, fixtures.vip);
     const heading = preview.selections.find((selection) => selection.tag === "h1");
     const lines = SOURCE.split("\n");
     expect(heading?.origins).toEqual([
@@ -120,9 +120,9 @@ describe("renderIrPreview", () => {
   });
 
   it("selects only what the fixture renders", async () => {
-    const { ir, fixtures } = await compile();
-    const vip = renderIrPreview(ir!, fixtures.vip);
-    const plain = renderIrPreview(ir!, fixtures.plain);
+    const { template, fixtures } = await compile();
+    const vip = previewEmail(template!, fixtures.vip);
+    const plain = previewEmail(template!, fixtures.plain);
     const membership = (selections: typeof vip.selections) =>
       selections.filter((selection) => selection.tag === "p").length;
     expect(membership(vip.selections)).toBeGreaterThan(membership(plain.selections));
@@ -130,8 +130,8 @@ describe("renderIrPreview", () => {
   });
 
   it("marks the elements a primitive generates as generated, and the one the author wrote as authored", async () => {
-    const { ir, fixtures } = await compile();
-    const preview = renderIrPreview(ir!, fixtures.vip);
+    const { template, fixtures } = await compile();
+    const preview = previewEmail(template!, fixtures.vip);
     const sameOrigin = (
       a: (typeof preview.selections)[number],
       b: (typeof preview.selections)[number],

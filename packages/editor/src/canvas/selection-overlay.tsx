@@ -1,4 +1,4 @@
-import type { EmailElementSelection } from "@samva/markup/render";
+import type { EmailElementSelection } from "@samva/markup/edit";
 import { type CSSProperties, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
 import { selectionLabel } from "../chrome/email-outline";

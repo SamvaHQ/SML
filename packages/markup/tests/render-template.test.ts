@@ -1,30 +1,30 @@
 /* oxlint-disable samva/no-try-catch-or-throw, samva/no-hand-rolled-object-guard, samva/no-unsafe-type-assertion -- The helpers observe RenderError diagnostics, and adversarial cases deliberately feed malformed IR. */
 import { describe, expect, it } from "@effect/vitest";
 
+import type {
+  CompiledElement,
+  CompiledEmail,
+  CompiledNode,
+  CompiledPredicate,
+  CompiledStyle,
+  CompiledValue,
+  CompiledTemplate,
+} from "../src/compiled-template";
 import type { BrandPlugin } from "../src/email/brand-plugin";
 import { serializeEmailHtml } from "../src/email/html";
 import { jsx, type EmailChild } from "../src/email/jsx-runtime";
 import { renderEmailContent } from "../src/email/render";
 import { deriveEmailText } from "../src/email/text";
 import { createFmt } from "../src/fmt";
-import type {
-  IrElement,
-  IrEmail,
-  IrNode,
-  IrPredicate,
-  IrStyle,
-  IrValue,
-  TemplateIr,
-} from "../src/ir";
-import { RenderError, renderIr, renderIrSms } from "../src/render-ir";
+import { render, RenderError } from "../src/render-template";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const tpl = (
-  body: IrNode,
-  email: Partial<IrEmail> = {},
-  extra: Partial<TemplateIr> = {},
-): TemplateIr => ({
+  body: CompiledNode,
+  email: Partial<CompiledEmail> = {},
+  extra: Partial<CompiledTemplate> = {},
+): CompiledTemplate => ({
   sml: 1,
   template: "t",
   schema: {},
@@ -32,16 +32,16 @@ const tpl = (
   ...extra,
 });
 
-const html = (body: IrNode, input: unknown = {}, options = {}): string =>
-  renderIr(tpl(body), input, options).html;
+const html = (body: CompiledNode, input: unknown = {}, options = {}): string =>
+  render(tpl(body), input, { channel: "email", ...options }).html;
 
 const el = (
   tag: string,
-  attrs: Record<string, IrValue> = {},
-  ...children: IrNode[]
-): IrElement => ({ el: tag, attrs, children });
+  attrs: Record<string, CompiledValue> = {},
+  ...children: CompiledNode[]
+): CompiledElement => ({ el: tag, attrs, children });
 
-const bind = (path: string): IrValue => ({ bind: path });
+const bind = (path: string): CompiledValue => ({ bind: path });
 
 const codes = (run: () => unknown): string[] => {
   try {
@@ -63,7 +63,7 @@ const deepFreeze = <T>(value: T): T => {
 
 // ── Basics ────────────────────────────────────────────────────────────────────
 
-describe("renderIr basics", () => {
+describe("render basics", () => {
   it("reads bound values and escapes them as text", () => {
     expect(html(el("p", {}, bind("name")), { name: "Ada <b>&" })).toBe("<p>Ada &lt;b&gt;&amp;</p>");
     expect(
@@ -80,12 +80,14 @@ describe("renderIr basics", () => {
   });
 
   it("concatenates text and skips null, undefined and booleans", () => {
-    const value: IrValue = { concat: ["Hi ", bind("name"), null, true, bind("nope"), " #", 7] };
+    const value: CompiledValue = {
+      concat: ["Hi ", bind("name"), null, true, bind("nope"), " #", 7],
+    };
     expect(html(el("p", {}, value), { name: "Ada" })).toBe("<p>Hi Ada #7</p>");
   });
 
   it("selects with if/else nodes and value-ifs", () => {
-    const node: IrNode = {
+    const node: CompiledNode = {
       if: { present: "vip" },
       then: [el("b", {}, "VIP")],
       else: [el("i", {}, "regular")],
@@ -93,7 +95,7 @@ describe("renderIr basics", () => {
     expect(html(el("p", {}, node), { vip: true })).toBe("<p><b>VIP</b></p>");
     expect(html(el("p", {}, node), { vip: "" })).toBe("<p><i>regular</i></p>");
     expect(html(el("p", {}, { if: { present: "vip" }, then: [] }), {})).toBe("<p></p>");
-    const value: IrValue = { if: { present: "vip" }, then: "yes", else: "no" };
+    const value: CompiledValue = { if: { present: "vip" }, then: "yes", else: "no" };
     expect(html(el("p", {}, value), { vip: 1 })).toBe("<p>yes</p>");
     expect(html(el("p", {}, value), {})).toBe("<p>no</p>");
   });
@@ -167,7 +169,7 @@ describe("renderIr basics", () => {
   });
 
   it("evaluates arithmetic, length and comparisons", () => {
-    const text = (value: IrValue, input: unknown = {}) => html(el("p", {}, value), input);
+    const text = (value: CompiledValue, input: unknown = {}) => html(el("p", {}, value), input);
     expect(text({ op: "+", args: [2, 3] })).toBe("<p>5</p>");
     expect(text({ op: "-", args: [2, 3] })).toBe("<p>-1</p>");
     expect(text({ op: "*", args: [bind("n"), 4] }, { n: 2.5 })).toBe("<p>10</p>");
@@ -175,8 +177,12 @@ describe("renderIr basics", () => {
     expect(text({ op: "%", args: [9, 4] })).toBe("<p>1</p>");
     expect(text({ length: bind("s") }, { s: "héllo" })).toBe("<p>5</p>");
     expect(text({ length: bind("a") }, { a: [1, 2, 3] })).toBe("<p>3</p>");
-    const cmp = (op: "eq" | "ne" | "lt" | "gt" | "le" | "ge", a: IrValue, b: IrValue, input = {}) =>
-      text({ if: { cmp: op, args: [a, b] }, then: "T", else: "F" }, input);
+    const cmp = (
+      op: "eq" | "ne" | "lt" | "gt" | "le" | "ge",
+      a: CompiledValue,
+      b: CompiledValue,
+      input = {},
+    ) => text({ if: { cmp: op, args: [a, b] }, then: "T", else: "F" }, input);
     expect(cmp("eq", 1, 1)).toBe("<p>T</p>");
     expect(cmp("eq", 1, "1")).toBe("<p>F</p>");
     expect(cmp("eq", bind("missing"), null)).toBe("<p>T</p>");
@@ -192,7 +198,7 @@ describe("renderIr basics", () => {
   });
 
   it("evaluates every predicate form with short-circuiting", () => {
-    const test = (predicate: IrPredicate, input: unknown = {}) =>
+    const test = (predicate: CompiledPredicate, input: unknown = {}) =>
       html(el("p", {}, { if: predicate, then: ["T"], else: ["F"] }), input);
     expect(test({ present: "a" }, { a: "x" })).toBe("<p>T</p>");
     expect(test({ present: "a" }, { a: 0 })).toBe("<p>F</p>");
@@ -235,7 +241,7 @@ describe("renderIr basics", () => {
   });
 
   it("renders style as a static string, a list, or a conditional after attributes", () => {
-    const at = (style: IrStyle, input: unknown = {}) =>
+    const at = (style: CompiledStyle, input: unknown = {}) =>
       html({ el: "div", attrs: { id: "a" }, style, children: ["x"] }, input);
     expect(at("color:red")).toBe('<div id="a" style="color:red">x</div>');
     expect(at('font-family:"A", B')).toBe(
@@ -257,7 +263,7 @@ describe("renderIr basics", () => {
     ).toBe(
       '<div id="a" style="background-color:#fff;font-size:14px;line-height:1.5;margin:0;--brand:red">x</div>',
     );
-    const conditional: IrStyle = {
+    const conditional: CompiledStyle = {
       if: { present: "on" },
       then: [["color", "red"]],
       else: "color:blue",
@@ -319,22 +325,32 @@ describe("renderIr basics", () => {
   });
 
   it("renders raw parts with per-context escaping", () => {
-    const node: IrNode = {
+    const node: CompiledNode = {
       raw: ['<v:rect fillcolor="', { attr: bind("c") }, '"><b>', { text: bind("t") }, "</b>"],
       text: bind("t"),
     };
-    const out = renderIr(tpl(el("div", {}, node, "!")), { c: '"><script>', t: "<i>&" }, {});
+    const out = render(
+      tpl(el("div", {}, node, "!")),
+      { c: '"><script>', t: "<i>&" },
+      { channel: "email" },
+    );
     expect(out.html).toBe(
       '<div><v:rect fillcolor="&quot;&gt;&lt;script&gt;"><b>&lt;i&gt;&amp;</b>!</div>',
     );
     expect(out.text).toBe("<i>&!");
-    expect(renderIr(tpl(el("div", {}, { raw: ["<!--x-->"] })), {}).text).toBe("");
+    expect(render(tpl(el("div", {}, { raw: ["<!--x-->"] })), {}, { channel: "email" }).text).toBe(
+      "",
+    );
   });
 });
 
 describe("subject, preheader and document assembly", () => {
   it("renders the subject from values", () => {
-    const out = renderIr(tpl(el("p"), { subject: { concat: ["Order ", bind("id")] } }), { id: 12 });
+    const out = render(
+      tpl(el("p"), { subject: { concat: ["Order ", bind("id")] } }),
+      { id: 12 },
+      { channel: "email" },
+    );
     expect(out.subject).toBe("Order 12");
     expect(out.preheader).toBeUndefined();
   });
@@ -346,13 +362,13 @@ describe("subject, preheader and document assembly", () => {
       el("head", {}, el("title", {}, "T")),
       el("body", {}, el("p", {}, "x")),
     );
-    const out = renderIr(tpl(document), {});
+    const out = render(tpl(document), {}, { channel: "email" });
     expect(out.html.startsWith("<!DOCTYPE html PUBLIC")).toBe(true);
     expect(out.html).toContain("<html><head><title>T</title></head><body><p>x</p></body></html>");
     expect(html(el("p"))).toBe("<p></p>");
   });
 
-  const shell = (children: IrNode[] = [el("p", {}, "Body")]): IrElement =>
+  const shell = (children: CompiledNode[] = [el("p", {}, "Body")]): CompiledElement =>
     el("html", {}, el("head", {}, el("title", {}, "T")), el("body", {}, ...children));
 
   const jsxShell = (children: EmailChild[] = [jsx("p", { children: "Body" })]) =>
@@ -365,7 +381,7 @@ describe("subject, preheader and document assembly", () => {
 
   it("inserts the preheader first in the body, matching the JSX pipeline", () => {
     for (const preheader of ["Preview <text> & more", "", "x".repeat(250)]) {
-      const mine = renderIr(tpl(shell(), { preheader }), {});
+      const mine = render(tpl(shell(), { preheader }), {}, { channel: "email" });
       const old = renderEmailContent(undefined, () => ({
         subject: "S",
         preheader,
@@ -381,14 +397,14 @@ describe("subject, preheader and document assembly", () => {
     const body = el("body", {}, el("p", {}, "A"), { preheader: true }, el("p", {}, "B"), {
       preheader: true,
     });
-    const out = renderIr(tpl(body, { preheader: "Hi" }), {});
+    const out = render(tpl(body, { preheader: "Hi" }), {}, { channel: "email" });
     expect(out.html.match(/data-samva-preheader=/g)?.length).toBe(1);
     expect(out.html.indexOf("<p>A</p>")).toBeLessThan(out.html.indexOf("data-samva-preheader="));
     expect(out.html.indexOf("data-samva-preheader=")).toBeLessThan(out.html.indexOf("<p>B</p>"));
   });
 
   it("puts the preheader first overall when there is no body", () => {
-    const out = renderIr(tpl(el("p", {}, "x"), { preheader: "Hi" }), {});
+    const out = render(tpl(el("p", {}, "x"), { preheader: "Hi" }), {}, { channel: "email" });
     const old = renderEmailContent(undefined, () => ({
       subject: "S",
       preheader: "Hi",
@@ -399,17 +415,20 @@ describe("subject, preheader and document assembly", () => {
   });
 
   it("renders nothing for a marker without a preheader value, and for an unbound one", () => {
-    expect(renderIr(tpl(el("body", {}, { preheader: true }, "x")), {}).html).toBe("<body>x</body>");
-    const out = renderIr(
+    expect(
+      render(tpl(el("body", {}, { preheader: true }, "x")), {}, { channel: "email" }).html,
+    ).toBe("<body>x</body>");
+    const out = render(
       tpl(el("body", {}, { preheader: true }, "x"), { preheader: bind("p") }),
       {},
+      { channel: "email" },
     );
     expect(out.html).toBe("<body>x</body>");
     expect(out.preheader).toBeUndefined();
   });
 
   it("emits the exact hidden block", () => {
-    const out = renderIr(tpl(el("body"), { preheader: "Hi" }), {});
+    const out = render(tpl(el("body"), { preheader: "Hi" }), {}, { channel: "email" });
     expect(out.html).toBe(
       '<body><div data-samva-preheader="Hi" style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0">Hi<div data-samva-preheader-padding="">' +
         " ‌​‍‎‏﻿".repeat(29) +
@@ -417,36 +436,61 @@ describe("subject, preheader and document assembly", () => {
     );
   });
 
+  it.each(["email", "sms", "whatsapp"] as const)(
+    "refuses a template compiled as another version on the %s channel",
+    (channel) => {
+      const future = { ...tpl(el("p")), sml: 2 } as unknown as CompiledTemplate;
+      expect(codes(() => render(future, {}, { channel }))).toEqual(["unsupported-version"]);
+    },
+  );
+
   it.each([
     ["line feed", "a\nb"],
     ["carriage return", "a\rb"],
     ["nul", "a\u0000b"],
   ])("rejects a subject with a %s", (_name, subject) => {
-    expect(codes(() => renderIr(tpl(el("p"), { subject }), {}))).toContain("invalid-subject");
-    expect(codes(() => renderIr(tpl(el("p"), { subject: bind("s") }), { s: subject }))).toContain(
+    expect(codes(() => render(tpl(el("p"), { subject }), {}, { channel: "email" }))).toContain(
       "invalid-subject",
     );
     expect(
       codes(() =>
-        renderIr(tpl(el("p"), { subject: { concat: ["x", bind("s")] } }), { s: subject }),
+        render(tpl(el("p"), { subject: bind("s") }), { s: subject }, { channel: "email" }),
+      ),
+    ).toContain("invalid-subject");
+    expect(
+      codes(() =>
+        render(
+          tpl(el("p"), { subject: { concat: ["x", bind("s")] } }),
+          { s: subject },
+          { channel: "email" },
+        ),
       ),
     ).toContain("invalid-subject");
   });
 
   it("requires the channel", () => {
-    expect(codes(() => renderIr({ sml: 1, template: "t", schema: {} }, {}))).toEqual([
+    expect(
+      codes(() => render({ sml: 1, template: "t", schema: {} }, {}, { channel: "email" })),
+    ).toEqual(["missing-channel"]);
+    expect(codes(() => render(tpl(el("p")), {}, { channel: "sms" }).text)).toEqual([
       "missing-channel",
     ]);
-    expect(codes(() => renderIrSms(tpl(el("p")), {}))).toEqual(["missing-channel"]);
   });
 });
 
 // ── Formatting, options, determinism ──────────────────────────────────────────
 
 describe("format nodes and options", () => {
-  const money = (amount: IrValue): IrValue => ({ format: "money", args: [amount, "EUR"] });
-  const text = (value: IrValue, ir: Partial<TemplateIr>, options = {}, input: unknown = {}) =>
-    renderIr(tpl(el("p", {}, value), {}, ir), input, options).html;
+  const money = (amount: CompiledValue): CompiledValue => ({
+    format: "money",
+    args: [amount, "EUR"],
+  });
+  const text = (
+    value: CompiledValue,
+    ir: Partial<CompiledTemplate>,
+    options = {},
+    input: unknown = {},
+  ) => render(tpl(el("p", {}, value), {}, ir), input, { channel: "email", ...options }).html;
 
   it("formats through the fmt module", () => {
     expect(text(money(bind("a")), {}, {}, { a: 1234.5 })).toBe(
@@ -479,7 +523,7 @@ describe("format nodes and options", () => {
   });
 
   it("applies the time zone option and defaults to UTC", () => {
-    const date: IrValue = { format: "date", args: ["2026-09-30T02:30:00Z"] };
+    const date: CompiledValue = { format: "date", args: ["2026-09-30T02:30:00Z"] };
     expect(text(date, {})).toBe("<p>Sep 30, 2026</p>");
     expect(text(date, {}, { timeZone: "America/Los_Angeles" })).toBe("<p>Sep 29, 2026</p>");
   });
@@ -505,8 +549,8 @@ describe("format nodes and options", () => {
       { preheader: "P" },
     );
     const before = JSON.stringify(input);
-    const first = renderIr(ir, input);
-    const second = renderIr(ir, input);
+    const first = render(ir, input, { channel: "email" });
+    const second = render(ir, input, { channel: "email" });
     expect(second).toEqual(first);
     expect(JSON.stringify(input)).toBe(before);
     expect(JSON.stringify(ir)).toBe(JSON.stringify(deepFreeze(JSON.parse(JSON.stringify(ir)))));
@@ -515,9 +559,9 @@ describe("format nodes and options", () => {
 
 // ── SMS ───────────────────────────────────────────────────────────────────────
 
-describe("renderIrSms", () => {
-  const sms = (body: IrNode[], input: unknown = {}) =>
-    renderIrSms({ sml: 1, template: "t", schema: {}, sms: { body } }, input);
+describe("the sms channel render", () => {
+  const sms = (body: CompiledNode[], input: unknown = {}) =>
+    render({ sml: 1, template: "t", schema: {}, sms: { body } }, input, { channel: "sms" }).text;
 
   it("renders values, conditionals, loops and formats as plain text", () => {
     expect(
@@ -574,13 +618,13 @@ const toJsx = (spec: Spec): EmailChild =>
         ...(spec.kids ? { children: spec.kids.map(toJsx) } : {}),
       });
 
-const toIr = (spec: Spec): IrNode =>
+const toIr = (spec: Spec): CompiledNode =>
   typeof spec === "string"
     ? spec
     : {
         el: spec.tag,
         ...(spec.attrs ? { attrs: spec.attrs } : {}),
-        ...(spec.style ? { style: Object.entries(spec.style) as [string, IrValue][] } : {}),
+        ...(spec.style ? { style: Object.entries(spec.style) as [string, CompiledValue][] } : {}),
         ...(spec.kids ? { children: spec.kids.map(toIr) } : {}),
       };
 
@@ -731,14 +775,14 @@ describe("differential parity with the JSX pipeline", () => {
   it.each(battery)("%s", (_name, spec) => {
     const node = toJsx(spec);
     if (typeof node === "string") throw new Error("root must be an element");
-    const mine = renderIr(tpl(toIr(spec)), {});
+    const mine = render(tpl(toIr(spec)), {}, { channel: "email" });
     expect(mine.html).toBe(serializeEmailHtml(node as never).html);
     expect(mine.text).toBe(deriveEmailText(node as never));
   });
 
   it("matches bound content escaped the same way as the literal", () => {
     const literal = 'Ada <script>alert(1)</script> & "q"';
-    const bound = renderIr(tpl(el("p", {}, bind("v"))), { v: literal });
+    const bound = render(tpl(el("p", {}, bind("v"))), { v: literal }, { channel: "email" });
     const node = jsx("p", { children: literal });
     expect(bound.html).toBe(serializeEmailHtml(node).html);
     expect(bound.text).toBe(deriveEmailText(node));
@@ -778,7 +822,7 @@ describe("differential parity with the JSX pipeline", () => {
         ],
       }),
     }));
-    const mine = renderIr(ir, {});
+    const mine = render(ir, {}, { channel: "email" });
     expect(mine.html).toBe(old.html);
     expect(mine.text).toBe(old.text);
   });
@@ -818,7 +862,7 @@ describe("adversarial: attribute and text breakout", () => {
 
   it("passes bidirectional and unicode text through unchanged", () => {
     const value = "‮evil‬ ⁦x⁩ ‏ mixed עברית 🎉";
-    const out = renderIr(tpl(el("p", {}, bind("v"))), { v: value });
+    const out = render(tpl(el("p", {}, bind("v"))), { v: value }, { channel: "email" });
     expect(out.html).toBe(`<p>${value}</p>`);
   });
 
@@ -1028,7 +1072,7 @@ describe("adversarial: URLs", () => {
   });
 
   it("checks urls inside style values", () => {
-    const at = (value: IrValue, input: unknown = {}) =>
+    const at = (value: CompiledValue, input: unknown = {}) =>
       html({ el: "div", style: [["backgroundImage", value]] }, input);
     expect(at('url("https://x.test/a.png")')).toContain("url(&quot;https://x.test/a.png&quot;)");
     expect(codes(() => at(bind("u"), { u: "url(javascript:alert(1))" }))).toContain("unsafe-url");
@@ -1045,7 +1089,7 @@ describe("adversarial: URLs", () => {
 });
 
 describe("adversarial: style", () => {
-  const style = (value: IrValue, input: unknown = {}, property = "color") =>
+  const style = (value: CompiledValue, input: unknown = {}, property = "color") =>
     html({ el: "div", style: [[property, value]] }, input);
 
   it.each([
@@ -1189,18 +1233,22 @@ describe("adversarial: bindings and values", () => {
     ]);
     expect(codes(() => html(el("p", {}, { lit: { a: 1 } })))).toEqual(["invalid-value"]);
     expect(codes(() => html(el("p", {}, { lit: [1] })))).toEqual(["invalid-value"]);
-    expect(codes(() => html([1] as unknown as IrNode))).toEqual(["invalid-value"]);
-    expect(codes(() => html(el("p", {}, { nonsense: 1 } as unknown as IrNode)))).toEqual([
+    expect(codes(() => html([1] as unknown as CompiledNode))).toEqual(["invalid-value"]);
+    expect(codes(() => html(el("p", {}, { nonsense: 1 } as unknown as CompiledNode)))).toEqual([
       "invalid-value",
     ]);
-    expect(codes(() => renderIr(tpl(el("p"), { subject: bind("o") }), { o: {} }))).toEqual([
-      "invalid-value",
-    ]);
+    expect(
+      codes(() => render(tpl(el("p"), { subject: bind("o") }), { o: {} }, { channel: "email" })),
+    ).toEqual(["invalid-value"]);
   });
 
   it("rejects bad arithmetic", () => {
-    const op = (o: "+" | "-" | "*" | "/" | "%", a: IrValue, b: IrValue, input: unknown = {}) =>
-      codes(() => html(el("p", {}, { op: o, args: [a, b] }), input));
+    const op = (
+      o: "+" | "-" | "*" | "/" | "%",
+      a: CompiledValue,
+      b: CompiledValue,
+      input: unknown = {},
+    ) => codes(() => html(el("p", {}, { op: o, args: [a, b] }), input));
     expect(op("+", bind("n"), 1, { n: Number.NaN })).toEqual(["invalid-value"]);
     expect(op("+", bind("n"), 1, { n: Infinity })).toEqual(["invalid-value"]);
     expect(op("+", "1", 1)).toEqual(["invalid-value"]);
@@ -1231,26 +1279,28 @@ describe("adversarial: bindings and values", () => {
 
   it("rejects malformed nodes", () => {
     expect(
-      codes(() => html(el("p", {}, { if: { nope: 1 } as unknown as IrPredicate, then: [] }))),
+      codes(() => html(el("p", {}, { if: { nope: 1 } as unknown as CompiledPredicate, then: [] }))),
     ).toEqual(["invalid-value"]);
     expect(codes(() => html({ raw: [{ nope: 1 } as never] }))).toEqual(["invalid-value"]);
     expect(codes(() => html({ raw: "x" as never }))).toEqual(["invalid-value"]);
     expect(
-      codes(() => html(el("p", {}, { if: { and: "x" } as unknown as IrPredicate, then: [] }))),
+      codes(() =>
+        html(el("p", {}, { if: { and: "x" } as unknown as CompiledPredicate, then: [] })),
+      ),
     ).toEqual(["invalid-value"]);
   });
 });
 
 describe("adversarial: resource limits", () => {
-  const loop = (count: number): IrNode =>
+  const loop = (count: number): CompiledNode =>
     el("p", {}, { each: bind("xs"), as: "x", children: ["."] });
 
   it("caps total iterations per render", () => {
-    const ok = renderIr(tpl(loop(0)), { xs: new Array(10_000).fill(1) });
+    const ok = render(tpl(loop(0)), { xs: new Array(10_000).fill(1) }, { channel: "email" });
     expect(ok.html.length).toBe("<p></p>".length + 10_000);
-    expect(codes(() => renderIr(tpl(loop(0)), { xs: new Array(10_001).fill(1) }))).toEqual([
-      "render-limit",
-    ]);
+    expect(
+      codes(() => render(tpl(loop(0)), { xs: new Array(10_001).fill(1) }, { channel: "email" })),
+    ).toEqual(["render-limit"]);
   });
 
   it("counts nested loops together", () => {
@@ -1263,15 +1313,17 @@ describe("adversarial: resource limits", () => {
         children: [{ each: bind("xs"), as: "y", children: ["."] }],
       },
     );
-    expect(codes(() => renderIr(tpl(nested), { xs: new Array(101).fill(1) }))).toEqual([
-      "render-limit",
-    ]);
-    expect(renderIr(tpl(nested), { xs: new Array(9).fill(1) }).html).toContain(".");
+    expect(
+      codes(() => render(tpl(nested), { xs: new Array(101).fill(1) }, { channel: "email" })),
+    ).toEqual(["render-limit"]);
+    expect(render(tpl(nested), { xs: new Array(9).fill(1) }, { channel: "email" }).html).toContain(
+      ".",
+    );
   });
 
   it("caps nesting depth", () => {
-    const nest = (depth: number): IrNode => {
-      let node: IrNode = "x";
+    const nest = (depth: number): CompiledNode => {
+      let node: CompiledNode = "x";
       for (let index = 0; index < depth; index++) node = el("div", {}, node);
       return node;
     };
@@ -1281,10 +1333,10 @@ describe("adversarial: resource limits", () => {
   });
 
   it("caps nested values and predicates", () => {
-    let value: IrValue = "x";
+    let value: CompiledValue = "x";
     for (let index = 0; index < 500; index++) value = { concat: [value] };
     expect(codes(() => html(el("p", {}, value)))).toEqual(["render-limit"]);
-    let predicate: IrPredicate = { present: "a" };
+    let predicate: CompiledPredicate = { present: "a" };
     for (let index = 0; index < 500; index++) predicate = { not: predicate };
     expect(codes(() => html(el("p", {}, { if: predicate, then: [], else: [] })))).toEqual([
       "render-limit",
@@ -1295,7 +1347,7 @@ describe("adversarial: resource limits", () => {
 describe("each with where, chunk and count", () => {
   const list = { bind: "n" };
   const input = { n: [1, 2, 3, 4, 5] };
-  const ul = (each: IrNode) => el("p", {}, each);
+  const ul = (each: CompiledNode) => el("p", {}, each);
 
   it("keeps only the items whose condition holds", () => {
     const body = ul({

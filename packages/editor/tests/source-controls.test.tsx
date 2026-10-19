@@ -15,7 +15,7 @@ import { type EditableEditorHost, type LifecycleApi } from "@samva/editor/host/e
 import { toAsyncHost } from "@samva/editor/host/effect";
 import { createMockHost } from "@samva/editor/mock";
 import { compileTemplate } from "@samva/markup/compiler";
-import { renderIrPreview } from "@samva/markup/render";
+import { previewEmail } from "@samva/markup/edit";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { Effect, Stream } from "effect";
 import { useEffect } from "react";
@@ -64,7 +64,7 @@ const PARTIAL_ENTRY = template(`        <Card title="Track" />`, 'import { Card 
 const CARD_SOURCE = `export const Card = ({ title }: { title: string }) => <h2>Card heading</h2>;
 `;
 
-/** The render a real host makes: compile the project, render the fixture from the IR. */
+/** The render a real host makes: compile the project, render the fixture from the compiled template. */
 const buildRender = async (files: Readonly<Record<string, string>>, revision: string) => {
   const compiled = await compileTemplate({
     files,
@@ -72,8 +72,8 @@ const buildRender = async (files: Readonly<Record<string, string>>, revision: st
     assetBase: "https://assets.invalid",
     tailwind: false,
   });
-  if (compiled.ir === undefined) throw new Error(JSON.stringify(compiled.diagnostics));
-  const preview = renderIrPreview(compiled.ir, compiled.fixtures.welcome);
+  if (compiled.template === undefined) throw new Error(JSON.stringify(compiled.diagnostics));
+  const preview = previewEmail(compiled.template, compiled.fixtures.welcome);
   return {
     revision,
     subject: preview.subject,

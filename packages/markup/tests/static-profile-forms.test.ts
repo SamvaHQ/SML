@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { PROFILE_FORMS, PROFILE_REJECTED, checkStaticProfile } from "../src/sml/profile";
+import { PROFILE_FORMS, PROFILE_REJECTED, checkTemplate } from "../src/sml/profile";
 
 const template = (body: string, bodyFunction = false): string => `
 import { defineTemplate } from "@samva/markup";
@@ -52,9 +52,7 @@ describe("static profile forms", () => {
     "reads %s",
     (_form, example) => {
       const wrapped = example.startsWith("`") ? `{${example}}` : example;
-      const errors = checkStaticProfile(template(wrapped)).filter(
-        (item) => item.severity === "error",
-      );
+      const errors = checkTemplate(template(wrapped)).filter((item) => item.severity === "error");
       expect(errors).toEqual([]);
     },
   );
@@ -64,7 +62,7 @@ describe("static profile forms", () => {
       (entry) => [entry.form, entry.example, entry.code, "scope" in entry] as const,
     ),
   )("refuses %s with its code", (_form, example, code, bodyFunction) => {
-    const codes = checkStaticProfile(template(example, bodyFunction)).map((item) => item.code);
+    const codes = checkTemplate(template(example, bodyFunction)).map((item) => item.code);
     expect(codes).toContain(code);
   });
 });

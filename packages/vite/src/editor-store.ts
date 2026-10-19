@@ -3,8 +3,8 @@ import { open, readFile, realpath, rename, rm, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
 import type { EmailDiagnostic, TemplateDiagnostic } from "@samva/markup/diagnostics";
-import type { RenderedIrWhatsApp } from "@samva/markup/render";
-import { renderIrPreview, type EmailElementSelection } from "@samva/markup/render";
+import { previewEmail, type EmailElementSelection } from "@samva/markup/edit";
+import type { RenderedWhatsApp } from "@samva/markup/render";
 
 import {
   emailCompatibility,
@@ -99,7 +99,7 @@ interface EditorEmailContent {
 /** One render of an SMS or WhatsApp channel for the viewed fixture. */
 type EditorChannelRender =
   | { readonly revision: string; readonly text: string }
-  | ({ readonly revision: string } & RenderedIrWhatsApp);
+  | ({ readonly revision: string } & RenderedWhatsApp);
 
 /** What an SMS or WhatsApp lane shows. */
 interface EditorChannelContent {
@@ -222,8 +222,8 @@ const previewRender = (
 ): EditorEmailRender | null => {
   // oxlint-disable-next-line samva/no-try-catch-or-throw -- Plain library boundary: the renderer signals a refused render by throwing, and the delivered pass already reported why.
   try {
-    const preview = renderIrPreview(
-      entry.ir,
+    const preview = previewEmail(
+      entry.compiled,
       entry.fixtures[fixture],
       entry.brandPlugin === undefined ? {} : { brandPlugin: entry.brandPlugin },
     );
@@ -407,7 +407,7 @@ export class EditorFileStore {
       content,
       authoredSource,
       rev,
-      variables: variablesOf(entry.ir.schema),
+      variables: variablesOf(entry.compiled.schema),
       compiled: entry,
     };
   }

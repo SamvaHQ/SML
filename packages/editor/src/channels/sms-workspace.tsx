@@ -185,7 +185,7 @@ export function SmsWorkspace() {
               <div className="grid gap-4">
                 <Diagnostics diagnostics={doc?.diagnostics ?? []} />
                 <EditRefusal reason={refusal} />
-                {form === null ? (
+                {form === undefined ? (
                   <p className="text-muted-foreground text-[12.5px]">
                     The SMS body is not a <code>{"<Sms>"}</code> written in place, so it is edited
                     in Source.
@@ -203,7 +203,7 @@ export function SmsWorkspace() {
                 >
                   SMS preview
                 </div>
-                {form === null ? (
+                {form === undefined ? (
                   <div className="bg-muted text-muted-foreground rounded-[18px] px-4 py-3 text-[14px] whitespace-pre-wrap">
                     {render?.text || "Message preview"}
                   </div>

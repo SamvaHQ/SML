@@ -1,11 +1,11 @@
 import { contractVersion, type EditableEditorDocument } from "@samva/editor/host";
 import type { AsyncEditableEditorHost } from "@samva/editor/host";
 import { compileTemplate } from "@samva/markup/compiler";
-import { renderIrSms, renderIrWhatsApp } from "@samva/markup/render";
+import { render } from "@samva/markup/render";
 
 /**
  * A controlled host for the SMS and WhatsApp lanes that does what a real host does: it holds the
- * authored TSX, compiles it with the static compiler, renders the first fixture from the IR, and
+ * authored TSX, compiles it with the static compiler, renders the first fixture from the compiled template, and
  * answers each save with the render of what was saved. Tests drive the editor against it instead
  * of modelling editor state a second time.
  */
@@ -76,19 +76,19 @@ const build = async (channel: MarkupChannel, source: string, revision: string) =
   const fixtures = Object.keys(compiled.fixtures);
   const fixture = fixtures[0] ?? null;
   const input = fixture === null ? undefined : compiled.fixtures[fixture];
-  const ir = compiled.ir;
-  const render =
-    ir === undefined || fixture === null
+  const template = compiled.template;
+  const rendered =
+    template === undefined || fixture === null
       ? null
       : channel === "sms"
-        ? { revision, text: renderIrSms(ir, input) }
-        : { revision, ...renderIrWhatsApp(ir, input) };
+        ? { revision, text: render(template, input, { channel: "sms" }).text }
+        : { revision, ...render(template, input, { channel: "whatsapp" }) };
   return {
     channel,
     preview: { status: "current" as const },
     fixtures,
     fixture,
-    render,
+    render: rendered,
     diagnostics: compiled.diagnostics,
   };
 };

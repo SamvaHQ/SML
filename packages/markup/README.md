@@ -7,7 +7,7 @@ directly for TSX templates or together with `@samva/vite` for the visual editor 
 
 - **SML** is the name of this toolkit, not a second syntax. An email is a TSX file that
   default-exports `defineTemplate`, written in the static profile (ordinary JSX, HTML, and Tailwind
-  classes read without running). Compiling it produces the **IR**, the JSON description that
+  classes read without running). Compiling it produces the **compiled template**, the JSON description that
   previews and sends render.
 - The package ships the `sml` skill at `skills/sml/SKILL.md`; it routes you through write, check,
   render, look, and repair. `AGENTS.md` and `contract.json` ship alongside it.
@@ -107,13 +107,13 @@ export default defineTemplate({
 
 A template is read, not run. `@samva/markup/compiler` parses the file and the project files it
 imports without evaluating them, checks every binding against the schema, resolves Tailwind and CSS
-against the markup, and produces the template's IR: JSON, versioned (`"sml": 1`), carrying the
+against the markup, and produces the compiled template: JSON, versioned (`"sml": 1`), carrying the
 markup, the bindings, the conditions, the loops and the formatters. `@samva/markup/render`
-renders that IR against an input. It is a pure function with no dependencies, so nothing executes
+renders that template against an input. It is a pure function with no dependencies, so nothing executes
 at send time.
 
 ```ts
-import { renderIr } from "@samva/markup/render";
+import { render } from "@samva/markup/render";
 import { compileTemplate } from "@samva/markup/compiler";
 
 const compiled = await compileTemplate({
@@ -122,9 +122,10 @@ const compiled = await compileTemplate({
   assetBase: "https://assets.example.com",
   tailwind: { css: files["theme.css"] },
 });
-if (compiled.ir === undefined) throw new Error(compiled.diagnostics.map(String).join("\n"));
+if (compiled.template === undefined) throw new Error(compiled.diagnostics.map(String).join("\n"));
 
-const { subject, preheader, html, text } = renderIr(compiled.ir, compiled.fixtures.default, {
+const { subject, preheader, html, text } = render(compiled.template, compiled.fixtures.default, {
+  channel: "email",
   locale: "en-US",
   timeZone: "UTC",
 });
@@ -157,7 +158,7 @@ chains before `.map(...)` or `.length`. `<Columns each per>` lays a list out in 
 (one row without `per`): the child is a function from an item, and its index within the row, to a
 `Column`. A `Column` that states no `width` takes an equal share of the row, whole percent rounded
 down, and a last row with fewer items keeps that share, so it leaves empty space instead of
-stretching. Both lower to a loop in the IR, so nothing is computed at send time.
+stretching. Both lower to a loop in the compiled template, so nothing is computed at send time.
 
 Rejected, each with its own diagnostic: calls other than `fmt.*` and `.map` (`dynamic-expression`),
 statements in a body (`statement-in-body`), imports other than `@samva/markup` and project files
@@ -234,7 +235,7 @@ is checked for these vendors, but a converter-supplied JSON Schema constraint re
 ### Authoring with an agent
 
 The package ships what an agent needs without any other source. `AGENTS.md` opens with the model:
-a template is TSX in the static profile that compiles to IR, and nothing runs at send time.
+a template is TSX in the static profile that compiles to a compiled template, and nothing runs at send time.
 `@samva/markup/contract.json` lists the components with their props, the profile's forms, the
 formatters, the HTML elements and every diagnostic code with its fix; it is generated from the
 compiler, so it matches the version you installed. `skills/sml/SKILL.md` is the `sml` skill: it
@@ -243,7 +244,7 @@ for diagnostics an agent can apply.
 
 ### Previewing a render
 
-`renderIrPreview(ir, input)` from `@samva/markup/render` renders a fixture the way `renderIr` does
+`previewEmail(template, input)` from `@samva/markup/edit` renders a fixture the way `render` does
 and stamps `data-samva-instance` on every element. Its `selections` map each stamped element to the
 line and column of the JSX that produced it, so an editor can select an element on the canvas and
 edit the source at that span. A delivered message never carries the attribute.

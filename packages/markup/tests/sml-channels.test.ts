@@ -1,7 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { renderIr, renderIrSms, renderIrWhatsApp } from "../src/render-ir";
+import { render, RenderError } from "../src/render-template";
 import { compileTemplate } from "../src/sml/compile";
+import { smsSegmentInfo } from "../src/sms-segments";
 import { whatsappTemplate } from "../src/whatsapp-template";
 
 const SCHEMA = `jsonSchema<{
@@ -129,11 +130,11 @@ const WHATSAPP = `whatsapp: (input) => (
 describe("the sms channel", () => {
   it("lowers bindings, conditionals, formatters and maps to plain text", async () => {
     const compiled = await ok(SMS);
-    expect(compiled.ir?.sms?.category).toBe("transactional");
-    expect(renderIrSms(compiled.ir!, compiled.fixtures.default)).toBe(
+    expect(compiled.template?.sms?.category).toBe("transactional");
+    expect(render(compiled.template!, compiled.fixtures.default, { channel: "sms" }).text).toBe(
       "Hi Ada, order A-1 ships. Priority. Track: https://track.example/A-1 Total $84.00. [Shirt] [Hat]",
     );
-    expect(renderIrSms(compiled.ir!, compiled.fixtures.bare)).toBe(
+    expect(render(compiled.template!, compiled.fixtures.bare, { channel: "sms" }).text).toBe(
       "Hi Bo, order B-2 ships. Total $5.00.",
     );
   });
@@ -176,9 +177,9 @@ describe("the sms channel", () => {
 describe("the whatsapp channel", () => {
   it("lowers header, body, footer and buttons, with the url button conditional", async () => {
     const compiled = await ok(WHATSAPP);
-    const ir = compiled.ir!.whatsapp!;
+    const ir = compiled.template!.whatsapp!;
     expect(ir.buttons?.[0]).toHaveProperty("if");
-    expect(renderIrWhatsApp(compiled.ir!, compiled.fixtures.default)).toEqual({
+    expect(render(compiled.template!, compiled.fixtures.default, { channel: "whatsapp" })).toEqual({
       language: "en_US",
       category: "utility",
       header: { type: "text", text: "Order A-1" },
@@ -192,7 +193,9 @@ describe("the whatsapp channel", () => {
       ],
     });
     expect(
-      renderIrWhatsApp(compiled.ir!, compiled.fixtures.bare).buttons.map((b) => b.type),
+      render(compiled.template!, compiled.fixtures.bare, { channel: "whatsapp" }).buttons.map(
+        (b) => b.type,
+      ),
     ).toEqual(["quick-reply", "phone", "copy-code"]);
   });
 
@@ -206,7 +209,7 @@ describe("the whatsapp channel", () => {
         </WhatsApp.Buttons>
       </WhatsApp>
     ),`);
-    const rendered = renderIrWhatsApp(compiled.ir!, compiled.fixtures.bare);
+    const rendered = render(compiled.template!, compiled.fixtures.bare, { channel: "whatsapp" });
     expect(rendered.header).toEqual({ type: "image", text: "https://cdn.example/a.png" });
     expect(rendered.buttons).toEqual([{ type: "quick-reply", text: "Join" }]);
   });
@@ -279,12 +282,12 @@ describe("the whatsapp channel", () => {
       const compiled = await ok(
         flowTemplate(`<WhatsApp.FlowButton flow="order-survey">Take survey</WhatsApp.FlowButton>`),
       );
-      expect(compiled.ir!.whatsapp!.buttons).toEqual([
+      expect(compiled.template!.whatsapp!.buttons).toEqual([
         { type: "flow", text: "Take survey", flow: "order-survey", action: "navigate" },
       ]);
-      expect(renderIrWhatsApp(compiled.ir!, compiled.fixtures.default).buttons).toEqual([
-        { type: "flow", text: "Take survey", flow: "order-survey", action: "navigate" },
-      ]);
+      expect(
+        render(compiled.template!, compiled.fixtures.default, { channel: "whatsapp" }).buttons,
+      ).toEqual([{ type: "flow", text: "Take survey", flow: "order-survey", action: "navigate" }]);
     });
 
     it("keeps an explicit screen and the data_exchange action", async () => {
@@ -293,7 +296,7 @@ describe("the whatsapp channel", () => {
           `<WhatsApp.FlowButton flow="order-survey" screen="RATE_ORDER">Rate</WhatsApp.FlowButton>`,
         ),
       );
-      expect(screen.ir!.whatsapp!.buttons).toEqual([
+      expect(screen.template!.whatsapp!.buttons).toEqual([
         {
           type: "flow",
           text: "Rate",
@@ -307,7 +310,7 @@ describe("the whatsapp channel", () => {
           `<WhatsApp.FlowButton flow="order-survey" action="data_exchange">Rate</WhatsApp.FlowButton>`,
         ),
       );
-      expect(exchange.ir!.whatsapp!.buttons).toEqual([
+      expect(exchange.template!.whatsapp!.buttons).toEqual([
         { type: "flow", text: "Rate", flow: "order-survey", action: "data_exchange" },
       ]);
     });
@@ -381,7 +384,7 @@ describe("the whatsapp channel", () => {
     expect(warnings.every((item) => item.severity === "warning" && item.fix !== undefined)).toBe(
       true,
     );
-    expect(compiled.ir).toBeDefined();
+    expect(compiled.template).toBeDefined();
 
     expect(
       await errorCodes(`whatsapp: (input) => (<WhatsApp language="en_US" category="utility" />),`),
@@ -469,7 +472,7 @@ describe("whatsappTemplate", () => {
 
   it("derives the registration text from a compiled body", async () => {
     const compiled = await ok(WHATSAPP);
-    const derived = whatsappTemplate(compiled.ir!.whatsapp!.body);
+    const derived = whatsappTemplate(compiled.template!.whatsapp!.body);
     expect(derived.template).toBe("Hi {{1}}, your order {{2}} has shipped.");
     expect(derived.params).toEqual([{ bind: "name" }, { bind: "order.id" }]);
   });
@@ -483,12 +486,46 @@ describe("one template, three channels", () => {
     },
     ${SMS}
     ${WHATSAPP}`);
-    const ir = compiled.ir!;
+    const ir = compiled.template!;
     expect(ir.email).toBeDefined();
     expect(ir.sms).toBeDefined();
     expect(ir.whatsapp).toBeDefined();
-    expect(renderIr(ir, compiled.fixtures.default).subject).toBe("Order A-1");
-    expect(renderIrSms(ir, compiled.fixtures.default)).toContain("Hi Ada");
-    expect(renderIrWhatsApp(ir, compiled.fixtures.default).body).toContain("Hi Ada");
+    expect(render(ir, compiled.fixtures.default, { channel: "email" }).subject).toBe("Order A-1");
+    expect(render(ir, compiled.fixtures.default, { channel: "sms" }).text).toContain("Hi Ada");
+    expect(render(ir, compiled.fixtures.default, { channel: "whatsapp" }).body).toContain("Hi Ada");
+  });
+
+  it("renders each channel to its own message shape", async () => {
+    const compiled = await ok(`email: {
+      subject: (input) => \`Order \${input.order.id}\`,
+      body: (input) => (<Email><p>Hi {input.name}</p></Email>),
+    },
+    ${SMS}
+    ${WHATSAPP}`);
+    const compiledTemplate = compiled.template!;
+    const input = compiled.fixtures.default;
+
+    const email = render(compiledTemplate, input, { channel: "email" });
+    expect(Object.keys(email).sort()).toEqual(["html", "preheader", "subject", "text"]);
+    expect(email.html).toContain("Hi Ada");
+
+    const sms = render(compiledTemplate, input, { channel: "sms" });
+    expect(Object.keys(sms).sort()).toEqual(["segments", "text"]);
+    expect(sms.segments).toEqual(smsSegmentInfo(sms.text));
+    expect(sms.segments).toMatchObject({ encoding: "gsm7", segmentCount: 1 });
+
+    const whatsapp = render(compiledTemplate, input, { channel: "whatsapp" });
+    expect(whatsapp).toMatchObject({
+      language: "en_US",
+      body: "Hi Ada, your order A-1 has shipped.",
+    });
+    expect(whatsapp.buttons).toBeInstanceOf(Array);
+  });
+
+  it("names the channel the template does not declare", async () => {
+    const compiled = await ok(SMS);
+    expect(() =>
+      render(compiled.template!, compiled.fixtures.default, { channel: "email" }),
+    ).toThrow(RenderError);
   });
 });
