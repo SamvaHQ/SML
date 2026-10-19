@@ -161,7 +161,7 @@ test("groups fixture diagnostics and persists a one-click fix through undo and r
   await page.getByTestId("check.fix-target").click();
   await expect.poll(() => readFile(path, "utf8")).toContain('target="_blank"');
   await expect(frame.locator("a")).toHaveAttribute("target", "_blank");
-  if (before === 1) await expect(badge).toContainText("No known risks");
+  if (before === 1) await expect(badge).toHaveText(/^(\d+ checks? to review|No issues found)$/);
   else await expect(badge).toHaveText(`${before - 1} warning${before - 1 === 1 ? "" : "s"}`);
   await page.getByTestId("source.undo").click();
   await expect.poll(() => readFile(path, "utf8")).toContain('target="_self"');
