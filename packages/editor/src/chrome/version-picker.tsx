@@ -115,6 +115,8 @@ function VersionRow({
 export function VersionPicker() {
   const lifecycleCapability = useEditorStore((state) => state.lifecycleCapability);
   const loadedDocument = useEditorStore((state) => state.doc !== null);
+  // A read-only template can list its versions but not take one back.
+  const editable = useEditorStore((state) => state.editable);
   const { beginLifecycle, endLifecycle, flushSaves, adoptLifecycleSnapshot } = useEditorStore(
     (state) => state.actions,
   );
@@ -172,7 +174,7 @@ export function VersionPicker() {
   };
 
   const restore = () => {
-    if (pending === null || pending.blocked || restoring) return;
+    if (pending === null || pending.blocked || restoring || !editable) return;
     if (!beginLifecycle()) return;
     setRestoring(true);
     setRestoreError(null);
@@ -323,7 +325,12 @@ export function VersionPicker() {
             <AlertDialogDescription>
               {`“${pending?.message ?? ""}” replaces the draft. Newer versions stay in the list, so you can restore them again.`}
             </AlertDialogDescription>
-            {pending?.blocked ? (
+            {!editable ? (
+              <AlertDialogDescription data-testid="preview-bar.restore-readonly">
+                This template is read-only, so its versions can be viewed but not restored.
+              </AlertDialogDescription>
+            ) : null}
+            {editable && pending?.blocked ? (
               <AlertDialogDescription>
                 Save a version first, so your unsaved changes stay in the list.
               </AlertDialogDescription>
@@ -345,7 +352,7 @@ export function VersionPicker() {
             <Button
               data-testid="preview-bar.restore-confirm"
               data-editor-control=""
-              disabled={restoring || pending?.blocked === true}
+              disabled={restoring || !editable || pending?.blocked === true}
               onClick={restore}
             >
               {restoring ? "Restoring…" : "Restore"}

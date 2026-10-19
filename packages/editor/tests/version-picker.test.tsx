@@ -77,7 +77,11 @@ const unarranged = (name: keyof AsyncLifecycleApi) => (): never => {
 
 const restoredSnapshot = { rev: "rev_2", authoredSource: "export default function Older() {}" };
 
-const mount = (overrides: Partial<AsyncLifecycleApi> = {}, withLifecycle = true) => {
+const mount = (
+  overrides: Partial<AsyncLifecycleApi> = {},
+  withLifecycle = true,
+  readonly = false,
+) => {
   const inspect = overrides.inspect ?? vi.fn(() => Promise.resolve(state()));
   const restore = overrides.restore ?? vi.fn(() => Promise.resolve(restoredSnapshot));
   const api: AsyncLifecycleApi = {
@@ -88,14 +92,29 @@ const mount = (overrides: Partial<AsyncLifecycleApi> = {}, withLifecycle = true)
     updateFile: unarranged("updateFile"),
     putAsset: unarranged("putAsset"),
   };
-  const host: AsyncEditorHost = {
-    contractVersion,
-    access: "editable",
-    sourceAccess: "editable",
-    document: { open: () => Promise.resolve({ initial: document, close: () => {} }) },
-    writer: { save: () => Promise.resolve({ rev: "rev_1" }) },
-    ...(withLifecycle ? { lifecycle: { status: "ready" as const, api } } : {}),
-  };
+  const lifecycle = withLifecycle ? { lifecycle: { status: "ready" as const, api } } : {};
+  const host: AsyncEditorHost = readonly
+    ? {
+        contractVersion,
+        access: "readonly",
+        sourceAccess: "readonly",
+        document: {
+          open: () =>
+            Promise.resolve({
+              initial: { ...document, access: { kind: "readonly", reason: "Owned by a teammate" } },
+              close: () => {},
+            }),
+        },
+        ...lifecycle,
+      }
+    : {
+        contractVersion,
+        access: "editable",
+        sourceAccess: "editable",
+        document: { open: () => Promise.resolve({ initial: document, close: () => {} }) },
+        writer: { save: () => Promise.resolve({ rev: "rev_1" }) },
+        ...lifecycle,
+      };
   const view = render(
     <EditorProvider host={host}>
       <VersionPicker />
@@ -221,6 +240,18 @@ describe("VersionPicker", () => {
     expect(view.getByTestId("preview-bar.restore-dialog").textContent).toContain(
       "Save a version first, so your unsaved changes stay in the list.",
     );
+  });
+
+  it("lists versions of a read-only template but does not offer to restore one", async () => {
+    const { view, restore } = mount({}, true, true);
+    await openPicker(view);
+    fireEvent.click(view.getByTestId(`preview-bar.version.${OLDER}`));
+
+    await view.findByTestId("preview-bar.restore-readonly");
+    const confirm = view.getByTestId("preview-bar.restore-confirm") as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(confirm);
+    expect(restore).not.toHaveBeenCalled();
   });
 
   it("keeps the dialog open and shows the error when the restore fails", async () => {
