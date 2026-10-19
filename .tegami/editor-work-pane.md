@@ -31,5 +31,21 @@ the Gmail clipping check use it, and otherwise say they measure the preview. `Ed
 `previewBusy` to show the progress line while the host works, and `onOpenPreview` to offer open
 in a new tab.
 
-The editor's tabs, switches, buttons, menus, popovers and tooltips now use the dashboard design
-system's recipes and tokens.
+## Chrome built from shadcn parts
+
+The editor's controls are shadcn's Base UI components (`base-nova` classes) styled with Tailwind on
+shadcn's token names, so a shadcn host draws the editor in its own theme. `EditorShell` is now a
+thin assembly of exported parts — `EditorRoot`, `EditorTopBar`, `EditorWorkspace`,
+`EditorStatusBar`, `EditorAssistantDock`, `EditorDivider`, `EditorPaneSwitch`, `EditorWorkPane`,
+`EditorCanvas`, `EditorPreviewBar`, `EditorVersionPicker`, `EditorFixtureSelect` and
+`EditorZoomControl` — that a host can rearrange. Each part carries a `data-slot`, exposes its state
+as data attributes, merges `className` (a string or a function of its state) with tailwind-merge,
+and takes Base UI's `render` prop. The README lists every slot and state attribute.
+
+Below 1280px the Chat | Preview switch sits in the top bar; on a phone the top bar stays one row,
+the work pane's tab row steps aside while Preview is its only tab, and the editor's own controls
+get an invisible 44px hit area instead of growing. The status bar lines up with the panes.
+
+The `--editor-raised-*`, `--editor-chip-*` and `--editor-pressed-*` variables are gone; restyle the
+chrome through Tailwind on shadcn's tokens or the parts' `className`. Popups animate with
+`tw-animate-css` where the host loads it.
