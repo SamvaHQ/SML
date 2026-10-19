@@ -50,12 +50,26 @@ describe("BrandFooter", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.html).toContain(`${FOOTER_ATTRIBUTE}=""`);
     expect(output.html).toContain("Acme Inc.");
-    expect(output.html).toContain("1 Market St<br />San Francisco, CA, 94105<br />US");
     expect(output.html).toContain('href="https://github.com/acme"');
+    // One line: company, social links and the unsubscribe link; the address on its own below.
     expect(output.html).toContain(
-      `<tr data-samva-unsubscribe=""><td style="padding:0 0 8px 0"><a href="${UNSUBSCRIBE_URL_PLACEHOLDER}" data-samva-no-track`,
+      `GitHub</a><span data-samva-unsubscribe=""> · <a href="${UNSUBSCRIBE_URL_PLACEHOLDER}" data-samva-no-track`,
+    );
+    expect(output.html).toContain(
+      '<p style="margin:0">1 Market St, San Francisco, CA, 94105, US</p>',
     );
     expect(output.text).toContain(`Unsubscribe (${UNSUBSCRIBE_URL_PLACEHOLDER})`);
+  });
+
+  it("follows the alignment its className asks for", () => {
+    const { BrandFooter } = brandComponents(BRAND);
+    const output = compileEmail(<BrandFooter className="text-left" />);
+    expect(output.html).toContain(
+      '<td align="left" class="text-xs text-muted-foreground text-left"',
+    );
+    expect(compileEmail(<BrandFooter />).html).toContain(
+      '<td align="center" class="text-xs text-muted-foreground text-center"',
+    );
   });
 
   it("omits what the brand does not set", () => {
@@ -173,7 +187,36 @@ describe("the send path's view of a footer", () => {
     const stripped = withoutUnsubscribeRow(rendered);
     expect(stripped.html).not.toContain("data-samva-unsubscribe");
     expect(stripped.html).toContain("Acme Inc.");
+    expect(stripped.html).toContain("GitHub</a></p>");
     expect(stripped.text).not.toContain(UNSUBSCRIBE_URL_PLACEHOLDER);
+    // Only the link's segment goes: the company and social links share its line.
+    expect(stripped.text).toContain("Acme Inc.");
+    expect(stripped.text).toContain("GitHub (https://github.com/acme)");
+    expect(stripped.text).not.toMatch(/·\s*$/m);
+  });
+
+  it("strips the unsubscribe link whatever its label says", () => {
+    const { BrandFooter } = brandComponents(BRAND);
+    for (const unsubscribeLabel of ["", "Unsubscribe · preferences"]) {
+      const stripped = withoutUnsubscribeRow(
+        compileEmail(<BrandFooter unsubscribeLabel={unsubscribeLabel} />),
+      );
+      expect(stripped.html).not.toContain(UNSUBSCRIBE_URL_PLACEHOLDER);
+      expect(stripped.text).not.toContain(UNSUBSCRIBE_URL_PLACEHOLDER);
+      expect(stripped.text).not.toContain("preferences");
+      expect(stripped.text).toContain("GitHub (https://github.com/acme)");
+      expect(stripped.text).not.toMatch(/·\s*$/m);
+    }
+  });
+
+  it("strips the unsubscribe row of a footer compiled before the single line", () => {
+    const html = `<table data-samva-footer=""><tbody><tr data-samva-unsubscribe=""><td><a href="${UNSUBSCRIBE_URL_PLACEHOLDER}">Unsubscribe</a></td></tr></tbody></table>`;
+    const stripped = withoutUnsubscribeRow({
+      html,
+      text: `Acme Inc.\nUnsubscribe (${UNSUBSCRIBE_URL_PLACEHOLDER})`,
+    });
+    expect(stripped.html).toBe('<table data-samva-footer=""><tbody></tbody></table>');
+    expect(stripped.text).toBe("Acme Inc.");
   });
 
   it("does not take a marker without the placeholder link for a footer that carries one", () => {
