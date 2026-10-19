@@ -352,18 +352,22 @@ export function DesignProperties({
     const both = next.find((token) => token.startsWith(`${kind}-`));
     const pair = sides === "y" || sides === "t" || sides === "b" ? "y" : "x";
     const opposite = pair === "x" ? "y" : "x";
+    // An explicit class for a side the author set is kept rather than overridden by the split.
+    const keep = (prefix: string, value: string) => {
+      if (!next.some((token) => token.startsWith(`${prefix}-`))) next.push(`${prefix}-${value}`);
+    };
     if (both !== undefined) {
       const value = both.slice(kind.length + 1);
       next = next.filter((token) => token !== both);
-      next.push(`${kind}${opposite}-${value}`);
-      if (sides === "t") next.push(`${kind}b-${value}`);
-      if (sides === "b") next.push(`${kind}t-${value}`);
+      keep(`${kind}${opposite}`, value);
+      if (sides === "t") keep(`${kind}b`, value);
+      if (sides === "b") keep(`${kind}t`, value);
     }
     const shared = next.find((token) => token.startsWith(`${kind}y-`));
     if ((sides === "t" || sides === "b") && shared !== undefined) {
       const value = shared.slice(kind.length + 2);
       next = next.filter((token) => token !== shared);
-      next.push(`${kind}${sides === "t" ? "b" : "t"}-${value}`);
+      keep(`${kind}${sides === "t" ? "b" : "t"}`, value);
     }
     if (step !== "") next.push(`${kind}${sides}-${step}`);
     setClasses(next, label);
@@ -676,11 +680,7 @@ export function DesignProperties({
                 value={align as "left" | "center" | "right"}
                 onChange={(value) =>
                   available &&
-                  swap(
-                    (token) => ALIGN.test(token),
-                    value === "left" ? [] : [`text-${value}`],
-                    "Change alignment",
-                  )
+                  swap((token) => ALIGN.test(token), [`text-${value}`], "Change alignment")
                 }
                 options={[
                   {

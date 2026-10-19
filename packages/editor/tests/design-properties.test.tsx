@@ -93,6 +93,20 @@ describe("Design properties", () => {
     expect(staged.at(-1)?.after).toContain('className="text-[13px] text-center"');
   });
 
+  it("writes left alignment explicitly, so an aligned parent does not win", async () => {
+    const { view, staged } = await mount('<p className="text-center">Hi</p>');
+    fireEvent.click(view.getByTestId("design-properties.align.left"));
+    expect(staged.at(-1)?.after).toContain('className="text-left"');
+  });
+
+  it("keeps a side the author set when it splits a shorthand", async () => {
+    const { view, staged } = await mount('<p className="my-6 mb-2">Hi</p>');
+    fireEvent.change(view.getByTestId("design-properties.margin-top"), {
+      target: { value: "4" },
+    });
+    expect(staged.at(-1)?.after).toContain('className="mb-2 mt-4"');
+  });
+
   it("splits a padding shorthand so the other axis keeps its value", async () => {
     const { view, staged } = await mount('<div className="bg-card p-4">Box</div>');
     fireEvent.change(view.getByTestId("design-properties.padding-x"), {
