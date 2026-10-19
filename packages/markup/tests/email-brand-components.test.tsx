@@ -195,6 +195,20 @@ describe("the send path's view of a footer", () => {
     expect(stripped.text).not.toMatch(/·\s*$/m);
   });
 
+  it("strips the unsubscribe link whatever its label says", () => {
+    const { BrandFooter } = brandComponents(BRAND);
+    for (const unsubscribeLabel of ["", "Unsubscribe · preferences"]) {
+      const stripped = withoutUnsubscribeRow(
+        compileEmail(<BrandFooter unsubscribeLabel={unsubscribeLabel} />),
+      );
+      expect(stripped.html).not.toContain(UNSUBSCRIBE_URL_PLACEHOLDER);
+      expect(stripped.text).not.toContain(UNSUBSCRIBE_URL_PLACEHOLDER);
+      expect(stripped.text).not.toContain("preferences");
+      expect(stripped.text).toContain("GitHub (https://github.com/acme)");
+      expect(stripped.text).not.toMatch(/·\s*$/m);
+    }
+  });
+
   it("strips the unsubscribe row of a footer compiled before the single line", () => {
     const html = `<table data-samva-footer=""><tbody><tr data-samva-unsubscribe=""><td><a href="${UNSUBSCRIBE_URL_PLACEHOLDER}">Unsubscribe</a></td></tr></tbody></table>`;
     const stripped = withoutUnsubscribeRow({

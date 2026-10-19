@@ -1,7 +1,7 @@
 import { BRAND_FOOTER_MARKER, UNSUBSCRIBE_LINK } from "../internal/unsubscribe-link";
 import type { BrandPlugin } from "./brand-plugin";
 import { escapeAttribute } from "./html";
-import { Fragment, jsx, type EmailChild, type EmailNode } from "./jsx-runtime";
+import { Fragment, jsx, rawMarkup, type EmailChild, type EmailNode } from "./jsx-runtime";
 import { samvaBrandPlugin } from "./samva-brand-plugin";
 
 // A brand as a build receives it: the organization's brand theme, logo assets
@@ -150,7 +150,8 @@ export const brandComponents = (
 
   // One line of who sent it, where to find them and how to stop, then the postal address:
   // `Acme · X · LinkedIn · Unsubscribe`. The unsubscribe link and its separator sit in their
-  // own marked span, so a send without an unsubscribe group drops exactly that.
+  // own marked span, so a send without an unsubscribe group drops exactly that. In the text part
+  // the separator is a line break: the link has a line of its own, whatever its label says.
   const BrandFooter = ({ unsubscribeLabel = "Unsubscribe", className }: BrandFooterProps) => {
     const items: EmailChild[] = [];
     const separator = () => (items.length === 0 ? [] : [" · "]);
@@ -169,7 +170,10 @@ export const brandComponents = (
       jsx("span", {
         [plugin.unsubscribeRowAttribute]: "",
         [BRAND_FOOTER_MARKER]: true,
-        children: [...separator(), unsubscribeLink(unsubscribeLabel, plugin)],
+        children: [
+          ...(items.length === 0 ? [] : [rawMarkup(" · ", "\n")]),
+          unsubscribeLink(unsubscribeLabel, plugin),
+        ],
       }),
     );
     const address = footer.address === undefined ? [] : addressLines(footer.address);
@@ -236,8 +240,6 @@ export const renderedFooterMarkers = (
   unsubscribeLink: html.includes(`href="${escapeAttribute(plugin.unsubscribeUrlPlaceholder)}"`),
 });
 
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 /**
  * Drop the unsubscribe row from a rendered message, for a send that resolved
  * no unsubscribe group: there is no link to put there, so the row goes.
@@ -254,18 +256,8 @@ export const withoutUnsubscribeRow = (
     new RegExp(`<(span|tr) ${plugin.unsubscribeRowAttribute}=""[^>]*>[\\s\\S]*?</\\1>`, "g"),
     "",
   ),
-  // The link's segment of its line, with the separator before it; a line left empty goes.
   text: rendered.text
     ?.split("\n")
-    .flatMap((textLine) => {
-      if (!textLine.includes(plugin.unsubscribeUrlPlaceholder)) return [textLine];
-      const rest = textLine
-        .replace(
-          new RegExp(`(?:\\s*·\\s*)?[^·]*\\(${escapeRegExp(plugin.unsubscribeUrlPlaceholder)}\\)`),
-          "",
-        )
-        .trimEnd();
-      return rest.trim() === "" ? [] : [rest];
-    })
+    .filter((textLine) => !textLine.includes(plugin.unsubscribeUrlPlaceholder))
     .join("\n"),
 });
