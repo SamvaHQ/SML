@@ -315,7 +315,7 @@ describe("source controls on the static profile", () => {
       true,
     );
     expect((await view.findByTestId("source.partial-warning")).textContent).toContain(
-      "every template that uses this partial",
+      "every template that uses it",
     );
     fireEvent.change(await view.findByTestId("source.property.children.literal"), {
       target: { value: "Tracking" },

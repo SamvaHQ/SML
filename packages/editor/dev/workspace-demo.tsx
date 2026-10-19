@@ -12,6 +12,7 @@ import { useState } from "react";
 import { useEditorStoreApi } from "../src/state/context";
 import type { CompiledHostControls } from "./compiled-host";
 import { DemoChat } from "./demo-chat";
+import { NIMBUS_THEME_CSS, NIMBUS_THEME_FILE } from "./nimbus-template";
 
 // `?demo=workspace` runs the editor the way Samva's dashboard does: a docked assistant beside
 // the tabbed work pane, a review surface, saved versions to restore, a host-reported sent size,
@@ -67,7 +68,8 @@ export const createWorkspaceHost = (controls: CompiledHostControls): AsyncEditab
     baseCommit: commits[0]!.commit,
     remoteHead: commits[0]!.commit,
     dirty: false,
-    files: [],
+    // The theme, so Design's color swatches show the template's own colors.
+    files: [{ path: NIMBUS_THEME_FILE, status: "clean", content: NIMBUS_THEME_CSS }],
     conflicts: [],
     commits,
   });

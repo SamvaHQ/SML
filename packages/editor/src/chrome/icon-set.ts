@@ -49,6 +49,9 @@ import SmartPhone01Icon from "@hugeicons/core-free-icons/SmartPhone01Icon";
 import SourceCodeIcon from "@hugeicons/core-free-icons/SourceCodeIcon";
 import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
 import Sun03Icon from "@hugeicons/core-free-icons/Sun03Icon";
+import TextAlignCenterIcon from "@hugeicons/core-free-icons/TextAlignCenterIcon";
+import TextAlignLeftIcon from "@hugeicons/core-free-icons/TextAlignLeftIcon";
+import TextAlignRightIcon from "@hugeicons/core-free-icons/TextAlignRightIcon";
 import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 import Undo02Icon from "@hugeicons/core-free-icons/Undo02Icon";
 import ViewIcon from "@hugeicons/core-free-icons/ViewIcon";
@@ -75,6 +78,9 @@ const hugeicon = (icon: IconSvgElement): EditorIcon => {
  * host replaces any of them through `EditorProvider`'s `icons`; the rest keep these.
  */
 export const DEFAULT_EDITOR_ICONS = {
+  alignCenter: hugeicon(TextAlignCenterIcon),
+  alignLeft: hugeicon(TextAlignLeftIcon),
+  alignRight: hugeicon(TextAlignRightIcon),
   arrowLeft: hugeicon(ArrowLeft02Icon),
   arrowUp: hugeicon(ArrowUp02Icon),
   arrowsExpand: hugeicon(ArrowExpand01Icon),

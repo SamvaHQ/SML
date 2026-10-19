@@ -83,16 +83,18 @@ describe("Inspector envelope scope", () => {
 });
 
 describe("Inspector element scope", () => {
-  it("identifies an authored element by tag, instance path, and where it was written", async () => {
+  it("names an authored element plainly and keeps where it was written one step away", async () => {
     const { view } = await mountInspector();
 
     fireEvent.click(view.getByTestId(`scope.${HEADING}`));
-    expect(view.container.textContent).toContain("Element");
+    expect(view.getByTestId("inspector.element-name").textContent).toBe("Heading");
     expect(view.container.textContent).toContain("Authored");
-    expect(view.container.textContent).toContain(HEADING);
     expect(view.container.textContent).toContain("src/Welcome.tsx:20:9");
     expect(view.container.textContent).toContain("This authoring renders one element here.");
-    expect(view.getByTestId("inspector.selection-badge").textContent).toBe("h1");
+    // The instance path is an attribute for tests and hosts, never text an author reads.
+    expect(view.getByTestId("inspector").textContent).not.toContain(HEADING);
+    expect(view.container.querySelector(`[data-instance-path="${HEADING}"]`)).not.toBeNull();
+    expect(view.queryByTestId("inspector.selection-badge")).toBeNull();
   });
 
   it("presents a generated wrapper as generated, pointing at the call that asked for it", async () => {
@@ -102,7 +104,7 @@ describe("Inspector element scope", () => {
     expect(view.container.textContent).toContain("Generated");
     // origins[0] is the authored Button, not the table the compiler emitted.
     expect(view.container.textContent).toContain("src/Welcome.tsx:24:9");
-    expect(view.getByTestId("inspector.selection-badge").textContent).toBe("table · generated");
+    expect(view.getByTestId("inspector.selection-badge").textContent).toBe("Generated");
   });
 
   it("lists the enclosing call sites, innermost first", async () => {
@@ -124,23 +126,23 @@ describe("Inspector element scope", () => {
     expect(view.container.textContent).toContain(
       "This authoring renders 3 elements here; this is number 2.",
     );
-    expect(view.getByTestId("inspector.selection-badge").textContent).toBe("tr 2 of 3");
+    expect(view.getByTestId("inspector.selection-badge").textContent).toBe("2 of 3");
 
     // Every iteration is reachable, and picking one moves the selection to it.
     expect(view.getByTestId("inspector.iteration.0.0.4.0")).toBeTruthy();
     expect(view.getByTestId("inspector.iteration.0.0.4.2")).toBeTruthy();
     fireEvent.click(view.getByTestId("inspector.iteration.0.0.4.2"));
-    expect(view.getByTestId("inspector.selection-badge").textContent).toBe("tr 3 of 3");
+    expect(view.getByTestId("inspector.selection-badge").textContent).toBe("3 of 3");
   });
 
   it("falls back to the document scope when the selection leaves the render", async () => {
     const { editor, view } = await mountInspector();
 
     fireEvent.click(view.getByTestId(`scope.${HEADING}`));
-    expect(view.container.textContent).toContain("Element");
+    expect(view.queryByTestId("inspector.element-name")).not.toBeNull();
 
     await act(() => emitChange(editor, { origin: "external", broken: true }));
-    await waitFor(() => expect(view.container.textContent).not.toContain("Element"));
+    await waitFor(() => expect(view.queryByTestId("inspector.element-name")).toBeNull());
     expect(view.container.textContent).toContain("Document");
   });
 });

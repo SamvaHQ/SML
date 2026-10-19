@@ -11,9 +11,11 @@ import { useShallow } from "zustand/react/shallow";
 import { useEditorStore } from "../state/context";
 import { DEVICE_WIDTH } from "../state/store";
 import { Button } from "../ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { ChecksPanel } from "./checks-panel";
-import { SidebarRightHide } from "./editor-icons";
-import { formatOrigin, selectionLabel } from "./email-outline";
+import { ChevronRight, SidebarRightHide } from "./editor-icons";
+import { formatOrigin, selectionTextExcerpt } from "./email-outline";
+import { authoredAncestry, friendlyName, occurrenceNote } from "./friendly";
 import { SourceControls, FixtureSourceControls } from "./source-controls";
 import { GroupLabel, Value, VarChip } from "./ui";
 import { Tip } from "./ui";
@@ -253,6 +255,7 @@ function EnvelopeInspector() {
  */
 function ElementInspector({ selection }: { selection: EmailElementSelection }) {
   const selections = useEditorStore((state) => state.render?.selections ?? NO_SELECTIONS);
+  const html = useEditorStore((state) => state.render?.html ?? "");
   const { select } = useEditorStore((state) => state.actions);
   const authoring = selection.origins[0];
   const enclosing = selection.origins.slice(1);
@@ -260,109 +263,116 @@ function ElementInspector({ selection }: { selection: EmailElementSelection }) {
   const definitionInstances = emailDefinitionInstances(selections, selection);
 
   return (
-    <>
-      <div className="border-border-subtle border-b py-3">
-        <GroupLabel>Element</GroupLabel>
-        <Row label="Tag">
-          <Value testId="inspector.element.tag">{selection.tag}</Value>
-        </Row>
-        <Row
-          label="Source"
-          title={
-            selection.authored
-              ? "This element was written in the template."
-              : "A compiler primitive produced this element; the authoring below is the call that asked for it."
-          }
-        >
-          <Value testId="inspector.element.provenance">
-            {selection.authored ? "Authored" : "Generated"}
-          </Value>
-        </Row>
-        <Row label="Instance">
-          <Value testId="inspector.element.instance">{selection.instancePath}</Value>
-        </Row>
-      </div>
-
-      <div className="border-border-subtle border-b py-3">
-        <GroupLabel>Authoring</GroupLabel>
-        {authoring === undefined ? (
-          <p className="text-muted-foreground text-[11.5px]">
-            The renderer produced this element with no authoring on the stack, so nothing in the
-            template points at it.
-          </p>
-        ) : (
-          <>
-            <Row label="Written at">
-              <Value testId="inspector.authoring.origin">{formatOrigin(authoring)}</Value>
-            </Row>
-            <p
-              data-testid="inspector.authoring.occurrence"
-              className="text-muted-foreground mt-2 text-[11.5px]"
-            >
-              {selection.occurrences > 1
-                ? `This authoring renders ${selection.occurrences} elements here; this is number ${selection.occurrence}.`
-                : "This authoring renders one element here."}
-            </p>
-            {definitionInstances.length > siblings.length && (
-              <p
-                data-testid="inspector.authoring.definition-scope"
-                className="text-muted-foreground mt-1 text-[11.5px]"
-              >
-                {definitionInstances.length} elements across the whole render come from it, through
-                more than one call site.
-              </p>
-            )}
-          </>
-        )}
-      </div>
-
-      <SourceControls
-        key={`${selection.instancePath}:${selection.start}:${selection.end}`}
-        selection={selection}
-      />
-
-      {enclosing.length > 0 && (
-        <div className="border-border-subtle border-b py-3">
-          <GroupLabel>Call sites</GroupLabel>
-          <ol className="m-0 flex list-none flex-col gap-1.5 p-0">
-            {enclosing.map((origin, index) => (
-              <li
-                key={`${formatOrigin(origin)}:${index}`}
-                data-testid={`inspector.call-site.${index}`}
-                className="text-foreground font-mono text-[11.5px] break-all"
-              >
-                {formatOrigin(origin)}
-              </li>
-            ))}
-          </ol>
-          <p className="text-muted-foreground mt-2 text-[11.5px]">Innermost call first.</p>
-        </div>
-      )}
-
+    <div data-slot="editor-element-inspector" data-instance-path={selection.instancePath}>
       {siblings.length > 1 && (
-        <div className="py-3">
-          <GroupLabel>Iterations</GroupLabel>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        <div data-slot="editor-element-copies" className="border-border/70 border-b py-3">
+          <GroupLabel>Copies</GroupLabel>
+          <p className="text-muted-foreground mb-2 text-[11.5px]">
+            A loop or a repeated block draws this {siblings.length} times; an edit changes every
+            copy.
+          </p>
+          <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
             {siblings.map((sibling, index) => (
               <li key={sibling.instancePath}>
                 <button
                   type="button"
                   data-testid={`inspector.iteration.${sibling.instancePath}`}
+                  aria-current={sibling.instancePath === selection.instancePath || undefined}
                   onClick={() => select(sibling.instancePath)}
                   className={cn(
-                    "hover:bg-muted w-full rounded px-1.5 py-1 text-left font-mono text-[11.5px]",
+                    "hover:bg-muted flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[12.5px]",
                     sibling.instancePath === selection.instancePath &&
-                      "bg-sel-soft text-accent-email",
+                      "bg-muted text-foreground font-medium",
                   )}
                 >
-                  {index + 1}. {sibling.instancePath}
+                  <span className="text-muted-foreground w-4 tabular-nums">{index + 1}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {selectionTextExcerpt(sibling, html) ?? `Copy ${index + 1}`}
+                  </span>
                 </button>
               </li>
             ))}
           </ul>
         </div>
       )}
-    </>
+
+      <SourceControls
+        key={`${selection.instancePath}:${selection.start}:${selection.end}`}
+        selection={selection}
+      />
+
+      <Collapsible data-slot="editor-element-details" className="py-1">
+        <CollapsibleTrigger
+          data-testid="inspector.details-toggle"
+          className="text-muted-foreground hover:text-foreground group/details flex w-full items-center gap-1.5 py-2 font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase outline-none"
+        >
+          <ChevronRight className="size-3 transition-transform group-data-[panel-open]/details:rotate-90" />
+          Where it's written
+        </CollapsibleTrigger>
+        <CollapsibleContent keepMounted className="pb-3 data-[closed]:hidden">
+          {authoring === undefined ? (
+            <p className="text-muted-foreground text-[11.5px]">
+              The renderer produced this element with no authoring on the stack, so nothing in the
+              template points at it.
+            </p>
+          ) : (
+            <>
+              <Row label="Written at">
+                <Value testId="inspector.authoring.origin">{formatOrigin(authoring)}</Value>
+              </Row>
+              <Row
+                label="Kind"
+                title={
+                  selection.authored
+                    ? "This element was written in the template."
+                    : "A compiler primitive produced this element; the authoring above is the call that asked for it."
+                }
+              >
+                <Value testId="inspector.element.provenance">
+                  {selection.authored ? "Authored" : "Generated"}
+                </Value>
+              </Row>
+              <Row label="Rendered as">
+                <Value testId="inspector.element.tag">{selection.tag}</Value>
+              </Row>
+              <p
+                data-testid="inspector.authoring.occurrence"
+                className="text-muted-foreground mt-2 text-[11.5px]"
+              >
+                {selection.occurrences > 1
+                  ? `This authoring renders ${selection.occurrences} elements here; this is number ${selection.occurrence}.`
+                  : "This authoring renders one element here."}
+              </p>
+              {definitionInstances.length > siblings.length && (
+                <p
+                  data-testid="inspector.authoring.definition-scope"
+                  className="text-muted-foreground mt-1 text-[11.5px]"
+                >
+                  {definitionInstances.length} elements across the whole render come from it,
+                  through more than one call site.
+                </p>
+              )}
+            </>
+          )}
+          {enclosing.length > 0 && (
+            <div className="mt-3">
+              <span className="text-muted-foreground text-xs">Inside, innermost first</span>
+              <ol className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
+                {enclosing.map((origin, index) => (
+                  <li
+                    key={`${formatOrigin(origin)}:${index}`}
+                    data-testid={`inspector.call-site.${index}`}
+                    className="text-foreground font-mono text-[11.5px] break-all"
+                  >
+                    {formatOrigin(origin)}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
   );
 }
 
@@ -384,9 +394,7 @@ export function Inspector({
       layoutMode: state.layoutMode,
     })),
   );
-  const { select, selectDocument, breadcrumbOf, toggleRight } = useEditorStore(
-    (state) => state.actions,
-  );
+  const { select, selectDocument, toggleRight } = useEditorStore((state) => state.actions);
 
   const selected =
     selection.kind === "element" ? (outline?.index.get(selection.instancePath) ?? null) : null;
@@ -394,7 +402,18 @@ export function Inspector({
   // resolves, so the panel falls back to Document rather than rendering blank.
   const scope =
     selection.kind === "envelope" ? "envelope" : selected === null ? "document" : "element";
-  const crumbs = selected === null ? [] : breadcrumbOf(selected.instancePath);
+  const authoredSource = useEditorStore((state) => state.doc?.origin.authoredSource ?? "");
+  // Only the blocks the author wrote, the nearest two, so the trail stays one short line.
+  const crumbs =
+    selected === null || outline === null
+      ? []
+      : authoredAncestry(outline, selected.instancePath)
+          .slice(-2)
+          .map((entry) => ({
+            instancePath: entry.instancePath,
+            label: friendlyName(entry, authoredSource),
+          }));
+  const repeat = selected === null ? undefined : occurrenceNote(selected);
   const overlay = !embedded && (layoutMode === "compact" || layoutMode === "narrow");
 
   return (
@@ -436,33 +455,34 @@ export function Inspector({
                   >
                     Email
                   </button>
-                  {crumbs.map((crumb, index) => (
+                  {crumbs.map((crumb) => (
                     <span key={crumb.instancePath} className="contents">
-                      <span className="text-placeholder">/</span>
-                      {index === crumbs.length - 1 ? (
-                        <span className="text-foreground truncate px-1 font-semibold">
-                          {crumb.label}
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => select(crumb.instancePath)}
-                          className="hover:bg-muted hover:text-foreground max-w-[72px] truncate rounded px-1"
-                        >
-                          {crumb.label}
-                        </button>
-                      )}
+                      <ChevronRight className="text-placeholder size-3 shrink-0" />
+                      <button
+                        type="button"
+                        onClick={() => select(crumb.instancePath)}
+                        className="hover:bg-muted hover:text-foreground max-w-[88px] truncate rounded px-1"
+                      >
+                        {crumb.label}
+                      </button>
                     </span>
                   ))}
+                  <ChevronRight className="text-placeholder size-3 shrink-0" />
+                  <span
+                    data-testid="inspector.element-name"
+                    className="text-foreground truncate px-1 font-semibold"
+                  >
+                    {selected === null ? "" : friendlyName(selected, authoredSource)}
+                  </span>
                 </>
               )}
             </div>
-            {selected !== null && (
+            {selected !== null && (repeat !== undefined || !selected.authored) && (
               <span
                 data-testid="inspector.selection-badge"
-                className="bg-muted text-muted-foreground shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase"
+                className="bg-muted text-muted-foreground shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium tabular-nums"
               >
-                {selected.authored ? selectionLabel(selected) : `${selected.tag} · generated`}
+                {selected.authored ? repeat : "Generated"}
               </span>
             )}
             {!embedded && (

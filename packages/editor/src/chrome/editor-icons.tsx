@@ -64,3 +64,6 @@ export const Redo = icon("redo");
 export const Reset = icon("reset");
 export const Trash = icon("trash");
 export const Undo = icon("undo");
+export const AlignCenter = icon("alignCenter");
+export const AlignLeft = icon("alignLeft");
+export const AlignRight = icon("alignRight");
