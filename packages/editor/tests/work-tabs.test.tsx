@@ -321,6 +321,17 @@ describe("refresh preview", () => {
     expect(state().pendingAuthoredSource).toBe(`${source} `);
   });
 
+  it("waits for a metadata save before reopening the document", async () => {
+    await mount();
+    actions().rename("Renamed while refreshing");
+    expect(state().metadataSaving).toBe(true);
+    actions().refreshPreview();
+    expect(state().previewEpoch).toBe(0);
+    await waitFor(() => expect(state().metadataSaving).toBe(false));
+    actions().refreshPreview();
+    expect(state().previewEpoch).toBe(1);
+  });
+
   it("does nothing while an edit is still pending", async () => {
     await mount();
     const source = state().doc?.origin.authoredSource;

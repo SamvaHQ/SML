@@ -715,6 +715,9 @@ export const createEditorBundle = (
         if (
           state.doc === null ||
           state.pendingAuthoredSource !== null ||
+          // A metadata save sends no document change, so a snapshot taken before it lands
+          // would put the old name or sender defaults back on screen.
+          state.metadataSaving ||
           state.conflict ||
           state.lifecycleBusy
         )

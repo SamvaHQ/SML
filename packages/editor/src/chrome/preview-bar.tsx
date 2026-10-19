@@ -125,6 +125,7 @@ export function EditorPreviewBar({
       canRefresh:
         state.doc !== null &&
         state.pendingAuthoredSource === null &&
+        !state.metadataSaving &&
         !state.conflict &&
         !state.lifecycleBusy,
     })),
