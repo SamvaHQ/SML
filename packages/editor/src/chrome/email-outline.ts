@@ -151,16 +151,3 @@ export const outlineBreadcrumb = (
       ? []
       : [{ instancePath: path, label: selectionLabel(selection) }];
   });
-
-/** The root and every node that directly holds children, so the tree opens on structure. */
-export const defaultExpanded = (outline: EmailOutline | null): Set<string> => {
-  const expanded = new Set<string>();
-  if (outline === null) return expanded;
-  for (const root of outline.roots) {
-    expanded.add(root.instancePath);
-    for (const child of root.children) {
-      if (child.children.length > 0) expanded.add(child.instancePath);
-    }
-  }
-  return expanded;
-};

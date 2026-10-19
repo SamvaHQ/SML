@@ -4,7 +4,6 @@ import { emailSelections, type EmittedPosition } from "@samva/markup/render";
 
 import {
   authoringOrigin,
-  defaultExpanded,
   emailOutline,
   formatOrigin,
   outlineAncestry,
@@ -157,17 +156,6 @@ describe("outlineAncestry + outlineBreadcrumb", () => {
   it("has nothing to say about a path outside this render", () => {
     expect(outlineAncestry(outline, "9.9")).toStrictEqual([]);
     expect(outlineBreadcrumb(outline, "9.9")).toStrictEqual([]);
-  });
-});
-
-describe("defaultExpanded", () => {
-  it("opens the root and every child of it that holds children", () => {
-    const expanded = defaultExpanded(outline);
-    expect([...expanded].toSorted()).toStrictEqual(["0", "0.0"]);
-  });
-
-  it("is empty without an outline", () => {
-    expect(defaultExpanded(null).size).toBe(0);
   });
 });
 

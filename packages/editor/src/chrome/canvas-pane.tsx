@@ -29,6 +29,7 @@ import { EditorDesignDock, EditorPinTray } from "./design-controls";
 import { DesignToolbar } from "./design-toolbar";
 import { outlineAncestry, selectionLabel } from "./email-outline";
 import { EnvelopeCard } from "./envelope-card";
+import { nearestAuthored } from "./friendly";
 import { Inspector } from "./inspector";
 import { NodeContextMenu, type AncestorEntry } from "./node-context-menu";
 import { usePart, type PartProps } from "./part";
@@ -120,9 +121,15 @@ export function CanvasPane({
   // so the frame's listeners never re-attach as it changes.
   const onFrameSelect = useCallback(
     (instancePath: string | null) => {
-      const { canvasMode: mode, actions } = store.getState();
-      if (mode !== "pin") actions.select(instancePath);
-      else if (instancePath !== null) actions.addPin(instancePath);
+      const { canvasMode: mode, actions, outline: current } = store.getState();
+      // Design and pins name what the author wrote: a click on a compiler's table or cell lands
+      // on the authored block around it.
+      const target =
+        mode === "point" || instancePath === null || current === null
+          ? instancePath
+          : (nearestAuthored(current, instancePath)?.instancePath ?? instancePath);
+      if (mode !== "pin") actions.select(target);
+      else if (target !== null) actions.addPin(target);
     },
     [store],
   );

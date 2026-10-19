@@ -5,7 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
 import { ArrowUp, ChevronDown, ChevronUp, Duplicate, Trash } from "./editor-icons";
-import { selectionLabel } from "./email-outline";
+import { authoredAncestry, friendlyName, occurrenceNote } from "./friendly";
 
 type BlockOperation =
   | { readonly kind: "delete" }
@@ -37,7 +37,12 @@ export function DesignToolbar({
         state.pendingAuthoredSource === null,
     })),
   );
-  const { applySourceEdit, select, ancestryOf } = useEditorStore((state) => state.actions);
+  const { applySourceEdit, select } = useEditorStore((state) => state.actions);
+  const name = useEditorStore((state) =>
+    [friendlyName(selection, state.doc?.origin.authoredSource ?? ""), occurrenceNote(selection)]
+      .filter((part) => part !== undefined)
+      .join(" "),
+  );
   const origin = selection.origins[0];
   const target = useMemo(
     () =>
@@ -46,7 +51,12 @@ export function DesignToolbar({
         : inspectSourceElement(source, entry, origin),
     [origin, entry, source],
   );
-  const parent = ancestryOf(selection.instancePath).at(-1);
+  const outline = useEditorStore((state) => state.outline);
+  // Out to the block the author wrote around it, past the compiler's tables and cells.
+  const parent =
+    outline === null
+      ? undefined
+      : authoredAncestry(outline, selection.instancePath).at(-1)?.instancePath;
   const available = ready && target !== null && source !== null && revision === rev;
   const run = (operation: BlockOperation, label: string) => {
     if (!available || revision === null) return;
@@ -82,7 +92,7 @@ export function DesignToolbar({
       aria-label="Selected element"
       data-testid="design-toolbar"
     >
-      <span className="samva-tb-label">{selectionLabel(selection)}</span>
+      <span className="samva-tb-label">{name}</span>
       <span className="samva-tb-sep" aria-hidden />
       {button({
         label: "Select the element around it",

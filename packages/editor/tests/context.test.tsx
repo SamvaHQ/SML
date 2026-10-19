@@ -268,12 +268,12 @@ describe("metadata save failure", () => {
 // editor dist gets no React Compiler, so this isolation is load-bearing.
 
 function EditorRenderProbe({ onRender }: { onRender: () => void }) {
-  const { doc, expandedLayers } = useEditorStore(
-    useShallow((state) => ({ doc: state.doc, expandedLayers: state.expandedLayers })),
+  const { doc, collapsedLayers } = useEditorStore(
+    useShallow((state) => ({ doc: state.doc, collapsedLayers: state.collapsedLayers })),
   );
   onRender();
   return (
-    <div data-testid="render-probe-doc" data-expanded-count={expandedLayers.size}>
+    <div data-testid="render-probe-doc" data-collapsed-count={collapsedLayers.size}>
       {doc?.name ?? "loading"}
     </div>
   );
@@ -311,7 +311,7 @@ describe("hover render isolation", () => {
     await waitFor(() => {
       const probe = view.getByTestId("render-probe-doc");
       expect(probe.textContent).toBe("Welcome — first bag on us");
-      expect(Number(probe.dataset.expandedCount)).toBeGreaterThan(0);
+      expect(Number(probe.dataset.collapsedCount)).toBe(0);
     });
 
     const editorRendersBeforeHover = editorRender.mock.calls.length;

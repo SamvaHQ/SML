@@ -19,13 +19,12 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 
 import type { DeviceMode } from "../canvas/device";
 import {
-  defaultExpanded,
   outlineAncestry,
   outlineBreadcrumb,
-  selectionLabel,
   type Crumb,
   type EmailOutline,
 } from "../chrome/email-outline";
+import { friendlyName, occurrenceNote } from "../chrome/friendly";
 import {
   type SizeSource,
   deriveDocumentState,
@@ -291,6 +290,7 @@ export interface EditorActions {
     readonly fromDefault?: FromDefault | null | undefined;
     readonly replyToDefault?: ReadonlyArray<string> | null | undefined;
   }) => void;
+  /** Open or close one layer in the layers list. */
   readonly toggleLayerExpand: (instancePath: string) => void;
   readonly ancestryOf: (instancePath: string) => ReadonlyArray<string>;
   readonly breadcrumbOf: (instancePath: string) => ReadonlyArray<Crumb>;
@@ -379,9 +379,8 @@ export interface EditorState {
   // ── selection
   readonly selection: EditorSelection;
   readonly renameActive: boolean;
-  readonly expandedLayers: ReadonlySet<string>;
-  /** The expanded set is seeded once per store, on the first render that has an outline. */
-  readonly layersSeeded: boolean;
+  /** Layers the author closed. Every authored layer starts open. */
+  readonly collapsedLayers: ReadonlySet<string>;
   // ── layout
   readonly leftCollapsed: boolean;
   readonly rightCollapsed: boolean;
@@ -513,14 +512,11 @@ export const createEditorBundle = (
     pendingAuthoredSource: string | null,
   ): Partial<EditorState> => {
     const derived = deriveDocumentState(doc, state.hostChecks);
-    const seed = !state.layersSeeded && derived.outline !== null;
     return {
       doc,
       pendingAuthoredSource,
       ...derived,
       render: renderOf(doc),
-      expandedLayers: seed ? defaultExpanded(derived.outline) : state.expandedLayers,
-      layersSeeded: state.layersSeeded || seed,
       selection: resolveSelection(state.selection, doc, state.outline),
     };
   };
@@ -863,10 +859,11 @@ export const createEditorBundle = (
           if (!render.selections.some((entry) => entry.instancePath === instancePath)) {
             return { selection: DOCUMENT_SELECTION };
           }
-          const expanded = new Set(current.expandedLayers);
+          // The layers around a selection open, so the selected row is on screen.
+          const collapsed = new Set(current.collapsedLayers);
           if (current.outline !== null) {
             for (const ancestor of outlineAncestry(current.outline, instancePath)) {
-              expanded.add(ancestor);
+              collapsed.delete(ancestor);
             }
           }
           return {
@@ -877,7 +874,7 @@ export const createEditorBundle = (
               revision: render.revision,
               fixture: doc.fixture,
             },
-            expandedLayers: expanded,
+            collapsedLayers: collapsed,
           };
         });
         const { selection } = get();
@@ -1083,10 +1080,10 @@ export const createEditorBundle = (
 
       toggleLayerExpand: (instancePath) =>
         set((current) => {
-          const next = new Set(current.expandedLayers);
+          const next = new Set(current.collapsedLayers);
           if (next.has(instancePath)) next.delete(instancePath);
           else next.add(instancePath);
-          return { expandedLayers: next };
+          return { collapsedLayers: next };
         }),
 
       ancestryOf: (instancePath) => {
@@ -1259,7 +1256,9 @@ export const createEditorBundle = (
               revision: render.revision,
               fixture: doc.fixture,
               tag: entry.tag,
-              label: selectionLabel(entry),
+              label: [friendlyName(entry, doc.origin.authoredSource), occurrenceNote(entry)]
+                .filter((part) => part !== undefined)
+                .join(" "),
               origin:
                 origin === undefined
                   ? null
@@ -1331,8 +1330,7 @@ export const createEditorBundle = (
       diagnosticAssistance: null,
       selection: DOCUMENT_SELECTION,
       renameActive: false,
-      expandedLayers: new Set<string>(),
-      layersSeeded: false,
+      collapsedLayers: new Set<string>(),
       leftCollapsed: false,
       rightCollapsed: false,
       workTabs: initialWorkTabs,

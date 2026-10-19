@@ -151,7 +151,7 @@ test("pins drop numbered, carry notes, renumber and clear after a confirm", asyn
 
   await page.getByTestId("pin-tray.remove.1").click();
   await expect(page.getByTestId("pin-tray")).toHaveAttribute("data-count", "2");
-  await expect(page.getByTestId("pin-tray.row.1")).toContainText("a");
+  await expect(page.getByTestId("pin-tray.row.1")).toContainText("Button");
   await expect(pins).not.toContainText("Shorten this");
 
   await page.getByTestId("pin-tray.clear").click();
