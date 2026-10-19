@@ -336,6 +336,46 @@ describe("container-responsive rail policy", () => {
     expect(view.queryByTestId("agent-workspace.preview-updated")).toBeNull();
   });
 
+  it("leaves zoom chords to the page while the narrow layout shows the chat", async () => {
+    stubFrame(1440);
+    const notify = observeResizes();
+    const view = render(
+      <EditorProvider host={await host()}>
+        <EditorShell
+          contributions={[
+            {
+              slot: "rail.assistant",
+              id: "assistant",
+              render: () => <input data-testid="test.composer" />,
+            },
+          ]}
+        />
+        <StoreCapture />
+      </EditorProvider>,
+    );
+    await waitFor(() => expect(view.getByTestId("work-pane")).toBeTruthy());
+    act(() => notify(1000));
+    await waitFor(() => expect(view.getByTestId("agent-workspace.tab.assistant")).toBeTruthy());
+    const zoom = storeOf().getState().canvasZoom;
+    const chord = () => {
+      const event = new KeyboardEvent("keydown", {
+        key: "=",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      view.getByTestId("test.composer").dispatchEvent(event);
+      return event;
+    };
+
+    expect(chord().defaultPrevented).toBe(false);
+    expect(storeOf().getState().canvasZoom).toBe(zoom);
+
+    fireEvent.click(view.getByTestId("agent-workspace.tab.preview"));
+    await waitFor(() => expect(chord().defaultPrevented).toBe(true));
+    expect(storeOf().getState().canvasZoom).not.toBe(zoom);
+  });
+
   it("keeps the work pane's tabs across mounts of the same editor", async () => {
     stubFrame(1440);
     observeResizes();

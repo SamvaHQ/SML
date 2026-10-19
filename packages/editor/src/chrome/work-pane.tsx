@@ -85,7 +85,14 @@ function ChecksBadge() {
  * a × that shows on hover or focus, and always on a touch screen. In the split layout the bar
  * starts with the control that collapses the chat so the work pane takes the full width.
  */
-export function WorkPane({ split }: { readonly split: boolean }) {
+export function WorkPane({
+  split,
+  visible = true,
+}: {
+  readonly split: boolean;
+  /** The pane is on screen; a Chat | Preview switch showing the chat hides it. */
+  readonly visible?: boolean | undefined;
+}) {
   const portalContainer = useEditorPortalContainer();
   const { workTabs, activeWorkTab, chatCollapsed } = useEditorStore(
     useShallow((state) => ({
@@ -231,7 +238,7 @@ export function WorkPane({ split }: { readonly split: boolean }) {
           data-testid="work-pane.panel.preview"
           className="flex min-h-0 min-w-0 flex-1 outline-none"
         >
-          <CanvasPane pointing active={active === "preview"} />
+          <CanvasPane pointing active={visible && active === "preview"} />
         </Tabs.Panel>
         {active === "source" && (
           <Tabs.Panel value="source" className="flex min-h-0 min-w-0 flex-1 outline-none">

@@ -140,7 +140,7 @@ export function EmailWorkspace() {
             hidden={focused && focusedPane !== "preview"}
             className="flex min-h-0 min-w-0 flex-1"
           >
-            <WorkPane split={!focused} />
+            <WorkPane split={!focused} visible={!focused || focusedPane === "preview"} />
           </div>
         </div>
       </div>
