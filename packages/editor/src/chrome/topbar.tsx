@@ -270,6 +270,7 @@ export function TopBar({
                   variant="ghost"
                   size="sm"
                   data-testid="topbar.undo"
+                  data-editor-control=""
                   onClick={onUndo}
                   disabled={!canUndo}
                 >
@@ -281,6 +282,7 @@ export function TopBar({
                   variant="ghost"
                   size="sm"
                   data-testid="topbar.redo"
+                  data-editor-control=""
                   onClick={onRedo}
                   disabled={!canRedo}
                 >
@@ -289,20 +291,21 @@ export function TopBar({
               )}
               {!folded && messageChannel && <FixtureSelect testId="topbar.fixture" />}
               {!folded && <Separator orientation="vertical" className="mx-1 h-4!" />}
-              {
+              {!narrow && (
                 <Tip label="Preview template">
                   <Button
                     variant="ghost"
                     size={standard || folded ? "icon-sm" : "sm"}
                     aria-label="Preview template"
                     data-testid="topbar.preview"
+                    data-editor-control=""
                     onClick={onPreview}
                   >
                     <Eye />
                     {standard || folded ? null : "Preview"}
                   </Button>
                 </Tip>
-              }
+              )}
               {!folded && exportEnabled === true && (
                 <Tip
                   label={canExport ? "Export rendered HTML" : "Export waits for the latest render"}
@@ -312,6 +315,7 @@ export function TopBar({
                     size={standard ? "icon-sm" : "sm"}
                     aria-label="Export HTML"
                     data-testid="topbar.export"
+                    data-editor-control=""
                     onClick={handleExport}
                     disabled={!canExport}
                   >
@@ -341,6 +345,7 @@ export function TopBar({
                     {onUndo !== undefined && (
                       <DropdownMenuItem
                         data-testid="topbar.undo"
+                        data-editor-control=""
                         disabled={!canUndo}
                         onClick={onUndo}
                       >
@@ -350,6 +355,7 @@ export function TopBar({
                     {onRedo !== undefined && (
                       <DropdownMenuItem
                         data-testid="topbar.redo"
+                        data-editor-control=""
                         disabled={!canRedo}
                         onClick={onRedo}
                       >
@@ -366,6 +372,7 @@ export function TopBar({
                     {exportEnabled === true && (
                       <DropdownMenuItem
                         data-testid="topbar.export"
+                        data-editor-control=""
                         disabled={!canExport}
                         onClick={handleExport}
                       >

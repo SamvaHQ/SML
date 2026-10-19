@@ -49,23 +49,25 @@ export function FixtureSelect({
   if (!available || fixture === null || fixtures.length < 2) return null;
   return (
     <Tip label="Sample data the preview shows">
-      <NativeSelect
-        size="sm"
-        aria-label="Fixture"
-        data-slot="editor-fixture-select"
-        data-testid={testId}
-        data-editor-control=""
-        value={fixture}
-        disabled={busy}
-        onChange={(event) => viewFixture(event.target.value)}
-        className={cn("max-w-40 min-w-0 [&_select]:text-xs [&_select]:font-medium", className)}
-      >
-        {fixtures.map((name) => (
-          <NativeSelectOption key={name} value={name}>
-            {name}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
+      {/* A select draws no ::after, so its wrapper carries the touch target. */}
+      <span data-editor-control="" className="inline-flex min-w-0">
+        <NativeSelect
+          size="sm"
+          aria-label="Fixture"
+          data-slot="editor-fixture-select"
+          data-testid={testId}
+          value={fixture}
+          disabled={busy}
+          onChange={(event) => viewFixture(event.target.value)}
+          className={cn("max-w-40 min-w-0 [&_select]:text-xs [&_select]:font-medium", className)}
+        >
+          {fixtures.map((name) => (
+            <NativeSelectOption key={name} value={name}>
+              {name}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </span>
     </Tip>
   );
 }

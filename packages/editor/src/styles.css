@@ -12,6 +12,32 @@
  */
 @source "./**/*.{js,ts,tsx}";
 
+/*
+ * shadcn's Base UI components key their orientation styles on these variants (shadcn's own
+ * `shadcn/tailwind.css` defines them the same way), and draw bare `border` utilities in the border
+ * token as shadcn's base layer does. Both are scoped to what the editor needs.
+ */
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) {
+    @slot;
+  }
+}
+
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) {
+    @slot;
+  }
+}
+
+@layer base {
+  .samva-editor-shell,
+  .samva-editor-shell *,
+  .samva-editor-shell ::before,
+  .samva-editor-shell ::after {
+    border-color: var(--border);
+  }
+}
+
 @theme {
   --color-accent-email: var(--accent-email);
   --color-sel-soft: var(--sel-soft);

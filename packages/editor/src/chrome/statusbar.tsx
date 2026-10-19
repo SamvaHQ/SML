@@ -7,6 +7,7 @@ import { summarizeChecks } from "../state/derive";
 import type { EditorLayoutMode } from "../state/store";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Separator } from "../ui/separator";
 import { AttentionSummary } from "./compatibility-report";
 import { useContribution } from "./contributions";
 import { usePart, type PartProps } from "./part";
@@ -147,6 +148,7 @@ export function StatusBar({
                 !narrow && <span>{doc === null ? "Loading…" : "Draft"}</span>
               )}
             </div>
+            {!split && <Separator orientation="vertical" className="my-2.5" />}
             <div
               data-slot="editor-status-bar-end"
               className="flex min-w-0 flex-1 items-center gap-1 px-2"

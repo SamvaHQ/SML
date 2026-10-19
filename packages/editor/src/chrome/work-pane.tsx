@@ -195,17 +195,23 @@ export function EditorWorkPane({
                 <Tabs.List
                   data-slot="editor-work-pane-tabs"
                   aria-label="Work pane views"
-                  className="samva-editor-scroll-hidden flex min-w-0 items-center gap-1 overflow-x-auto"
+                  className={cn(
+                    // The list fills the header's height so the phone's 44px hit areas stay
+                    // inside it instead of making the row scroll.
+                    "samva-editor-scroll-hidden flex h-full min-w-0 items-center gap-1 overflow-x-auto",
+                    narrow && "px-2",
+                  )}
                 >
                   <Tabs.Tab
                     value="preview"
                     data-slot="editor-work-pane-tab"
                     data-testid="work-pane.tab.preview"
                     data-editor-control=""
-                    className={TAB_CLASS}
+                    aria-label={narrow ? "Preview" : undefined}
+                    className={cn(TAB_CLASS, narrow && "px-2")}
                   >
                     <Eye />
-                    Preview
+                    {narrow ? null : "Preview"}
                   </Tabs.Tab>
                   {tabs.map((tab) => {
                     const { label, Icon } = TAB_META[tab];
@@ -220,10 +226,11 @@ export function EditorWorkPane({
                           data-slot="editor-work-pane-tab"
                           data-testid={`work-pane.tab.${tab}`}
                           data-editor-control=""
-                          className={cn(TAB_CLASS, narrow ? "pr-1.5" : "pr-7")}
+                          aria-label={narrow ? label : undefined}
+                          className={cn(TAB_CLASS, narrow ? "px-2" : "pr-7")}
                         >
                           <Icon />
-                          {label}
+                          {narrow ? null : label}
                           {tab === "review" && review?.badge}
                           {tab === "checks" && <ChecksBadge />}
                         </Tabs.Tab>
@@ -239,6 +246,8 @@ export function EditorWorkPane({
                             "text-muted-foreground size-5 rounded-sm",
                             narrow ? "relative" : "absolute right-1",
                             revealOnRowHover,
+                            // The shown tab keeps its × in view, so its pill never looks lopsided.
+                            "group-has-[[data-active]]/row:opacity-100",
                           )}
                         >
                           <Xmark className="size-3" />
@@ -319,7 +328,7 @@ export function EditorWorkPane({
                 data-testid="work-pane.panel.checks"
                 className="samva-editor-scroll min-h-0 flex-1 overflow-y-auto outline-none"
               >
-                <div className="mx-auto max-w-2xl px-4 pt-4 pb-8">
+                <div className="max-w-2xl px-4 pt-4 pb-8">
                   <ChecksPanel />
                 </div>
               </Tabs.Panel>

@@ -21,7 +21,7 @@ export function DesignPanel() {
         <section
           aria-label="Layers"
           data-slot="editor-layers"
-          className="border-border flex max-h-[40%] min-h-0 shrink-0 flex-col border-b @min-[36rem]/design:max-h-none @min-[36rem]/design:w-60 @min-[36rem]/design:border-r @min-[36rem]/design:border-b-0"
+          className="border-border flex max-h-[40%] min-h-0 shrink-0 flex-col border-b @min-[36rem]/design:max-h-none @min-[36rem]/design:w-72 @min-[36rem]/design:border-r @min-[36rem]/design:border-b-0"
         >
           <h2 className="text-muted-foreground px-3 pt-3 pb-1 font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase">
             Layers

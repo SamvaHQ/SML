@@ -34,7 +34,7 @@ function TreeRow({ node, depth }: { node: EmailOutlineNode; depth: number }) {
     <li>
       <div
         className="group relative"
-        style={{ paddingLeft: depth * 12 }}
+        style={{ paddingLeft: depth * 10 }}
         onMouseEnter={() => setHovered(node.instancePath)}
         onMouseLeave={() => setHovered(null)}
       >

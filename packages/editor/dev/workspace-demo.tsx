@@ -187,7 +187,7 @@ export function WorkspaceDemoShell({
                         onClick={() =>
                           emit({
                             origin: "agent",
-                            staleReason: "Unexpected token in src/Welcome.tsx:17:5",
+                            staleReason: "the headline closes a tag it never opened.",
                           })
                         }
                         className={DEV_BUTTON}

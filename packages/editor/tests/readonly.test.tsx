@@ -161,7 +161,10 @@ describe("readonly documents", () => {
     expect(view.getByTestId("topbar.name").getAttribute("contenteditable")).toBe("false");
     // The host declares a ready lifecycle; a read-only document still has nothing to publish.
     expect(view.queryByTestId("topbar.publish")).toBeNull();
-    expect(view.queryByTestId("topbar.preview")).not.toBeNull();
+    // Preview stays reachable: inline in a wide bar, in the bar's menu on a phone-width frame.
+    expect(
+      view.queryByTestId("topbar.preview") ?? view.queryByTestId("topbar.more"),
+    ).not.toBeNull();
     expect(view.container.querySelector('[contenteditable="true"]')).toBeNull();
 
     // The authored entry is readable but not typable when the host owns the source.

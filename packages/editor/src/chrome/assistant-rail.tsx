@@ -64,7 +64,14 @@ export function EditorAssistantDock({
                   <div className="ml-auto shrink-0">{assistant.header}</div>
                 )}
               </div>
-              <div data-slot="editor-assistant-dock-body" className="flex min-h-0 flex-1 flex-col">
+              <div
+                data-slot="editor-assistant-dock-body"
+                // A chat that takes the whole frame keeps a readable measure.
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col",
+                  focused && "mx-auto w-full max-w-3xl",
+                )}
+              >
                 {assistant.panel}
               </div>
             </div>
