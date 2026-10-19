@@ -5,6 +5,7 @@ import { useEditorStore } from "../state/context";
 import { BrandChip, type EditorBrandSource } from "./brand-chip";
 import { ChevronLeft, Download, Eye } from "./editor-icons";
 import { downloadEmailHtml } from "./export-html";
+import { FixtureSelect } from "./preview-bar";
 import { IconBtn } from "./ui";
 import { chromePrimary, cn, focusRing } from "./ui-classes";
 
@@ -96,6 +97,8 @@ export function TopBar({
     pendingAuthoredSource === null;
   const compact = layoutMode === "compact" || layoutMode === "narrow";
   const standard = layoutMode === "standard";
+  // An email shows its fixture in the preview bar; the message channels have no preview bar.
+  const messageChannel = doc !== null && doc.channel !== "email";
   const handleExport = () => {
     if (!canExport || doc === null || render === null) return;
     downloadEmailHtml(render.html, doc.name);
@@ -221,6 +224,7 @@ export function TopBar({
               Redo
             </IconBtn>
           )}
+          {!compact && messageChannel && <FixtureSelect testId="topbar.fixture" />}
           {!compact && <div className="bg-border mx-1 h-[18px] w-px" />}
           {!compact && (
             <IconBtn
@@ -289,6 +293,7 @@ export function TopBar({
               Redo
             </IconBtn>
           )}
+          {messageChannel && <FixtureSelect testId="topbar.fixture" />}
           <IconBtn
             title="Preview template"
             testId="topbar.preview"

@@ -9,6 +9,7 @@ import { LockedAction } from "../src/chrome/locked-action";
 import { EditorShell } from "../src/chrome/shell";
 import { useEditorStoreApi } from "../src/state/context";
 import { EditorProvider } from "../src/state/provider";
+import { markupEditor, SMS_TSX } from "./markup-host";
 import { mockEditor } from "./mock-host";
 
 afterEach(() => {
@@ -402,6 +403,29 @@ describe("public editor chrome", () => {
     fireEvent.click(view.getByTestId("work-pane.close.checks"));
     expect(view.queryByTestId("work-pane.tab.checks")).toBeNull();
     expect(view.getByTestId("work-pane.tab.design").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("keeps fixture switching in the toolbar for a message channel", async () => {
+    stubWideShell();
+    const editor = markupEditor(
+      "sms",
+      SMS_TSX.replace(
+        'fixtures: { default: { name: "Ada", code: "123456", vip: true } },',
+        'fixtures: { default: { name: "Ada", code: "123456", vip: true }, returning: { name: "Grace", code: "654321" } },',
+      ),
+    );
+    const view = render(
+      <EditorProvider
+        host={{ ...editor.host, fixtures: { status: "ready", api: { view: async () => {} } } }}
+      >
+        <EditorShell />
+      </EditorProvider>,
+    );
+
+    const picker = (await view.findByTestId("topbar.fixture")) as HTMLSelectElement;
+    expect([...picker.options].map((option) => option.value)).toEqual(["default", "returning"]);
+    // An SMS has no email canvas, so no preview bar carries the picker.
+    expect(view.queryByTestId("preview-bar")).toBeNull();
   });
 
   it("yields the guest headline to the live save note while a persist is queued", async () => {

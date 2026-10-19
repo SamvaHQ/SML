@@ -30,15 +30,16 @@ import { VersionPicker } from "./version-picker";
 const NO_FIXTURES: ReadonlyArray<string> = [];
 
 /**
- * Which declared fixture the canvas shows. Switching shows the same draft with other sample
+ * Which declared fixture the preview shows. Switching shows the same draft with other sample
  * data, so it changes what is on screen and never the template. Hidden when the host cannot
- * switch or the template declares one input.
+ * switch or the template declares one input. The email preview bar carries it; the message
+ * channels show it in the toolbar.
  */
-function FixtureSelect() {
+export function FixtureSelect({ testId }: { readonly testId: string }) {
   const { fixtures, fixture, busy, available } = useEditorStore(
     useShallow((state) => ({
-      fixtures: state.doc?.channel === "email" ? state.doc.fixtures : NO_FIXTURES,
-      fixture: state.doc?.channel === "email" ? state.doc.fixture : null,
+      fixtures: state.doc?.fixtures ?? NO_FIXTURES,
+      fixture: state.doc?.fixture ?? null,
       busy: state.fixtureBusy,
       available: state.fixtureCapability?.status === "ready",
     })),
@@ -50,7 +51,7 @@ function FixtureSelect() {
       <label className="relative inline-flex min-w-0 items-center">
         <span className="sr-only">Fixture</span>
         <select
-          data-testid="preview-bar.fixture"
+          data-testid={testId}
           data-editor-control=""
           value={fixture}
           disabled={busy}
@@ -151,7 +152,7 @@ export function PreviewBar() {
             },
           ]}
         />
-        <FixtureSelect />
+        <FixtureSelect testId="preview-bar.fixture" />
       </div>
       <Tip label={size.help}>
         <span
