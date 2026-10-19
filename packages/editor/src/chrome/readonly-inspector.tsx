@@ -4,6 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useEditorStore } from "../state/context";
 import { AttentionSummary } from "./compatibility-report";
 import { SidebarRightHide } from "./editor-icons";
+import { tooltipPopupClass } from "./ui-classes";
 import { useEditorPortalContainer } from "./use-editor-portal";
 
 /** Read-only source ownership and diagnostics, without mutation controls. */
@@ -52,10 +53,7 @@ export function ReadonlyInspector({
             </Tooltip.Trigger>
             <Tooltip.Portal container={portalContainer}>
               <Tooltip.Positioner side="bottom" sideOffset={5} className="z-[200]">
-                <Tooltip.Popup
-                  role="tooltip"
-                  className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-                >
+                <Tooltip.Popup role="tooltip" className={tooltipPopupClass}>
                   Collapse inspector
                 </Tooltip.Popup>
               </Tooltip.Positioner>

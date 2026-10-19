@@ -1,3 +1,4 @@
+import Add01Icon from "@hugeicons/core-free-icons/Add01Icon";
 import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
 import ArrowExpand01Icon from "@hugeicons/core-free-icons/ArrowExpand01Icon";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
@@ -7,31 +8,41 @@ import ArrowShrink01Icon from "@hugeicons/core-free-icons/ArrowShrink01Icon";
 import ArrowUp01Icon from "@hugeicons/core-free-icons/ArrowUp01Icon";
 import BubbleChatIcon from "@hugeicons/core-free-icons/BubbleChatIcon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
+import CheckListIcon from "@hugeicons/core-free-icons/CheckListIcon";
+import Clock01Icon from "@hugeicons/core-free-icons/Clock01Icon";
 import ComputerIcon from "@hugeicons/core-free-icons/ComputerIcon";
 import CursorPointer02Icon from "@hugeicons/core-free-icons/CursorPointer02Icon";
 import Download04Icon from "@hugeicons/core-free-icons/Download04Icon";
 import Files01Icon from "@hugeicons/core-free-icons/Files01Icon";
 import FrameIcon from "@hugeicons/core-free-icons/FrameIcon";
+import GitCompareIcon from "@hugeicons/core-free-icons/GitCompareIcon";
 import Heading01Icon from "@hugeicons/core-free-icons/Heading01Icon";
 import Image01Icon from "@hugeicons/core-free-icons/Image01Icon";
 import Layers01Icon from "@hugeicons/core-free-icons/Layers01Icon";
 import Layout2ColumnIcon from "@hugeicons/core-free-icons/Layout2ColumnIcon";
 import Layout3RowIcon from "@hugeicons/core-free-icons/Layout3RowIcon";
 import LeftToRightListBulletIcon from "@hugeicons/core-free-icons/LeftToRightListBulletIcon";
+import LinkSquare02Icon from "@hugeicons/core-free-icons/LinkSquare02Icon";
 import Mail01Icon from "@hugeicons/core-free-icons/Mail01Icon";
 import Message01Icon from "@hugeicons/core-free-icons/Message01Icon";
+import MinusSignIcon from "@hugeicons/core-free-icons/MinusSignIcon";
 import Moon02Icon from "@hugeicons/core-free-icons/Moon02Icon";
+import MoreHorizontalIcon from "@hugeicons/core-free-icons/MoreHorizontalIcon";
 import PaintBoardIcon from "@hugeicons/core-free-icons/PaintBoardIcon";
 import PanelLeftCloseIcon from "@hugeicons/core-free-icons/PanelLeftCloseIcon";
 import PanelLeftIcon from "@hugeicons/core-free-icons/PanelLeftIcon";
 import PanelRightCloseIcon from "@hugeicons/core-free-icons/PanelRightCloseIcon";
 import PanelRightIcon from "@hugeicons/core-free-icons/PanelRightIcon";
 import ParagraphIcon from "@hugeicons/core-free-icons/ParagraphIcon";
+import RefreshIcon from "@hugeicons/core-free-icons/RefreshIcon";
+import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import SeparatorHorizontalIcon from "@hugeicons/core-free-icons/SeparatorHorizontalIcon";
 import SlidersHorizontalIcon from "@hugeicons/core-free-icons/SlidersHorizontalIcon";
 import SmartPhone01Icon from "@hugeicons/core-free-icons/SmartPhone01Icon";
+import SourceCodeIcon from "@hugeicons/core-free-icons/SourceCodeIcon";
 import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
 import Sun03Icon from "@hugeicons/core-free-icons/Sun03Icon";
+import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 import ViewIcon from "@hugeicons/core-free-icons/ViewIcon";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { createElement, type ComponentType } from "react";
@@ -62,10 +73,15 @@ export const DEFAULT_EDITOR_ICONS = {
   bulletList: hugeicon(LeftToRightListBulletIcon),
   buttonCursor: hugeicon(CursorPointer02Icon),
   chatBubble: hugeicon(BubbleChatIcon),
+  check: hugeicon(Tick02Icon),
+  checkList: hugeicon(CheckListIcon),
   chevronDown: hugeicon(ArrowDown01Icon),
   chevronLeft: hugeicon(ArrowLeft01Icon),
   chevronRight: hugeicon(ArrowRight01Icon),
   chevronUp: hugeicon(ArrowUp01Icon),
+  clock: hugeicon(Clock01Icon),
+  code: hugeicon(SourceCodeIcon),
+  compare: hugeicon(GitCompareIcon),
   dividerY: hugeicon(SeparatorHorizontalIcon),
   download: hugeicon(Download04Icon),
   envelope: hugeicon(Mail01Icon),
@@ -78,10 +94,16 @@ export const DEFAULT_EDITOR_ICONS = {
   layers: hugeicon(Layers01Icon),
   message: hugeicon(Message01Icon),
   mobile: hugeicon(SmartPhone01Icon),
+  minus: hugeicon(MinusSignIcon),
   monitor: hugeicon(ComputerIcon),
   moon: hugeicon(Moon02Icon),
+  moreHorizontal: hugeicon(MoreHorizontalIcon),
+  openExternal: hugeicon(LinkSquare02Icon),
   palette: hugeicon(PaintBoardIcon),
   paragraph: hugeicon(ParagraphIcon),
+  plus: hugeicon(Add01Icon),
+  refresh: hugeicon(RefreshIcon),
+  search: hugeicon(Search01Icon),
   sidebarLeft: hugeicon(PanelLeftIcon),
   sidebarLeftHide: hugeicon(PanelLeftCloseIcon),
   sidebarRight: hugeicon(PanelRightIcon),

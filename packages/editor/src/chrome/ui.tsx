@@ -2,9 +2,17 @@ import { Switch } from "@base-ui/react/switch";
 import { Toggle as BaseToggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { Tooltip } from "@base-ui/react/tooltip";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
-import { cn, focusRing, tabOptionClass } from "./ui-classes";
+import {
+  cn,
+  focusRing,
+  tabListClass,
+  tabOptionClass,
+  toolbarButton,
+  tooltipKbdClass,
+  tooltipPopupClass,
+} from "./ui-classes";
 import { useEditorPortalContainer } from "./use-editor-portal";
 
 /** A `{{variable}}` token, rendered as the mono `{{name}}` placeholder. */
@@ -26,6 +34,40 @@ export function GroupLabel({ children }: { children: ReactNode }) {
     <div className="text-muted-foreground mb-2 flex items-center justify-between text-[10.5px] font-semibold tracking-[0.06em] uppercase">
       {children}
     </div>
+  );
+}
+
+/**
+ * A tooltip around one trigger, drawn with the design system's tooltip recipe. `shortcut` adds
+ * the key chord as a chip after the label. The trigger keeps its own accessible name; the tooltip
+ * is the inspect layer, not the label.
+ */
+export function Tip({
+  label,
+  shortcut,
+  side = "bottom",
+  disabled,
+  children,
+}: {
+  readonly label: ReactNode;
+  readonly shortcut?: string | undefined;
+  readonly side?: "top" | "bottom" | "left" | "right" | undefined;
+  readonly disabled?: boolean | undefined;
+  readonly children: ReactElement;
+}) {
+  const portalContainer = useEditorPortalContainer();
+  return (
+    <Tooltip.Root disabled={disabled}>
+      <Tooltip.Trigger render={children} />
+      <Tooltip.Portal container={portalContainer}>
+        <Tooltip.Positioner side={side} sideOffset={6} className="z-[200]">
+          <Tooltip.Popup role="tooltip" className={tooltipPopupClass}>
+            {label}
+            {shortcut !== undefined && <kbd className={tooltipKbdClass}>{shortcut}</kbd>}
+          </Tooltip.Popup>
+        </Tooltip.Positioner>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   );
 }
 
@@ -61,10 +103,10 @@ export function IconBtn({
             data-testid={testId}
             onClick={onClick}
             className={cn(
-              "inline-flex h-7.5 items-center gap-1.5 rounded-[7px] px-2.5 text-muted-foreground outline-none transition-all hover:bg-muted hover:text-foreground active:translate-y-px disabled:opacity-40",
+              toolbarButton,
+              "active:translate-y-px",
               "aria-pressed:bg-[var(--editor-pressed-bg)] aria-pressed:shadow-[var(--editor-pressed-shadow)]",
               "aria-pressed:text-accent-foreground",
-              focusRing,
               className,
             )}
           />
@@ -74,10 +116,7 @@ export function IconBtn({
       </Tooltip.Trigger>
       <Tooltip.Portal container={portalContainer}>
         <Tooltip.Positioner side="bottom" sideOffset={5} className="z-[200]">
-          <Tooltip.Popup
-            role="tooltip"
-            className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-          >
+          <Tooltip.Popup role="tooltip" className={tooltipPopupClass}>
             {help}
           </Tooltip.Popup>
         </Tooltip.Positioner>
@@ -117,10 +156,7 @@ export function Segmented({
         const next = values[0];
         if (next !== undefined) onChange(next);
       }}
-      className={cn(
-        "bg-muted inline-flex gap-0.5 rounded-lg p-0.5",
-        size === "sm" && "rounded-[7px]",
-      )}
+      className={cn(tabListClass, size === "sm" ? "h-7" : "h-8")}
     >
       {options.map((opt) => {
         const control = (
@@ -130,10 +166,7 @@ export function Segmented({
             aria-label={opt.title}
             data-testid={opt.testId}
             value={opt.value}
-            className={cn(
-              tabOptionClass,
-              size === "sm" ? "h-6 px-2 text-xs" : "h-7 px-2.5 text-xs",
-            )}
+            className={cn(tabOptionClass, "h-full px-2 text-xs")}
           >
             {opt.label}
           </BaseToggle>
@@ -144,10 +177,7 @@ export function Segmented({
             <Tooltip.Trigger render={control} />
             <Tooltip.Portal container={portalContainer}>
               <Tooltip.Positioner side="bottom" sideOffset={5} className="z-[200]">
-                <Tooltip.Popup
-                  role="tooltip"
-                  className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-                >
+                <Tooltip.Popup role="tooltip" className={tooltipPopupClass}>
                   {opt.title}
                 </Tooltip.Popup>
               </Tooltip.Positioner>

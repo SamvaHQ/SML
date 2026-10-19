@@ -7,7 +7,7 @@ import { useEditorStore } from "../state/context";
 import { ChevronRight, SidebarLeftHide } from "./editor-icons";
 import { selectionLabel, type EmailOutlineNode } from "./email-outline";
 import { iconForTag } from "./icons";
-import { cn } from "./ui-classes";
+import { cn, tooltipPopupClass } from "./ui-classes";
 import { useEditorPortalContainer } from "./use-editor-portal";
 
 // ---------------------------------------------------------------------------
@@ -162,10 +162,7 @@ export function LeftRail() {
             </Tooltip.Trigger>
             <Tooltip.Portal container={portalContainer}>
               <Tooltip.Positioner side="bottom" sideOffset={5} className="z-[200]">
-                <Tooltip.Popup
-                  role="tooltip"
-                  className="bg-foreground text-background rounded-md px-2 py-1 text-[11px] shadow-[var(--shadow-md)]"
-                >
+                <Tooltip.Popup role="tooltip" className={tooltipPopupClass}>
                   Collapse layers
                 </Tooltip.Popup>
               </Tooltip.Positioner>
