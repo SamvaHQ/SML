@@ -375,9 +375,15 @@ export const createEditorBundle = (
   let spine!: EditorSpine;
   let userSelectListener: ((selection: UserSelection) => void) | undefined;
 
-  /** An uneditable host, readonly document, or active lifecycle operation rejects mutations. */
+  /**
+   * An uneditable host, readonly document, active lifecycle operation, or a refresh still waiting
+   * for its reopened snapshot rejects mutations; that snapshot replaces the draft when it lands.
+   */
   const gated = (state: EditorState): boolean =>
-    host.access !== "editable" || state.doc?.access.kind === "readonly" || state.lifecycleBusy;
+    host.access !== "editable" ||
+    state.doc?.access.kind === "readonly" ||
+    state.lifecycleBusy ||
+    state.previewRefreshing;
 
   const sourceEditableFor = (document: EditorDocument | null): boolean =>
     document !== null &&

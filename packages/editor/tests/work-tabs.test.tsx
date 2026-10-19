@@ -308,6 +308,19 @@ describe("refresh preview", () => {
     expect(state().doc).not.toBeNull();
   });
 
+  it("refuses edits until the reopened snapshot lands", async () => {
+    await mount();
+    const source = state().doc?.origin.authoredSource;
+    if (source === undefined) throw new Error("Editor is not open");
+    actions().refreshPreview();
+    actions().replaceAuthoredSource(`${source} typed during the reopen`);
+    expect(state().pendingAuthoredSource).toBeNull();
+    expect(state().doc?.origin.authoredSource).toBe(source);
+    await waitFor(() => expect(state().previewRefreshing).toBe(false));
+    actions().replaceAuthoredSource(`${source} `);
+    expect(state().pendingAuthoredSource).toBe(`${source} `);
+  });
+
   it("does nothing while an edit is still pending", async () => {
     await mount();
     const source = state().doc?.origin.authoredSource;
