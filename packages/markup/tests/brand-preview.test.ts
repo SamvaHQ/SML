@@ -37,4 +37,13 @@ describe("previewBrand", () => {
     expect(preview.html).toBeUndefined();
     expect(preview.diagnostics.some((d) => d.severity === "error")).toBe(true);
   });
+
+  it("returns the render's refusal as findings for a brand URL the renderer rejects", async () => {
+    const preview = await previewBrand({
+      ...BRAND,
+      assets: { logoUrl: "http://cdn.example/acme.png" },
+    });
+    expect(preview.html).toBeUndefined();
+    expect(preview.diagnostics.some((d) => d.severity === "error")).toBe(true);
+  });
 });

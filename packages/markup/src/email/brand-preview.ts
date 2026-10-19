@@ -1,4 +1,4 @@
-import { render } from "../render-template";
+import { render, RenderError } from "../render-template";
 import { compileTemplate } from "../sml/compile";
 import type { EmailBrand } from "./brand";
 import type { BrandPlugin } from "./brand-plugin";
@@ -74,8 +74,25 @@ export const previewBrand = async (
   });
   if (compiled.template === undefined)
     return { html: undefined, diagnostics: compiled.diagnostics };
-  return {
-    html: render(compiled.template, {}, { channel: "email", brandPlugin: plugin }).html,
-    diagnostics: compiled.diagnostics,
-  };
+  // The brand reaches the compiled sample as data (logo and social URLs), so the render can refuse
+  // it; those refusals are findings about the brand, returned like the compile's.
+  // oxlint-disable-next-line samva/no-try-catch-or-throw -- render signals a refused render by throwing RenderError; this API returns findings instead.
+  try {
+    const { html } = render(compiled.template, {}, { channel: "email", brandPlugin: plugin });
+    return { html, diagnostics: compiled.diagnostics };
+  } catch (cause) {
+    if (!RenderError.is(cause)) throw cause;
+    return {
+      html: undefined,
+      diagnostics: [
+        ...compiled.diagnostics,
+        ...cause.diagnostics.map((finding) => ({
+          code: finding.code,
+          severity: "error" as const,
+          message: finding.message,
+          origins: [],
+        })),
+      ],
+    };
+  }
 };
