@@ -33,7 +33,7 @@ import { PreviewChromeProvider } from "./preview-context";
 import { PreviewOverlay } from "./preview-overlay";
 import { ShellChromeProvider, useShellChrome } from "./shell-context";
 import { StatusBar, type StatusBarProps } from "./statusbar";
-import { THEME_PATH, withDefaultBrandImport } from "./theme-brand";
+import { THEME_PATH, withBrandImport, type EditorBrand } from "./theme-brand";
 import { TopBar, type TopBarActions } from "./topbar";
 import { Tip } from "./ui";
 import { AssistantShellProvider } from "./use-assistant";
@@ -46,7 +46,7 @@ export interface EditorShellProps {
   /**
    * The organization's brands and the project's theme, for the brand chip beside
    * the document name. With the host's `versions` capability, a project with no brand import
-   * offers the default brand in one click. Omit to hide the chip.
+   * offers the organization's brands in the chip's menu. Omit to hide the chip.
    */
   readonly brand?: EditorBrandSource | undefined;
   /** Return to the templates list. Owned by the host (navigation). Omit to hide the button. */
@@ -316,17 +316,17 @@ export function EditorRoot({
     saveVersionRef.current = saveVersion;
   });
 
-  // One click layers the default brand into the theme through the lifecycle
+  // Choosing a brand writes its import into the theme through the lifecycle
   // file write, then saves a version through the same path as Save version.
-  const applyDefaultBrand =
+  const applyBrand =
     brand === undefined || onSaveVersion === undefined
       ? undefined
-      : async () => {
+      : async (chosen: EditorBrand) => {
           const lifecycle = store.getState().lifecycleCapability;
           if (lifecycle?.status !== "ready") return;
           const revision = await store.getState().actions.flushSaves();
           const theme = await brand.readTheme();
-          const content = withDefaultBrandImport(theme);
+          const content = withBrandImport(theme, chosen);
           if (content !== theme.theme) {
             await lifecycle.api.updateFile({ path: THEME_PATH, baseRev: revision, content });
           }
@@ -463,7 +463,7 @@ export function EditorRoot({
     renameEnabled,
     onExport,
     brand,
-    onUseDefaultBrand: applyDefaultBrand,
+    onUseBrand: applyBrand,
   };
   const keepsSaveVersion = guestStatus === undefined || guestStatus.saveVersion;
   const statusBar: StatusBarProps = {

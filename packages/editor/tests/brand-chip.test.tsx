@@ -155,27 +155,54 @@ const brandSource = (
 ): EditorBrandSource => ({
   readTheme,
   brands,
-  brandLink: (slug) => ({ href: `/dashboard/acme-org/templates/brands/${slug}`, navigate }),
+  manageLink: () => ({ href: "/dashboard/acme-org/templates/brands", navigate }),
 });
 
+const openMenu = async (view: ReturnType<typeof render>, trigger: string) => {
+  fireEvent.click(await view.findByTestId(trigger));
+  return view.findByTestId("topbar.brand-menu");
+};
+
 describe("topbar brand chip", () => {
-  it("links the imported brand to its page without editing it", async () => {
+  it("names the imported brand and marks it in the menu without editing it", async () => {
     stubWideShell();
     const project = arrangeProject(`@import "./starter.css";\n@import 'samva:brand/holiday';\n`);
-    const navigate = vi.fn();
     const view = render(
       <EditorProvider host={withVersions(project.host, async (revision) => revision)}>
+        <EditorShell brand={brandSource(project.readTheme, [acme, holiday])} />
+      </EditorProvider>,
+    );
+
+    const chip = await view.findByTestId("topbar.brand");
+    expect(chip.textContent).toBe("Holiday");
+    const menu = await openMenu(view, "topbar.brand");
+    expect(
+      menu
+        .querySelector('[data-testid="topbar.brand-option.holiday"]')
+        ?.getAttribute("aria-current"),
+    ).toBe("true");
+    expect(
+      menu.querySelector('[data-testid="topbar.brand-option.acme"]')?.getAttribute("aria-current"),
+    ).toBeNull();
+    expect(view.queryByTestId("topbar.brand-use")).toBeNull();
+    expect(project.updateFile).not.toHaveBeenCalled();
+  });
+
+  it("links Manage brands to the host's page", async () => {
+    stubWideShell();
+    const project = arrangeProject(`@import "samva:brand";\n${OVERRIDES}`);
+    const navigate = vi.fn();
+    const view = render(
+      <EditorProvider host={project.host}>
         <EditorShell brand={brandSource(project.readTheme, [acme, holiday], navigate)} />
       </EditorProvider>,
     );
 
-    const link = await view.findByTestId("topbar.brand");
-    expect(link.textContent).toBe("Holiday");
-    expect(link.getAttribute("href")).toBe("/dashboard/acme-org/templates/brands/holiday");
-    fireEvent.click(link);
+    await openMenu(view, "topbar.brand");
+    const manage = view.getByTestId("topbar.brand-manage");
+    expect(manage.getAttribute("href")).toBe("/dashboard/acme-org/templates/brands");
+    fireEvent.click(manage);
     expect(navigate).toHaveBeenCalledTimes(1);
-    expect(view.queryByTestId("topbar.brand-use")).toBeNull();
-    expect(project.updateFile).not.toHaveBeenCalled();
   });
 
   it("resolves bare samva:brand to the organization's default brand", async () => {
@@ -190,7 +217,33 @@ describe("topbar brand chip", () => {
     expect((await view.findByTestId("topbar.brand")).textContent).toBe("Acme");
   });
 
-  it("layers the default brand into the theme and saves a version in one click", async () => {
+  it("switches to another brand by rewriting the import and saving a version", async () => {
+    stubWideShell();
+    const project = arrangeProject(
+      `@import "./starter.css";\n@import "samva:brand";\n${OVERRIDES}`,
+    );
+    const saveVersion = vi.fn(async (revision: string) => `${revision}_saved`);
+    const view = render(
+      <EditorProvider host={withVersions(project.host, saveVersion)}>
+        <EditorShell brand={brandSource(project.readTheme, [acme, holiday])} />
+      </EditorProvider>,
+    );
+
+    await openMenu(view, "topbar.brand");
+    await act(async () => {
+      fireEvent.click(view.getByTestId("topbar.brand-option.holiday"));
+    });
+
+    await waitFor(() => expect(saveVersion).toHaveBeenCalledWith("rev_2"));
+    expect(project.updateFile).toHaveBeenCalledWith({
+      path: "theme.css",
+      baseRev: "rev_1",
+      content: `@import "./starter.css";\n@import "samva:brand/holiday";\n${OVERRIDES}`,
+    });
+    expect((await view.findByTestId("topbar.brand")).textContent).toBe("Holiday");
+  });
+
+  it("layers the default brand into the theme and saves a version from the menu", async () => {
     stubWideShell();
     const project = arrangeProject(OVERRIDES);
     const saveVersion = vi.fn(async (revision: string) => `${revision}_saved`);
@@ -201,8 +254,11 @@ describe("topbar brand chip", () => {
     );
 
     expect((await view.findByTestId("topbar.brand-none")).textContent).toBe("No brand");
-    const use = await view.findByTestId("topbar.brand-use");
-    expect(use.textContent).toContain("Acme");
+    await openMenu(view, "topbar.brand-none");
+    const use = view.getByTestId("topbar.brand-use");
+    expect(use.textContent).toContain("Use Acme");
+    // The default leads the menu, so it is not listed a second time.
+    expect(view.queryByTestId("topbar.brand-option.acme")).toBeNull();
     await act(async () => {
       fireEvent.click(use);
     });
@@ -227,10 +283,9 @@ describe("topbar brand chip", () => {
       </EditorProvider>,
     );
 
-    const use = await view.findByTestId("topbar.brand-use");
-    expect(use.textContent).toContain("Acme");
+    await openMenu(view, "topbar.brand-none");
     await act(async () => {
-      fireEvent.click(use);
+      fireEvent.click(view.getByTestId("topbar.brand-use"));
     });
 
     await waitFor(() =>
@@ -260,7 +315,7 @@ describe("topbar brand chip", () => {
     expect(view.queryByTestId("topbar.brand-pending")).toBeNull();
   });
 
-  it("hides the one-click brand until the organization's brands load", async () => {
+  it("offers the default brand only once the organization's brands load", async () => {
     stubWideShell();
     const project = arrangeProject(OVERRIDES);
     const view = render(
@@ -269,11 +324,12 @@ describe("topbar brand chip", () => {
       </EditorProvider>,
     );
 
-    expect((await view.findByTestId("topbar.brand-none")).textContent).toBe("No brand");
+    await openMenu(view, "topbar.brand-none");
     expect(view.queryByTestId("topbar.brand-use")).toBeNull();
+    expect(view.getByTestId("topbar.brand-manage")).toBeTruthy();
   });
 
-  it("offers no write without a save path", async () => {
+  it("disables the choices without a save path", async () => {
     stubWideShell();
     const project = arrangeProject(OVERRIDES);
     const view = render(
@@ -282,7 +338,8 @@ describe("topbar brand chip", () => {
       </EditorProvider>,
     );
 
-    expect(await view.findByTestId("topbar.brand-none")).toBeTruthy();
-    expect(view.queryByTestId("topbar.brand-use")).toBeNull();
+    await openMenu(view, "topbar.brand-none");
+    expect(view.getByTestId("topbar.brand-use").getAttribute("aria-disabled")).toBe("true");
+    expect(project.updateFile).not.toHaveBeenCalled();
   });
 });

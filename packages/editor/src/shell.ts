@@ -51,6 +51,10 @@ export { useEditorPortalContainer } from "./chrome/use-editor-portal";
 export type { TopBarActions } from "./chrome/topbar";
 export type { EditorBrandSource } from "./chrome/brand-chip";
 export {
+  chipClass as editorChipClass,
+  chipTriggerClass as editorChipTriggerClass,
+} from "./chrome/ui-classes";
+export {
   STARTER_PATH,
   THEME_PATH,
   type EditorBrand,

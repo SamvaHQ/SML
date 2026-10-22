@@ -3,6 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 import {
   brandChipView,
   themeBrandImport,
+  withBrandImport,
   withDefaultBrandImport,
   type EditorBrand,
 } from "../src/chrome/theme-brand";
@@ -78,6 +79,27 @@ describe("withDefaultBrandImport", () => {
   });
 });
 
+describe("withBrandImport", () => {
+  const overrides = "@theme {\n  --color-brand: #4f46e5;\n}\n";
+
+  it("replaces the brand the theme imports and leaves the rest alone", () => {
+    const css = `@import "./starter.css";\n@import 'samva:brand/holiday';\n${overrides}`;
+    expect(withBrandImport({ theme: css, starter: true }, acme)).toBe(
+      `@import "./starter.css";\n@import "samva:brand";\n${overrides}`,
+    );
+    expect(
+      withBrandImport({ theme: `@import "samva:brand";\n${overrides}`, starter: false }, holiday),
+    ).toBe(`@import "samva:brand/holiday";\n${overrides}`);
+  });
+
+  it("layers a brand into a theme that has none, naming a non-default brand by slug", () => {
+    expect(withBrandImport({ theme: overrides, starter: true }, holiday)).toBe(
+      `@import "./starter.css";\n@import "samva:brand/holiday";\n\n${overrides}`,
+    );
+    expect(withBrandImport({ theme: null, starter: false }, acme)).toBe('@import "samva:brand";\n');
+  });
+});
+
 describe("brandChipView", () => {
   it("waits for the theme, and for brands when the theme names one", () => {
     expect(brandChipView(undefined, [acme])).toEqual({ kind: "pending" });
@@ -85,24 +107,37 @@ describe("brandChipView", () => {
   });
 
   it("resolves bare samva:brand to the default brand and a slug to its brand", () => {
-    expect(brandChipView({ slug: null }, [holiday, acme])).toEqual({ kind: "brand", brand: acme });
+    expect(brandChipView({ slug: null }, [holiday, acme])).toEqual({
+      kind: "brand",
+      brand: acme,
+      brands: [holiday, acme],
+    });
     expect(brandChipView({ slug: "holiday" }, [acme, holiday])).toEqual({
       kind: "brand",
       brand: holiday,
+      brands: [acme, holiday],
     });
   });
 
-  it("reports a brand the organization does not have", () => {
-    expect(brandChipView({ slug: "gone" }, [acme])).toEqual({ kind: "missing", slug: "gone" });
-    expect(brandChipView({ slug: "Not_A_Slug" }, [acme])).toEqual({
+  it("reports a brand the organization does not have, with the brands to switch to", () => {
+    expect(brandChipView({ slug: "gone" }, [acme])).toEqual({
+      kind: "missing",
+      slug: "gone",
+      brands: [acme],
+    });
+    expect(brandChipView({ slug: "Not_A_Slug" }, [acme])).toMatchObject({
       kind: "missing",
       slug: "Not_A_Slug",
     });
-    expect(brandChipView({ slug: null }, [holiday])).toEqual({ kind: "missing", slug: null });
+    expect(brandChipView({ slug: null }, [holiday])).toMatchObject({ kind: "missing", slug: null });
   });
 
   it("offers the default brand only once brands are loaded", () => {
-    expect(brandChipView(null, null)).toEqual({ kind: "none", defaultBrand: null });
-    expect(brandChipView(null, [holiday, acme])).toEqual({ kind: "none", defaultBrand: acme });
+    expect(brandChipView(null, null)).toEqual({ kind: "none", defaultBrand: null, brands: [] });
+    expect(brandChipView(null, [holiday, acme])).toEqual({
+      kind: "none",
+      defaultBrand: acme,
+      brands: [holiday, acme],
+    });
   });
 });
