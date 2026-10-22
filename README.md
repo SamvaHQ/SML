@@ -66,8 +66,27 @@ The three packages release together as the `authoring` group with Tegami. Add a 
 fail adds an `upgrade` recipe to the diagnostic code it reports, so hosted and local agents can
 migrate projects. A scheduled workflow opens the Version Packages pull request; merging it
 publishes to npm from GitHub Actions with provenance, after `scripts/check-packages.ts` builds and
-audits every tarball. A publish that includes `@samva/markup` or `@samva/vite` then opens a pull
-request that pins the starter to the new versions.
+audits every tarball.
+
+`bun run starter:check` installs `examples/email-starter` from its committed lockfile and runs
+`tests/starter-manifest.test.js`. Before publishing, that test can install the exact packed
+`@samva/markup` and `@samva/vite` tarballs instead of the registry pins. Run it from
+`examples/email-starter`:
+
+```bash
+SAMVA_STARTER_MARKUP_TARBALL=/absolute/path/samva-markup.tgz \
+SAMVA_STARTER_VITE_TARBALL=/absolute/path/samva-vite.tgz \
+  bun test ./tests/starter-manifest.test.js
+```
+
+Only the temporary copy's dependency pins change. The committed starter stays on the published
+versions.
+
+After an authoring release publishes `@samva/markup` or `@samva/vite`, `scripts/refresh-starter.ts`
+pins `examples/email-starter` to those versions, resolves `bun.lock` against them, rewrites
+`starter-manifest.json`, and opens the pull request that carries all three. The Version Packages
+pull request never edits that directory: the lock records the integrity of published tarballs,
+which exist only after publish.
 
 Both pull requests come from the workflow token, so GitHub holds their `check` run until a
 maintainer approves it from the pull request's Checks tab. A later push to the same branch starts

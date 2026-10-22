@@ -118,21 +118,3 @@ the publish command.
 Use external HTTPS image URLs or import project assets. Delivery builds with imported assets need an
 explicit HTTPS asset base; exports include content-addressed assets and their manifest. Relative
 preview URLs are not suitable for delivered email.
-
-## Release verification
-
-`bun run starter:check` from the repository root installs this directory from its committed lock
-and runs its tests. Before publishing a release, the repository also verifies the starter with both exact packed packages:
-
-```bash
-SAMVA_STARTER_MARKUP_TARBALL=/absolute/path/samva-markup.tgz \
-SAMVA_STARTER_VITE_TARBALL=/absolute/path/samva-vite.tgz \
-  bun test ./tests/starter-manifest.test.js
-```
-
-Only the temporary consumer's dependency pins change in that mode.
-
-After an authoring release publishes, `scripts/refresh-starter.ts` pins this project to the
-published versions, resolves `bun.lock` against them, rewrites `starter-manifest.json`, and opens
-the pull request that carries all three. The Version Packages pull request never edits this
-directory: the lock records the integrity of published tarballs, which exist only after publish.
