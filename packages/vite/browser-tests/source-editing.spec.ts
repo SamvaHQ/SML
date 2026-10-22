@@ -10,6 +10,42 @@ import { createServer, type ViteDevServer } from "vite";
 
 import { SOURCE, COPY } from "./source-editing-fixture";
 
+/** Counts in a status-bar checks line, as `describeChecks` words them. */
+interface ChecksStatusCounts {
+  readonly errors: number;
+  readonly warnings: number;
+  readonly tips: number;
+}
+
+/**
+ * Read a status-bar checks line. `describeChecks` writes "1 warning · 8 tips",
+ * most severe first, and omits a severity that is absent.
+ */
+const checksStatus = (text: string): ChecksStatusCounts => {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const count = (word: string) => {
+    const match = normalized.match(new RegExp(`\\b(\\d+) ${word}s?\\b`));
+    return match === null ? 0 : Number(match[1]);
+  };
+  return {
+    errors: count("error"),
+    warnings: count("warning"),
+    tips: count("tip"),
+  };
+};
+
+/** The line `describeChecks` shows for these counts, or "No issues found" when none remain. */
+const checksStatusText = (status: ChecksStatusCounts) => {
+  const parts: string[] = [];
+  const push = (count: number, one: string, many: string) => {
+    if (count > 0) parts.push(`${count} ${count === 1 ? one : many}`);
+  };
+  push(status.errors, "error", "errors");
+  push(status.warnings, "warning", "warnings");
+  push(status.tips, "tip", "tips");
+  return parts.length === 0 ? "No issues found" : parts.join(" · ");
+};
+
 /** Pointer coordinates include the canvas fit transform around the iframe. */
 const clickRendered = async (page: Page, target: Locator) => {
   // Centre the element first: the canvas floats its zoom control over the bottom of the pane.
@@ -157,21 +193,26 @@ test("groups fixture diagnostics and persists a one-click fix through undo and r
   await expect(targetCheck).toContainText("Fixtures: first, second");
   await expect(targetCheck).toContainText("caniemail@2.0.2");
   const badge = page.getByTestId("statusbar.checks-trigger");
-  const before = Number((await badge.textContent())?.match(/\d+/)?.[0]);
+  const before = checksStatus((await badge.textContent()) ?? "");
+  // The one-click fix removes the target-attribute warning. Other counts stay.
+  expect(before.warnings).toBeGreaterThan(0);
+  const fixed = { ...before, warnings: before.warnings - 1 };
   await page.getByTestId("check.fix-target").click();
   await expect.poll(() => readFile(path, "utf8")).toContain('target="_blank"');
   await expect(frame.locator("a")).toHaveAttribute("target", "_blank");
-  if (before === 1) await expect(badge).toHaveText(/^(\d+ tips?|No issues found)$/);
-  else await expect(badge).toHaveText(`${before - 1} warning${before - 1 === 1 ? "" : "s"}`);
+  await expect(badge).toHaveText(checksStatusText(fixed));
   await page.getByTestId("source.undo").click();
   await expect.poll(() => readFile(path, "utf8")).toContain('target="_self"');
   await expect(frame.locator("a")).toHaveAttribute("target", "_self");
+  await expect(badge).toHaveText(checksStatusText(before));
   await page.getByTestId("source.redo").click();
   await expect.poll(() => readFile(path, "utf8")).toContain('target="_blank"');
+  await expect(badge).toHaveText(checksStatusText(fixed));
   await page.reload();
   await page.getByTestId("template-card.templates/visual-proof.tsx").click();
   await expect(frame.locator("a")).toHaveAttribute("target", "_blank");
   if (await show.isVisible()) await show.click();
+  await expect(badge).toHaveText(checksStatusText(fixed));
   await page.getByTestId("checks.compatibility-report").click();
   await page.getByTestId("checks.report.assessment").selectOption("not-applicable");
   await targetCheck.locator("summary").click();
