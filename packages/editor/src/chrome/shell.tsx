@@ -33,7 +33,12 @@ import { PreviewChromeProvider } from "./preview-context";
 import { PreviewOverlay } from "./preview-overlay";
 import { ShellChromeProvider, useShellChrome } from "./shell-context";
 import { StatusBar, type StatusBarProps } from "./statusbar";
-import { THEME_PATH, withBrandImport, type EditorBrand } from "./theme-brand";
+import {
+  THEME_PATH,
+  withBrandImport,
+  withBrandModuleSpecifiers,
+  type EditorBrand,
+} from "./theme-brand";
 import { TopBar, type TopBarActions } from "./topbar";
 import { Tip } from "./ui";
 import { AssistantShellProvider } from "./use-assistant";
@@ -157,6 +162,9 @@ function ChannelWorkspace() {
  * a tabbed work pane (a Chat | Preview switch below 1280px of frame width); without one it is
  * layers · canvas · inspector. Must be rendered inside an {@link EditorProvider}.
  */
+/** The project files that can import brand components. */
+const SCRIPT_PATH = /\.[cm]?[jt]sx?$/;
+
 export function EditorRoot({
   height = "100dvh",
   contributions = NO_CONTRIBUTIONS,
@@ -316,19 +324,38 @@ export function EditorRoot({
     saveVersionRef.current = saveVersion;
   });
 
-  // Choosing a brand writes its import into the theme through the lifecycle
-  // file write, then saves a version through the same path as Save version.
+  // Choosing a brand writes its import into the theme, and into every script that imports brand
+  // components, through the lifecycle file write (a project compiles against one brand), then
+  // saves a version through the same path as Save version.
   const applyBrand =
     brand === undefined || onSaveVersion === undefined
       ? undefined
       : async (chosen: EditorBrand) => {
           const lifecycle = store.getState().lifecycleCapability;
           if (lifecycle?.status !== "ready") return;
-          const revision = await store.getState().actions.flushSaves();
+          let revision = await store.getState().actions.flushSaves();
           const theme = await brand.readTheme();
+          const project = await lifecycle.api.inspect();
           const content = withBrandImport(theme, chosen);
           if (content !== theme.theme) {
-            await lifecycle.api.updateFile({ path: THEME_PATH, baseRev: revision, content });
+            revision = (
+              await lifecycle.api.updateFile({ path: THEME_PATH, baseRev: revision, content })
+            ).rev;
+          }
+          for (const file of project.files) {
+            if (file.binary === true || file.content === null || !SCRIPT_PATH.test(file.path)) {
+              continue;
+            }
+            const next = withBrandModuleSpecifiers(file.content, chosen);
+            if (next === file.content) continue;
+            // Each write needs the revision the previous one returned.
+            // oxlint-disable-next-line no-await-in-loop -- Serial by design: the revision chains.
+            const written = await lifecycle.api.updateFile({
+              path: file.path,
+              baseRev: revision,
+              content: next,
+            });
+            revision = written.rev;
           }
           await saveVersion();
         };

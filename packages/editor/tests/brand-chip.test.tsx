@@ -83,8 +83,8 @@ const unarranged = (name: keyof AsyncLifecycleApi) => (): never => {
  * writes the draft and publishes the next revision on the change stream, as the
  * dashboard host does.
  */
-const arrangeProject = (initialTheme: string | null) => {
-  const files: Record<string, string> = { "starter.css": "@theme {}" };
+const arrangeProject = (initialTheme: string | null, scripts: Record<string, string> = {}) => {
+  const files: Record<string, string> = { "starter.css": "@theme {}", ...scripts };
   if (initialTheme !== null) files["theme.css"] = initialTheme;
   let publish: (change: DocumentChange) => void = () => {};
   let revision = 1;
@@ -111,7 +111,14 @@ const arrangeProject = (initialTheme: string | null) => {
     lifecycle: {
       status: "ready",
       api: {
-        inspect: unarranged("inspect"),
+        inspect: async () => ({
+          ...lifecycleState(`rev_${revision}`),
+          files: Object.entries(files).map(([path, content]) => ({
+            path,
+            status: "clean" as const,
+            content,
+          })),
+        }),
         publish: unarranged("publish"),
         restore: unarranged("restore"),
         resolveConflict: unarranged("resolveConflict"),
@@ -241,6 +248,31 @@ describe("topbar brand chip", () => {
       content: `@import "./starter.css";\n@import "samva:brand/holiday";\n${OVERRIDES}`,
     });
     expect((await view.findByTestId("topbar.brand")).textContent).toBe("Holiday");
+  });
+
+  it("points the project's brand component imports at the chosen brand too", async () => {
+    stubWideShell();
+    const footer = `import { BrandFooter } from "samva:brand";\nexport const Footer = BrandFooter;\n`;
+    const project = arrangeProject(`@import "samva:brand";\n`, { "partials/footer.tsx": footer });
+    const view = render(
+      <EditorProvider host={withVersions(project.host, async (revision) => `${revision}_saved`)}>
+        <EditorShell brand={brandSource(project.readTheme, [acme, holiday])} />
+      </EditorProvider>,
+    );
+
+    await openMenu(view, "topbar.brand");
+    await act(async () => {
+      fireEvent.click(view.getByTestId("topbar.brand-option.holiday"));
+    });
+
+    await waitFor(() =>
+      expect(project.files["partials/footer.tsx"]).toBe(
+        `import { BrandFooter } from "samva:brand/holiday";\nexport const Footer = BrandFooter;\n`,
+      ),
+    );
+    expect(project.files["theme.css"]).toBe(`@import "samva:brand/holiday";\n`);
+    expect(project.updateFile).toHaveBeenCalledTimes(2);
+    expect(project.updateFile.mock.calls[1]?.[0].baseRev).toBe("rev_2");
   });
 
   it("layers the default brand into the theme and saves a version from the menu", async () => {

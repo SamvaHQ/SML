@@ -242,16 +242,19 @@ export function StatusBar({
 
 /** The draft's own save state: "Draft", "Draft · saving…", "Draft · saved 2 min ago". */
 function DraftNote({ loading }: { readonly loading: boolean }) {
-  const { savedAt, saving } = useEditorStore(
+  const { savedAt, saving, failed } = useEditorStore(
     useShallow((state) => ({
       savedAt: state.draftSavedAt,
       saving: state.pendingAuthoredSource !== null,
+      // A failed or conflicted save keeps its unsaved text until the author recovers.
+      failed: state.storageError !== null || state.conflict,
     })),
   );
   const now = useNow(savedAt !== null);
   if (loading) return <span>Loading…</span>;
   let note = "Draft";
-  if (saving) note = "Draft · saving…";
+  if (failed) note = "Draft · couldn’t save";
+  else if (saving) note = "Draft · saving…";
   else if (savedAt !== null) note = `Draft · saved ${relativeAgo(now, savedAt)}`;
   return (
     <span data-testid="statusbar.draft" aria-live="polite" className="shrink-0">

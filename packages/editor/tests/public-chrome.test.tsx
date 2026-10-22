@@ -181,6 +181,11 @@ describe("public editor chrome", () => {
     await waitFor(() =>
       expect(view.getByTestId("statusbar.draft").textContent).toBe("Draft · saved 2 min ago"),
     );
+    // A save that stopped is not "saving": the note says so even while its source is queued.
+    act(() => storeApi?.setState({ pendingAuthoredSource: "queued", conflict: true }));
+    await waitFor(() =>
+      expect(view.getByTestId("statusbar.draft").textContent).toBe("Draft · couldn’t save"),
+    );
   });
 
   it("gives the assistant, the work pane tabs and the preview bar one header height and divider", async () => {

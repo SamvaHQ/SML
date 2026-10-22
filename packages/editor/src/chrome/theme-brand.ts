@@ -208,12 +208,33 @@ const insertBrandImport = (theme: EditorProjectTheme, brandImport: string): stri
  */
 export const withBrandImport = (theme: EditorProjectTheme, brand: EditorBrand): string => {
   const css = theme.theme ?? "";
-  const specifier = brand.isDefault ? BRAND_SPECIFIER : `${BRAND_SPECIFIER}/${brand.slug}`;
-  const brandImport = `@import "${specifier}";`;
-  const existing = topLevelImports(css).find(({ target }) => brandOfTarget(target) !== undefined);
-  if (existing === undefined) return insertBrandImport(theme, brandImport);
-  return `${css.slice(0, existing.start)}${brandImport}${css.slice(existing.end)}`;
+  const brandImport = `@import "${brandSpecifier(brand)}";`;
+  const existing = topLevelImports(css).filter(({ target }) => brandOfTarget(target) !== undefined);
+  if (existing.length === 0) return insertBrandImport(theme, brandImport);
+  // A project compiles against one brand, so a repeated import goes with the one it repeated.
+  return existing.reduceRight(
+    (out, { start, end }, index) =>
+      `${out.slice(0, start)}${index === 0 ? brandImport : ""}${out.slice(end)}`,
+    css,
+  );
 };
+
+const brandSpecifier = (brand: EditorBrand): string =>
+  brand.isDefault ? BRAND_SPECIFIER : `${BRAND_SPECIFIER}/${brand.slug}`;
+
+const BRAND_MODULE_SPECIFIER =
+  /(\b(?:from|import)\s*\(?\s*)(["'])samva:brand(?:\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)?\2/g;
+
+/**
+ * A script's `samva:brand` module imports (components such as `BrandFooter`) pointed at `brand`,
+ * so the project's TSX and its theme name one brand. The compiler refuses a project that imports
+ * two.
+ */
+export const withBrandModuleSpecifiers = (source: string, brand: EditorBrand): string =>
+  source.replace(
+    BRAND_MODULE_SPECIFIER,
+    (_match, head: string, quote: string) => `${head}${quote}${brandSpecifier(brand)}${quote}`,
+  );
 
 /** What the topbar brand chip shows. */
 export type BrandChipView =

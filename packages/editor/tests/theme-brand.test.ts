@@ -4,6 +4,7 @@ import {
   brandChipView,
   themeBrandImport,
   withBrandImport,
+  withBrandModuleSpecifiers,
   withDefaultBrandImport,
   type EditorBrand,
 } from "../src/chrome/theme-brand";
@@ -97,6 +98,23 @@ describe("withBrandImport", () => {
       `@import "./starter.css";\n@import "samva:brand/holiday";\n\n${overrides}`,
     );
     expect(withBrandImport({ theme: null, starter: false }, acme)).toBe('@import "samva:brand";\n');
+  });
+});
+
+describe("withBrandImport and module imports", () => {
+  it("keeps one brand import when the theme repeats it", () => {
+    const css = `@import "samva:brand/gone";\n@import "./extra.css";\n@import 'samva:brand/gone';\n`;
+    expect(withBrandImport({ theme: css, starter: false }, holiday)).toBe(
+      `@import "samva:brand/holiday";\n@import "./extra.css";\n\n`,
+    );
+  });
+
+  it("points every brand module import at the brand", () => {
+    const source = `import { A } from "samva:brand/gone";\nconst B = await import('samva:brand');\nimport x from "other";\n`;
+    expect(withBrandModuleSpecifiers(source, holiday)).toBe(
+      `import { A } from "samva:brand/holiday";\nconst B = await import('samva:brand/holiday');\nimport x from "other";\n`,
+    );
+    expect(withBrandModuleSpecifiers(source, acme)).toContain(`from "samva:brand";`);
   });
 });
 
