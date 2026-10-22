@@ -9,10 +9,10 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@samva/markup": "0.17.3"
+    "@samva/markup": "0.18.0"
   },
   "devDependencies": {
-    "@samva/vite": "0.17.3",
+    "@samva/vite": "0.18.0",
     "@types/node": "26.4.0",
     "typescript": "7.0.2",
     "vite": "8.2.2"
