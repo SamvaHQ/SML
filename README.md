@@ -31,7 +31,7 @@ Each package README covers its API. `@samva/markup` also ships an agent skill an
 
 ## Develop
 
-Requires Bun 1.4 and Node 24.
+Requires Bun 1.4.4 or newer and Node 24.
 
 ```sh
 bun install
