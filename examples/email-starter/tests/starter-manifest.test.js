@@ -207,6 +207,26 @@ test("the complete starter installs and checks outside the repository", async ()
     `,
     );
     await runBun(destination, "run", "typecheck");
+    // A template project imports the `samva:brand` module and image files; the starter's own
+    // tsconfig must declare both. The probe lives only in this temporary copy and extends that
+    // tsconfig, so dropping either `types` entry fails here without shipping a fixture.
+    // The specifier is assembled so the build's source scan does not read this file as a brand import.
+    const brandModule = ["samva", "brand"].join(":");
+    await mkdir(join(destination, "probe"), { recursive: true });
+    await writeFile(
+      join(destination, "probe", "tsconfig.json"),
+      JSON.stringify({ extends: "../tsconfig.json", include: ["./*.ts"] }),
+    );
+    await writeFile(
+      join(destination, "probe", "imports.ts"),
+      `
+      import { BrandLogo } from "${brandModule}";
+      import logo from "./logo.png";
+      export const probe: [typeof BrandLogo, string] = [BrandLogo, logo];
+    `,
+    );
+    await runBun(destination, "x", "tsc", "-p", "probe/tsconfig.json");
+    await rm(join(destination, "probe"), { force: true, recursive: true });
     await runBun(destination, "run", "build");
     await runBun(destination, "run", "check");
     const buildDigestScript = `
