@@ -13,9 +13,11 @@ import type { EmailElementSelection } from "@samva/markup/edit";
 import { emailOutline } from "../src/chrome/email-outline";
 import {
   deriveDocumentState,
+  describeChecks,
   documentChecks,
   documentSizeKb,
   projectDiagnosticCheck,
+  relativeAgo,
   resolveSelection,
   summarizeChecks,
   withDocumentChange,
@@ -608,5 +610,61 @@ describe("summarizeChecks", () => {
     expect(summary.ok).toHaveLength(1);
     // Errors sort ahead of warns in the actionable (badge-counted) set.
     expect(summary.actionable.map((check) => check.severity)).toEqual(["error", "warn", "warn"]);
+  });
+});
+
+describe("describeChecks", () => {
+  const check = (id: string, severity: CheckItem["severity"]): CheckItem => ({
+    id,
+    severity,
+    label: id,
+    detail: "",
+    ...(id.startsWith("tip")
+      ? {
+          diagnostics: [
+            {
+              code: "feature",
+              severity: "info",
+              message: "Verify",
+              origins: [],
+              compatibility: { assessment: "unverified", title: "Needs verification" },
+            },
+          ],
+        }
+      : {}),
+  });
+
+  it("splits the checks by severity, most severe first", () => {
+    const status = describeChecks([
+      check("a", "warn"),
+      check("b", "warn"),
+      check("c", "warn"),
+      ...Array.from({ length: 22 }, (_, index) => check(`tip${index}`, "info")),
+      check("ok", "ok"),
+    ]);
+    expect(status.text).toBe("3 warnings · 22 tips");
+    expect(status.tone).toBe("warning");
+    expect(
+      describeChecks([check("e", "error"), check("tip", "info"), check("size", "info")]),
+    ).toMatchObject({
+      text: "1 error · 1 tip",
+      tone: "error",
+    });
+  });
+
+  it("says why there is nothing to count", () => {
+    expect(describeChecks([])).toMatchObject({ text: "No checks yet", tone: "neutral" });
+    expect(describeChecks([check("ok", "ok")])).toMatchObject({ text: "No issues found" });
+  });
+});
+
+describe("relativeAgo", () => {
+  const now = 1_000_000_000;
+  it("words the time since a save", () => {
+    expect(relativeAgo(now, now - 5_000)).toBe("just now");
+    expect(relativeAgo(now, now - 2 * 60_000)).toBe("2 min ago");
+    expect(relativeAgo(now, now - 3 * 3_600_000)).toBe("3 h ago");
+    expect(relativeAgo(now, now - 50 * 3_600_000)).toBe("2 d ago");
+    expect(relativeAgo(now, now + 5_000)).toBe("just now");
   });
 });

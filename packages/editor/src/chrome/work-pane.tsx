@@ -35,7 +35,7 @@ import {
 } from "./editor-icons";
 import { usePart, type PartProps } from "./part";
 import { Tip } from "./ui";
-import { revealOnRowHover } from "./ui-classes";
+import { railHeaderClass, revealOnRowHover } from "./ui-classes";
 
 /** Each tab's name, glyph, and the line the "+" menu says about it. */
 const TAB_META: Record<
@@ -174,7 +174,7 @@ export function EditorWorkPane({
             {!rowHidden && (
               <div
                 data-slot="editor-work-pane-header"
-                className="border-border flex h-11 shrink-0 items-center gap-1 border-b px-2"
+                className={cn(railHeaderClass, "gap-1 px-2")}
               >
                 {split && (
                   <Tip label={chatLabel}>

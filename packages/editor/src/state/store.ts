@@ -416,6 +416,8 @@ export interface EditorState {
   readonly conflict: boolean;
   /** A save failed because host storage is full or blocked; the edit is kept in memory. Null when clear. */
   readonly storageError: string | null;
+  /** When the host last acknowledged a save of the draft (epoch ms); null until one lands in this session. */
+  readonly draftSavedAt: number | null;
   // ── hover (raw candidate; validity is derived in the selector against the outline)
   readonly hoveredCandidatePath: string | null;
   // ── design mode and pins
@@ -1344,6 +1346,7 @@ export const createEditorBundle = (
       lifecycleBusy: false,
       conflict: false,
       storageError: null,
+      draftSavedAt: null,
       hoveredCandidatePath: null,
       canvasMode: "point",
       designDraft: null,
@@ -1388,7 +1391,7 @@ export const createEditorBundle = (
     },
     onPersistedRevision: (rev) => {
       store.setState((current) =>
-        current.doc === null ? current : { doc: { ...current.doc, rev } },
+        current.doc === null ? current : { doc: { ...current.doc, rev }, draftSavedAt: Date.now() },
       );
     },
     // Our own acked save came back with the render the host produced for it.

@@ -20,6 +20,7 @@ import { Mobile, Monitor, MoreHorizontal, OpenExternal, Refresh } from "./editor
 import { usePart, type PartProps } from "./part";
 import { usePreviewChrome } from "./preview-context";
 import { Segmented, Tip } from "./ui";
+import { railHeaderClass } from "./ui-classes";
 import { VersionPicker } from "./version-picker";
 
 /** A stable empty list, so a document with no fixtures never mints a fresh snapshot. */
@@ -141,8 +142,7 @@ export function EditorPreviewBar({
     { "data-testid": "preview-bar", ...props },
     {
       state: { busy },
-      className:
-        "border-border bg-background @container/preview-bar relative flex h-11 shrink-0 items-center gap-1.5 border-b px-2",
+      className: cn(railHeaderClass, "bg-background @container/preview-bar relative gap-1.5 px-2"),
       props: {
         children: (
           <>
