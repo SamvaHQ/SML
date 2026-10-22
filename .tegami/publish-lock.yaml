@@ -1,17 +1,17 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## A host can open a narrow workspace on the preview\n\n`EditorProvider` takes `initialPane`. Below 1280px a docked workspace shows one pane at a time and\nstarts on the chat; a host whose own app is the conversation, such as ChatGPT, passes\n`initialPane=\"preview\"` so the email is on screen first. The Chat | Preview switch works as before.\n"
-    filename: editor-initial-pane.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## The brand chip is one menu, and the top and status bars read cleanly\n\nThe brand chip opens a menu of the organization's brands. Choosing one rewrites the theme's brand\nimport, and every `samva:brand` component import in the project's scripts, and saves a version; a project with no brand offers \"Use {default}\", and \"Manage brands\"\nlinks to the host's page. `EditorBrandSource.brandLink(slug)` is replaced by an optional\n`manageLink()`, and `EditorBrand` takes an optional `color` for the chip's swatch. The status bar\nsplits checks by severity (\"3 warnings · 22 tips\", errors in the error tone) and reads \"Draft ·\nsaved 2 min ago\" from the draft's last save. The Assistant header, the work pane's tab row and the\npreview bar share one height and divider. `@samva/editor/shell` exports `editorChipClass` and\n`editorChipTriggerClass` so a host's control beside the document name, such as an email switcher,\nmatches the editor's chips.\n"
+    filename: editor-chrome-polish.md
     v: 0.0.0
 core:packages:
   - id: npm:@samva/vite
     updated: true
-  - changelogIds:
-      - editor-initial-pane.md
-    id: npm:@samva/editor
-    updated: true
   - id: npm:@samva/markup
+    updated: true
+  - changelogIds:
+      - editor-chrome-polish.md
+    id: npm:@samva/editor
     updated: true
 npm:packages:
   - id: npm:@samva/vite
-  - id: npm:@samva/editor
   - id: npm:@samva/markup
+  - id: npm:@samva/editor
