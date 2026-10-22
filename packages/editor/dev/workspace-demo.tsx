@@ -140,8 +140,16 @@ const demoBrand = (): EditorBrandSource | undefined => {
             setTimeout(() => resolve({ theme: '@import "samva:brand";\n', starter: false }), 500),
           ),
       ),
-    brands: [{ slug: "northwind", name: "Northwind Seasonal Collection", isDefault: true }],
-    brandLink: (slug) => ({ href: `#brands/${slug}` }),
+    brands: [
+      {
+        slug: "northwind",
+        name: "Northwind Seasonal Collection",
+        isDefault: true,
+        color: "#c2410c",
+      },
+      { slug: "harbor", name: "Harbor", isDefault: false, color: "#1d4ed8" },
+    ],
+    manageLink: () => ({ href: "#brands" }),
   };
 };
 

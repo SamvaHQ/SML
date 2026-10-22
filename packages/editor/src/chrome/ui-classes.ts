@@ -37,3 +37,25 @@ export const revealOnRowHover = cn(
   "group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 focus-visible:opacity-100",
   "[@media(hover:none)]:opacity-100",
 );
+
+/**
+ * The header row of a rail or pane (the assistant's, the work pane's tabs, the preview bar): one
+ * height and one divider, so the rows line up across the frame.
+ */
+export const railHeaderClass = "border-border flex h-11 shrink-0 items-center border-b";
+
+/**
+ * A small value chip in the top bar (the brand, the email switcher, the channel): sentence case
+ * on the 12px step, one height, one fill. A host that draws its own control beside the document
+ * name uses this recipe so it matches.
+ */
+export const chipClass = cn(
+  "border-border-subtle bg-surface-inset text-muted-foreground inline-flex h-6 min-w-0 max-w-44 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium whitespace-nowrap outline-none",
+  focusRing,
+);
+
+/** A chip that opens something: it takes the hover fill and the open state. */
+export const chipTriggerClass = cn(
+  chipClass,
+  "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground data-popup-open:bg-muted data-popup-open:text-foreground",
+);

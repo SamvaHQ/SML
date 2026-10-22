@@ -321,3 +321,56 @@ export const summarizeChecks = (checks: ReadonlyArray<CheckItem>): ChecksSummary
     badgeCount: errors.length + warns.length,
   };
 };
+
+/** One severity's share of the status line: "3 warnings". */
+export interface ChecksStatusPart {
+  readonly severity: "error" | "warn" | "info";
+  readonly text: string;
+}
+
+/** The checks as the status bar words them, split by severity. */
+export interface ChecksStatus {
+  /** Errors, then warnings, then tips; only the severities present. */
+  readonly parts: ReadonlyArray<ChecksStatusPart>;
+  /** The whole line: "3 warnings · 22 tips", or the reason there is nothing to count. */
+  readonly text: string;
+  /** The most severe tier present; drives the status dot. */
+  readonly tone: "error" | "warning" | "neutral";
+}
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/**
+ * Word the checks by severity for the status bar. A tip is a note that still needs a look: an
+ * `info` check holding a finding no client has verified. Measurements such as the size are not.
+ */
+export const describeChecks = (checks: ReadonlyArray<CheckItem>): ChecksStatus => {
+  const { errorCount, warnCount, info } = summarizeChecks(checks);
+  const tips = info.filter((check) =>
+    check.diagnostics?.some((item) => item.compatibility?.assessment === "unverified"),
+  );
+  const parts: ChecksStatusPart[] = [];
+  if (errorCount > 0)
+    parts.push({ severity: "error", text: plural(errorCount, "error", "errors") });
+  if (warnCount > 0)
+    parts.push({ severity: "warn", text: plural(warnCount, "warning", "warnings") });
+  if (tips.length > 0) parts.push({ severity: "info", text: plural(tips.length, "tip", "tips") });
+  let text = parts.map((part) => part.text).join(" · ");
+  if (parts.length === 0) text = checks.length === 0 ? "No checks yet" : "No issues found";
+  return {
+    parts,
+    text,
+    tone: errorCount > 0 ? "error" : warnCount > 0 ? "warning" : "neutral",
+  };
+};
+
+/** "just now", "2 min ago", "3 h ago": how long ago `then` was, at `now` (epoch ms). */
+export const relativeAgo = (now: number, then: number): string => {
+  const seconds = Math.max(0, Math.round((now - then) / 1000));
+  if (seconds < 45) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+};

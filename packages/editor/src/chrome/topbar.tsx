@@ -21,7 +21,9 @@ import { downloadEmailHtml } from "./export-html";
 import { EditorPaneSwitch } from "./pane-switch";
 import { usePart, type PartProps } from "./part";
 import { FixtureSelect } from "./preview-bar";
+import type { EditorBrand } from "./theme-brand";
 import { Tip } from "./ui";
+import { chipClass } from "./ui-classes";
 
 /** The state an `EditorTopBar` exposes. */
 export interface TopBarState extends Record<string, unknown> {
@@ -48,8 +50,8 @@ export interface TopBarActions {
   readonly renameEnabled?: boolean | undefined;
   /** Host brand facts; the chip beside the document name shows the brand the theme imports. */
   readonly brand?: EditorBrandSource | undefined;
-  /** Writes the default brand import into the theme and saves a version. */
-  readonly onUseDefaultBrand?: (() => Promise<void>) | undefined;
+  /** Writes the chosen brand's import into the theme and saves a version. */
+  readonly onUseBrand?: ((brand: EditorBrand) => Promise<void>) | undefined;
 }
 
 export function TopBar({
@@ -67,7 +69,7 @@ export function TopBar({
   onExport,
   renameEnabled = true,
   brand,
-  onUseDefaultBrand,
+  onUseBrand,
   part,
 }: TopBarActions & {
   /** The part's own props: `className`, `render` and attributes from the host. */
@@ -230,9 +232,9 @@ export function TopBar({
                 </span>
               )}
               {narrow ? null : channelSwitcher === undefined ? (
-                <Badge variant="outline" className="text-muted-foreground font-mono uppercase">
+                <span data-slot="editor-top-bar-channel" className={cn(chipClass, "capitalize")}>
                   {doc?.channel ?? "email"}
-                </Badge>
+                </span>
               ) : (
                 <div
                   className={cn(
@@ -253,7 +255,7 @@ export function TopBar({
                 </Badge>
               )}
               {brand !== undefined && emailChrome && !narrow && (
-                <BrandChip source={brand} onUseDefault={onUseDefaultBrand} />
+                <BrandChip source={brand} onUseBrand={onUseBrand} />
               )}
             </div>
 

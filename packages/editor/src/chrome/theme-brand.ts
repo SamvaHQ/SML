@@ -24,6 +24,8 @@ export interface EditorBrand {
   readonly name: string;
   /** Whether bare `samva:brand` resolves to this brand. */
   readonly isDefault: boolean;
+  /** A CSS color for the brand's swatch in the chip and its menu; without one the chip shows a palette icon. */
+  readonly color?: string | undefined;
 }
 
 /** The project stylesheets the brand chip reads, from the open draft. */
@@ -40,6 +42,8 @@ export interface ThemeBrandImport {
 }
 
 interface CssImport {
+  /** Offset of the statement's `@`. */
+  readonly start: number;
   /** The quoted or `url(...)` target, when the prelude is exactly one target. */
   readonly target: string | undefined;
   /** Offset just past the statement's `;`. */
@@ -137,7 +141,7 @@ const topLevelImports = (css: string): ReadonlyArray<CssImport> => {
           else cursor += 1;
         }
         const end = Math.min(cursor + 1, css.length);
-        imports.push({ target: importTarget(css.slice(preludeStart, cursor)), end });
+        imports.push({ start: index, target: importTarget(css.slice(preludeStart, cursor)), end });
         index = end;
         continue;
       }
@@ -182,24 +186,78 @@ export const themeBrandImport = (css: string): ThemeBrandImport | null => {
 export const withDefaultBrandImport = (theme: EditorProjectTheme): string => {
   const css = theme.theme ?? "";
   if (themeBrandImport(css) !== null) return css;
+  return insertBrandImport(theme, BRAND_IMPORT);
+};
+
+const insertBrandImport = (theme: EditorProjectTheme, brandImport: string): string => {
+  const css = theme.theme ?? "";
   const starterImport = topLevelImports(css).find(({ target }) => importsStarter(target));
   if (starterImport !== undefined) {
-    return `${css.slice(0, starterImport.end)}\n${BRAND_IMPORT}${css.slice(starterImport.end)}`;
+    return `${css.slice(0, starterImport.end)}\n${brandImport}${css.slice(starterImport.end)}`;
   }
-  const head = [...(theme.starter ? [STARTER_IMPORT] : []), BRAND_IMPORT].join("\n");
+  const head = [...(theme.starter ? [STARTER_IMPORT] : []), brandImport].join("\n");
   if (css.length === 0) return `${head}\n`;
   return `${head}\n${css.startsWith("\n") ? "" : "\n"}${css}`;
 };
+
+/**
+ * `theme.css` importing `brand`: bare `samva:brand` for the organization's default brand,
+ * `samva:brand/<slug>` for any other. A theme that already imports a brand has that statement
+ * replaced in place and the rest of the file left as it is; one with none is layered the way
+ * {@link withDefaultBrandImport} layers it.
+ */
+export const withBrandImport = (theme: EditorProjectTheme, brand: EditorBrand): string => {
+  const css = theme.theme ?? "";
+  const brandImport = `@import "${brandSpecifier(brand)}";`;
+  const existing = topLevelImports(css).filter(({ target }) => brandOfTarget(target) !== undefined);
+  if (existing.length === 0) return insertBrandImport(theme, brandImport);
+  // A project compiles against one brand, so a repeated import goes with the one it repeated.
+  return existing.reduceRight(
+    (out, { start, end }, index) =>
+      `${out.slice(0, start)}${index === 0 ? brandImport : ""}${out.slice(end)}`,
+    css,
+  );
+};
+
+const brandSpecifier = (brand: EditorBrand): string =>
+  brand.isDefault ? BRAND_SPECIFIER : `${BRAND_SPECIFIER}/${brand.slug}`;
+
+const BRAND_MODULE_SPECIFIER =
+  /(\b(?:from|import)\s*\(?\s*)(["'])samva:brand(?:\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)?\2/g;
+
+/**
+ * A script's `samva:brand` module imports (components such as `BrandFooter`) pointed at `brand`,
+ * so the project's TSX and its theme name one brand. The compiler refuses a project that imports
+ * two.
+ */
+export const withBrandModuleSpecifiers = (source: string, brand: EditorBrand): string =>
+  source.replace(
+    BRAND_MODULE_SPECIFIER,
+    (_match, head: string, quote: string) => `${head}${quote}${brandSpecifier(brand)}${quote}`,
+  );
 
 /** What the topbar brand chip shows. */
 export type BrandChipView =
   /** The theme or the brand list has not been read yet. */
   | { readonly kind: "pending" }
-  | { readonly kind: "brand"; readonly brand: EditorBrand }
+  | {
+      readonly kind: "brand";
+      readonly brand: EditorBrand;
+      /** The organization's brands, in the host's order; the menu marks `brand` as current. */
+      readonly brands: ReadonlyArray<EditorBrand>;
+    }
   /** The theme names a brand the organization does not have; `slug: null` is a missing default. */
-  | { readonly kind: "missing"; readonly slug: string | null }
-  /** No brand import; `defaultBrand` is what one click would add, null while brands load. */
-  | { readonly kind: "none"; readonly defaultBrand: EditorBrand | null };
+  | {
+      readonly kind: "missing";
+      readonly slug: string | null;
+      readonly brands: ReadonlyArray<EditorBrand>;
+    }
+  /** No brand import; `defaultBrand` is what one choice would add, null while brands load. */
+  | {
+      readonly kind: "none";
+      readonly defaultBrand: EditorBrand | null;
+      readonly brands: ReadonlyArray<EditorBrand>;
+    };
 
 /**
  * Decide the chip from the theme's import and the organization's brands.
@@ -211,12 +269,13 @@ export const brandChipView = (
   brands: ReadonlyArray<EditorBrand> | null,
 ): BrandChipView => {
   if (imported === undefined) return { kind: "pending" };
-  const defaultBrand = brands?.find(({ isDefault }) => isDefault) ?? null;
-  if (imported === null) return { kind: "none", defaultBrand };
+  const list = brands ?? [];
+  const defaultBrand = list.find(({ isDefault }) => isDefault) ?? null;
+  if (imported === null) return { kind: "none", defaultBrand, brands: list };
   if (brands === null) return { kind: "pending" };
   const brand =
     imported.slug === null ? defaultBrand : brands.find(({ slug }) => slug === imported.slug);
   return brand === null || brand === undefined
-    ? { kind: "missing", slug: imported.slug }
-    : { kind: "brand", brand };
+    ? { kind: "missing", slug: imported.slug, brands }
+    : { kind: "brand", brand, brands };
 };

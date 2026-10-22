@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { cn } from "../lib/utils";
 import { useEditorStore } from "../state/context";
-import { summarizeChecks } from "../state/derive";
+import { describeChecks, relativeAgo } from "../state/derive";
 import type { EditorLayoutMode } from "../state/store";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
@@ -65,19 +65,12 @@ export function StatusBar({
   );
   const [open, setOpen] = useState(false);
 
-  const { errorCount, warnCount } = summarizeChecks(checks);
+  const status = describeChecks(checks);
+  const summary = status.text;
   const narrow = layoutMode === "narrow";
   const split = docked && layoutMode === "wide" && !chatCollapsed;
   // Only the email workspace has a work pane, and so a Checks tab, beside a docked assistant.
   const checksTab = docked && (doc === null || doc.channel === "email");
-  const pending = checks.filter((check) =>
-    check.diagnostics?.some((item) => item.compatibility?.assessment === "unverified"),
-  ).length;
-  let summary = "No issues found";
-  if (pending > 0) summary = `${pending} check${pending > 1 ? "s" : ""} to review`;
-  if (warnCount > 0) summary = `${warnCount} warning${warnCount > 1 ? "s" : ""}`;
-  if (errorCount > 0) summary = `${errorCount} check${errorCount > 1 ? "s" : ""} failing`;
-  if (checks.length === 0) summary = "No checks yet";
 
   // A static guest headline ("Draft saved") would otherwise read as saved while a persist is
   // still queued, blocked, or has failed. The live save note wins whenever it says anything
@@ -93,16 +86,31 @@ export function StatusBar({
   const indicator = (
     <>
       <span
+        data-slot="editor-status-bar-dot"
+        data-tone={status.tone}
         className={cn(
           "size-1.5 shrink-0 rounded-full",
-          errorCount > 0
+          status.tone === "error"
             ? "bg-status-error"
-            : warnCount > 0
+            : status.tone === "warning"
               ? "bg-status-warning"
               : "bg-muted-foreground",
         )}
       />
-      {guestHeadline === undefined && !narrow ? summary : null}
+      {guestHeadline === undefined && !narrow ? (
+        <span data-testid="statusbar.checks-summary">
+          {status.parts.length === 0
+            ? status.text
+            : status.parts.map((piece, index) => (
+                <span key={piece.severity}>
+                  {index > 0 && " · "}
+                  <span className={cn(piece.severity === "error" && "text-status-error")}>
+                    {piece.text}
+                  </span>
+                </span>
+              ))}
+        </span>
+      ) : null}
     </>
   );
 
@@ -119,8 +127,9 @@ export function StatusBar({
           <>
             <div
               data-slot="editor-status-bar-start"
-              style={split ? { width: assistantWidth } : undefined}
-              className={cn("flex min-w-0 shrink-0 items-center gap-3 px-2", split && "pr-3")}
+              // The half lines up with the chat but never narrower than its own text.
+              style={split ? { minWidth: assistantWidth } : undefined}
+              className={cn("flex shrink-0 items-center gap-3 px-2", split && "pr-3")}
             >
               {checksTab ? (
                 <Button
@@ -170,7 +179,7 @@ export function StatusBar({
                   {guestSaveNote ?? guestHeadline}
                 </span>
               ) : (
-                !narrow && <span>{doc === null ? "Loading…" : "Draft"}</span>
+                !narrow && <DraftNote loading={doc === null} />
               )}
             </div>
             {!split && <Separator orientation="vertical" className="my-2.5" />}
@@ -185,7 +194,7 @@ export function StatusBar({
                   data-save-version-state={saveVersionState ?? "unavailable"}
                   className="px-1"
                 >
-                  {saveVersionStatus ?? "Autosaved just now"}
+                  {saveVersionStatus}
                 </span>
               ) : (
                 <span
@@ -229,4 +238,38 @@ export function StatusBar({
       },
     },
   );
+}
+
+/** The draft's own save state: "Draft", "Draft · saving…", "Draft · saved 2 min ago". */
+function DraftNote({ loading }: { readonly loading: boolean }) {
+  const { savedAt, saving, failed } = useEditorStore(
+    useShallow((state) => ({
+      savedAt: state.draftSavedAt,
+      saving: state.pendingAuthoredSource !== null,
+      // A failed or conflicted save keeps its unsaved text until the author recovers.
+      failed: state.storageError !== null || state.conflict,
+    })),
+  );
+  const now = useNow(savedAt !== null);
+  if (loading) return <span>Loading…</span>;
+  let note = "Draft";
+  if (failed) note = "Draft · couldn’t save";
+  else if (saving) note = "Draft · saving…";
+  else if (savedAt !== null) note = `Draft · saved ${relativeAgo(now, savedAt)}`;
+  return (
+    <span data-testid="statusbar.draft" aria-live="polite" className="shrink-0">
+      {note}
+    </span>
+  );
+}
+
+/** The clock, refreshed every 30 seconds while `active` so relative times stay current. */
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [active]);
+  return now;
 }

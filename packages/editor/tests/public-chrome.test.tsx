@@ -133,6 +133,85 @@ describe("public editor chrome", () => {
     );
   });
 
+  it("splits the checks by severity and dates the draft's last save", async () => {
+    stubWideShell();
+    const checks = [
+      { id: "e", severity: "error" as const, label: "Broken link", detail: "" },
+      { id: "w1", severity: "warn" as const, label: "Alt text", detail: "" },
+      { id: "w2", severity: "warn" as const, label: "Contrast", detail: "" },
+      {
+        id: "t",
+        severity: "info" as const,
+        label: "Rendering needs verification",
+        detail: "",
+        diagnostics: [
+          {
+            code: "feature",
+            severity: "info" as const,
+            message: "Verify Outlook rendering",
+            origins: [],
+            clients: ["Outlook"],
+            compatibility: { assessment: "unverified" as const, title: "Needs verification" },
+          },
+        ],
+      },
+      { id: "size", severity: "info" as const, label: "Size", detail: "12 KB" },
+    ];
+    let storeApi: ReturnType<typeof useEditorStoreApi> | undefined;
+    const Probe = () => {
+      storeApi = useEditorStoreApi();
+      return null;
+    };
+    const view = render(
+      <EditorProvider host={await host()} checks={checks}>
+        <Probe />
+        <EditorShell
+          contributions={[
+            { slot: "rail.assistant", id: "assistant", render: () => <div>Assistant</div> },
+          ]}
+        />
+      </EditorProvider>,
+    );
+
+    const trigger = await view.findByTestId("statusbar.checks-trigger");
+    expect(trigger.textContent).toBe("1 error · 2 warnings · 1 tip");
+    expect(trigger.querySelector("[data-tone]")?.getAttribute("data-tone")).toBe("error");
+    expect((await view.findByTestId("statusbar.draft")).textContent).toBe("Draft");
+    act(() => storeApi?.setState({ draftSavedAt: Date.now() - 2 * 60_000 }));
+    await waitFor(() =>
+      expect(view.getByTestId("statusbar.draft").textContent).toBe("Draft · saved 2 min ago"),
+    );
+    // A save that stopped is not "saving": the note says so even while its source is queued.
+    act(() => storeApi?.setState({ pendingAuthoredSource: "queued", conflict: true }));
+    await waitFor(() =>
+      expect(view.getByTestId("statusbar.draft").textContent).toBe("Draft · couldn’t save"),
+    );
+  });
+
+  it("gives the assistant, the work pane tabs and the preview bar one header height and divider", async () => {
+    stubWideShell();
+    const view = render(
+      <EditorProvider host={await host()}>
+        <EditorShell
+          contributions={[
+            { slot: "rail.assistant", id: "assistant", render: () => <div>Assistant</div> },
+          ]}
+        />
+      </EditorProvider>,
+    );
+
+    await view.findByTestId("preview-bar");
+    const headers = [
+      view.container.querySelector('[data-slot="editor-assistant-dock-header"]'),
+      view.container.querySelector('[data-slot="editor-work-pane-header"]'),
+      view.getByTestId("preview-bar"),
+    ];
+    for (const header of headers) {
+      const tokens = (header?.className ?? "").split(/\s+/);
+      expect(tokens).toEqual(expect.arrayContaining(["h-11", "border-b", "border-border"]));
+    }
+  });
+
   it("names the checks left to review and opens them where the layout keeps checks", async () => {
     stubWideShell();
     const unverified = {
@@ -168,7 +247,7 @@ describe("public editor chrome", () => {
     );
 
     const trigger = await view.findByTestId("statusbar.checks-trigger");
-    expect(trigger.textContent).toBe("2 checks to review");
+    expect(trigger.textContent).toBe("2 tips");
     expect(view.queryByTestId("work-pane.panel.checks")).toBeNull();
     fireEvent.click(trigger);
     expect((await view.findByTestId("work-pane.panel.checks")).textContent).toContain(

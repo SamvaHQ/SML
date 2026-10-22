@@ -4,6 +4,7 @@ import { cn } from "../lib/utils";
 import { useEditorStore } from "../state/context";
 import { Sparkle } from "./editor-icons";
 import { usePart, type PartProps } from "./part";
+import { railHeaderClass } from "./ui-classes";
 import { useAssistant } from "./use-assistant";
 
 /** The state an `EditorAssistantDock` exposes. */
@@ -56,7 +57,7 @@ export function EditorAssistantDock({
             >
               <div
                 data-slot="editor-assistant-dock-header"
-                className="border-border flex h-11 shrink-0 items-center gap-2 border-b px-3"
+                className={cn(railHeaderClass, "gap-2 px-3")}
               >
                 <Sparkle className="text-primary size-4 shrink-0" />
                 <p className="text-foreground truncate text-sm font-medium">Assistant</p>
