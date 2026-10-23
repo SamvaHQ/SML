@@ -6,6 +6,7 @@ import type { CheckItem } from "../state/types";
 import { assessmentLabels } from "./assessment-labels";
 import { CheckActions } from "./check-actions";
 import { CheckDetails } from "./check-details";
+import { Xmark } from "./editor-icons";
 import { useEditorPortalContainer } from "./use-editor-portal";
 
 /** A compact repair surface; compatibility evidence lives in the roomy report. */
@@ -117,9 +118,9 @@ export function CompatibilityReport({
             <Dialog.Close
               data-testid="checks.report.close"
               aria-label="Close compatibility report"
-              className="hover:bg-muted rounded border px-2 py-1 text-xs"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring/50 inline-flex size-[30px] items-center justify-center rounded-[7px] outline-none focus-visible:ring-[3px]"
             >
-              Close
+              <Xmark className="size-[15px]" />
             </Dialog.Close>
           </div>
           <Dialog.Description className="text-muted-foreground mt-2 text-sm">

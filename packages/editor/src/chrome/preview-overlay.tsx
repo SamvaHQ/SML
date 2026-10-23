@@ -7,6 +7,7 @@ import { EmailFrame } from "../canvas/email-frame";
 import { SmsCounter } from "../channels/workspace-ui";
 import { useEditorStore } from "../state/context";
 import { CompatibilityReport } from "./compatibility-report";
+import { Xmark } from "./editor-icons";
 import { Segmented } from "./ui";
 import { cn } from "./ui-classes";
 import { useEditorPortalContainer } from "./use-editor-portal";
@@ -38,7 +39,7 @@ export interface PreviewOverlayProps {
  * regardless of the OS theme (real, not approximated — see EmailFrame), where the
  * editing canvas follows the OS. Device/scheme reset to Desktop/Light on each
  * open, while inheriting the workspace device so Preview never starts in a
- * contradictory width. Esc or Close dismisses.
+ * contradictory width. Esc or the close button dismisses.
  */
 export function PreviewOverlay({ open, onClose }: PreviewOverlayProps) {
   if (!open) return null;
@@ -179,10 +180,11 @@ function OpenPreviewOverlay({ onClose }: { readonly onClose: () => void }) {
             )}
             <Dialog.Close
               data-testid="preview-overlay.close"
-              className="border-border text-foreground hover:bg-muted focus-visible:border-ring focus-visible:ring-ring/50 ml-auto inline-flex h-[30px] items-center gap-1.5 rounded-[7px] border px-2.5 outline-none focus-visible:ring-[3px]"
+              aria-label="Close preview"
+              title="Close (Esc)"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring/50 ml-auto inline-flex size-[30px] items-center justify-center rounded-[7px] outline-none focus-visible:ring-[3px]"
             >
-              Close
-              <kbd className="text-muted-foreground text-[10px]">⎋</kbd>
+              <Xmark className="size-[15px]" />
             </Dialog.Close>
           </div>
           {view !== "preview" ? (
