@@ -1,6 +1,6 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## The brand chip is one menu, and the top and status bars read cleanly\n\nThe brand chip opens a menu of the organization's brands. Choosing one rewrites the theme's brand\nimport, and every `samva:brand` component import in the project's scripts, and saves a version; a project with no brand offers \"Use {default}\", and \"Manage brands\"\nlinks to the host's page. `EditorBrandSource.brandLink(slug)` is replaced by an optional\n`manageLink()`, and `EditorBrand` takes an optional `color` for the chip's swatch. The status bar\nsplits checks by severity (\"3 warnings · 22 tips\", errors in the error tone) and reads \"Draft ·\nsaved 2 min ago\" from the draft's last save. The Assistant header, the work pane's tab row and the\npreview bar share one height and divider. `@samva/editor/shell` exports `editorChipClass` and\n`editorChipTriggerClass` so a host's control beside the document name, such as an email switcher,\nmatches the editor's chips.\n"
-    filename: editor-chrome-polish.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## Preview and compatibility report close with an X\n\nThe Preview overlay and the Compatibility report dialog close from an icon-only X button instead of\na bordered \"Close\" label. Esc still dismisses both.\n"
+    filename: editor-icon-close-buttons.md
     v: 0.0.0
 core:packages:
   - id: npm:@samva/vite
@@ -8,7 +8,7 @@ core:packages:
   - id: npm:@samva/markup
     updated: true
   - changelogIds:
-      - editor-chrome-polish.md
+      - editor-icon-close-buttons.md
     id: npm:@samva/editor
     updated: true
 npm:packages:
