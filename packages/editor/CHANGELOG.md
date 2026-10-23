@@ -1,3 +1,10 @@
+## @samva/editor@0.18.1
+
+### Preview and compatibility report close with an X
+
+The Preview overlay and the Compatibility report dialog close from an icon-only X button instead of
+a bordered "Close" label. Esc still dismisses both.
+
 ## @samva/editor@0.18.0
 
 ### The brand chip is one menu, and the top and status bars read cleanly
