@@ -36,7 +36,7 @@ export function NodeContextMenu({
   readonly ancestors: ReadonlyArray<AncestorEntry>;
   readonly onSelect: (instancePath: string) => void;
   readonly onOpenChange?: ((open: boolean) => void) | undefined;
-  readonly portalContainer?: RefObject<HTMLElement | null> | undefined;
+  readonly portalContainer?: HTMLElement | RefObject<HTMLElement | null> | null | undefined;
   readonly open?: boolean | undefined;
   readonly anchor?: { readonly getBoundingClientRect: () => DOMRect } | undefined;
 }): ReactNode {
