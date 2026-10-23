@@ -438,10 +438,12 @@ export const applyStylesheet = (
     const emitted = [...winners]
       .filter(([property]) => !property.startsWith("--"))
       .sort(([, left], [, right]) => compareRank(left.key, right.key))
-      .map(([property, entry]): [string, string] => [
-        property,
-        finalizeValue(entry.value, variables),
-      ]);
+      .map(([property, entry]): [string, string] => {
+        const value = finalizeValue(entry.value, variables);
+        // Rank's first term is importance. The style attribute has to keep
+        // `!important`: inlining the value alone lets a later important rule win.
+        return [property, entry.key[0] === 1 ? `${value}!important` : value];
+      });
 
     for (const [property, value] of emitted)
       checkFallback(property, value, element.origins.slice(0, 1));

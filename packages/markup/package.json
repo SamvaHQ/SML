@@ -122,7 +122,7 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
-    "@css-inline/css-inline-wasm": "0.15.0",
+    "@css-inline/css-inline-wasm": "0.23.1",
     "@effect/vitest": "4.0.0",
     "@types/css-tree": "3.2.0",
     "@types/node": "^26.6.2",

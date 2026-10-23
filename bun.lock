@@ -66,7 +66,7 @@
         "tailwindcss": "^4.3.3",
       },
       "devDependencies": {
-        "@css-inline/css-inline-wasm": "0.15.0",
+        "@css-inline/css-inline-wasm": "0.23.1",
         "@effect/vitest": "4.0.0",
         "@types/css-tree": "3.2.0",
         "@types/node": "^26.6.2",
@@ -147,7 +147,7 @@
 
     "@clack/prompts": ["@clack/prompts@1.8.1", "", { "dependencies": { "@clack/core": "1.5.1", "fast-string-width": "^3.0.2", "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ=="],
 
-    "@css-inline/css-inline-wasm": ["@css-inline/css-inline-wasm@0.15.0", "", {}, "sha512-6kS2XI1qKn2RLgiUdEdiaJqJylDu9I+R1GK7H+7A8WBGi5cWmpDoByf6nWJVDFxasZ68/7GT4OM0TSuvt+gM4g=="],
+    "@css-inline/css-inline-wasm": ["@css-inline/css-inline-wasm@0.23.1", "", {}, "sha512-r8R/KyNrIK3A/r8JUpkatCRvxTxOsnUoiT4jq/+PhSsIZ/7kPFV1siAaIC5Fjg2+UCntI2nFY4V5AZS6exE6aw=="],
 
     "@effect/vitest": ["@effect/vitest@4.0.0", "", { "peerDependencies": { "effect": "^4.0.0", "vitest": ">=5.0.0 <6.0.0" } }, "sha512-kGElCPFGtP+CgMCwV/HjJWqtE3zYo6I1+8MSA54l+EI24lPU9p2Efa+TBp1jfkg9j711KKzEqgSAy3VzTsb76Q=="],
 

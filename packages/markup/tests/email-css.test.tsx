@@ -206,7 +206,7 @@ describe("cascade", () => {
         ".card{padding-inline-start:3px!important;padding:2px}",
         <td className="card" style={{ paddingLeft: "5px" }} />,
       ).html,
-    ).toContain('style="padding:2px;padding-left:3px"');
+    ).toContain('style="padding:2px;padding-left:3px!important"');
   });
 
   it("uses inherited RTL, child direction overrides, and resolved custom values", () => {
