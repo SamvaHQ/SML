@@ -11,6 +11,16 @@ export default defineConfig({
     include: ["tests/**/*.{test,spec}.{ts,tsx}"],
     exclude: ["**/node_modules/**", "**/dist/**"],
     setupFiles: ["./tests/setup.ts"],
+    // happy-dom 21 does not create an iframe document unless page loading is on.
+    // The canvas writes the rendered email into a src-less iframe, so the suite
+    // turns that back on. External stylesheet fetching stays off.
+    environmentOptions: {
+      happyDOM: {
+        settings: {
+          enableIframePageLoading: true,
+        },
+      },
+    },
     // Node exposes an unconfigured experimental `localStorage` that collides with happy-dom's.
     execArgv: ["--no-experimental-webstorage"],
     hookTimeout: 120_000,
