@@ -77,7 +77,7 @@
     "@playwright/test": "1.63.0",
     "@samva/editor": "workspace:^",
     "@types/node": "^26.6.2",
-    "tsdown": "^0.22.13",
+    "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
     "vite": "~8.3.0",
     "vitest": "^5.0.3"
