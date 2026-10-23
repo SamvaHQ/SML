@@ -73,7 +73,7 @@
     "@samva/markup": "workspace:^"
   },
   "devDependencies": {
-    "@effect/vitest": "4.0.0",
+    "@effect/vitest": "4.0.6",
     "@playwright/test": "1.64.1",
     "@samva/editor": "workspace:^",
     "@types/node": "^26.6.5",

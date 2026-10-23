@@ -27,7 +27,7 @@
       },
       "devDependencies": {
         "@base-ui/react": "^1.9.0",
-        "@effect/vitest": "4.0.0",
+        "@effect/vitest": "4.0.6",
         "@playwright/test": "1.64.1",
         "@tailwindcss/vite": "^4.3.3",
         "@testing-library/react": "^16.3.3",
@@ -35,7 +35,7 @@
         "@types/react": "19.3.0",
         "@types/react-dom": "19.3.0",
         "@vitejs/plugin-react": "^6.1.2",
-        "effect": "4.0.0",
+        "effect": "4.0.6",
         "happy-dom": "^21.0.4",
         "react": "19.3.1",
         "react-dom": "19.3.1",
@@ -73,11 +73,11 @@
       },
       "devDependencies": {
         "@css-inline/css-inline-wasm": "0.23.1",
-        "@effect/vitest": "4.0.0",
+        "@effect/vitest": "4.0.6",
         "@types/css-tree": "3.2.0",
         "@types/mdast": "^4.0.4",
         "@types/node": "^26.6.5",
-        "effect": "4.0.0",
+        "effect": "4.0.6",
         "tsdown": "^0.23.1",
         "typescript": "^7.0.2",
         "vitest": "^5.0.5",
@@ -91,7 +91,7 @@
         "@samva/markup": "workspace:^",
       },
       "devDependencies": {
-        "@effect/vitest": "4.0.0",
+        "@effect/vitest": "4.0.6",
         "@playwright/test": "1.64.1",
         "@samva/editor": "workspace:^",
         "@types/node": "^26.6.5",
@@ -112,7 +112,7 @@
         "@types/react": "19.3.0",
         "@types/react-dom": "19.3.0",
         "@vitejs/plugin-react": "^6.1.2",
-        "effect": "4.0.0",
+        "effect": "4.0.6",
         "react": "19.3.1",
         "react-dom": "19.3.1",
         "tailwindcss": "^4.3.3",
@@ -156,7 +156,7 @@
 
     "@css-inline/css-inline-wasm": ["@css-inline/css-inline-wasm@0.23.1", "", {}, "sha512-r8R/KyNrIK3A/r8JUpkatCRvxTxOsnUoiT4jq/+PhSsIZ/7kPFV1siAaIC5Fjg2+UCntI2nFY4V5AZS6exE6aw=="],
 
-    "@effect/vitest": ["@effect/vitest@4.0.0", "", { "peerDependencies": { "effect": "^4.0.0", "vitest": ">=5.0.0 <6.0.0" } }, "sha512-kGElCPFGtP+CgMCwV/HjJWqtE3zYo6I1+8MSA54l+EI24lPU9p2Efa+TBp1jfkg9j711KKzEqgSAy3VzTsb76Q=="],
+    "@effect/vitest": ["@effect/vitest@4.0.6", "", { "peerDependencies": { "effect": "^4.0.6", "vitest": ">=5.0.0 <6.0.0" } }, "sha512-oKNbtyUHK5+0o730CXwojULEu7f3+c235pYFD4U5T//o+hHrJbYbZU4bRkcv936tPr5IOnmujeyQiC/LuJJjHw=="],
 
     "@floating-ui/core": ["@floating-ui/core@1.8.0", "", { "dependencies": { "@floating-ui/utils": "^0.2.12" } }, "sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ=="],
 
@@ -518,7 +518,7 @@
 
     "dts-resolver": ["dts-resolver@3.0.0", "", { "peerDependencies": { "oxc-resolver": ">=11.0.0" }, "optionalPeers": ["oxc-resolver"] }, "sha512-1T1f+z+4tl9XD+m+0HBgWoL/nm0bOIffyWaUuUSBlFg/86IWvfx+wjNaO/ybU0AJzG9/Mi5hBUgGV6zCmWEN7Q=="],
 
-    "effect": ["effect@4.0.0", "", {}, "sha512-ooc1TG5t+FfzgYnFz2ff6BBKyZ7EwBRVXC7c4RhQUAD6/TZ2gTXXMeb4WX7a19ozQo4J73/QW+S00YAIresoMQ=="],
+    "effect": ["effect@4.0.6", "", {}, "sha512-Tc3mkzuLR6t6P9dhLt0D2GrxYtmU5td4XEJEiXCmILz53IRIfJyHsKZWjTA3xEjiwpNTtXBgI4iqYPxMztBDrw=="],
 
     "empathic": ["empathic@2.1.0", "", {}, "sha512-AnfC1ATldl49/cvZdLPDjBfrRNwbDO05aibiOtzQu3qtlbJtomNLhF30HEtn/7iBz50dlMECqATo3fG0LrdEgw=="],
 
