@@ -113,8 +113,8 @@ renders that template against an input. It is a pure function with no dependenci
 at send time.
 
 ```ts
-import { render } from "@samva/markup/render";
 import { compileTemplate } from "@samva/markup/compiler";
+import { render } from "@samva/markup/render";
 
 const compiled = await compileTemplate({
   files, // the project's files by path; binary files become content-addressed assets
