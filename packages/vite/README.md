@@ -177,8 +177,8 @@ resolver or credentials. A brand import without a resolver reports `brand-unavai
 For example, supply a brand from your own configuration:
 
 ```ts
-import { samvaEditor } from "@samva/vite";
 import { samvaBrandPlugin } from "@samva/markup/brand";
+import { samvaEditor } from "@samva/vite";
 
 samvaEditor({
   brandPlugin: samvaBrandPlugin,

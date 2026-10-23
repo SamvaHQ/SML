@@ -113,8 +113,8 @@ components, block and inline content, bindings, conditions, loops, formatters, a
 pure, with no authored code or external I/O at send time.
 
 ```ts
-import { render } from "@samva/markup/render";
 import { compileTemplate } from "@samva/markup/compiler";
+import { render } from "@samva/markup/render";
 
 const compiled = await compileTemplate({
   files, // the project's files by path; binary files become content-addressed assets
