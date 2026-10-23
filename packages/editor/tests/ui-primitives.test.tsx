@@ -2,7 +2,7 @@
  * @jsxImportSource react */
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { cleanup, render, waitFor } from "@testing-library/react";
-import { useRef, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { EditorPortalProvider } from "../src/chrome/portal-context";
 import { cn } from "../src/lib/utils";
@@ -62,13 +62,14 @@ afterEach(cleanup);
 
 const PORTAL_ID = "ui-primitives.portal";
 
-// The shell provides the portal target the same way: a ref to an element beside the content.
+// The shell publishes the portal element once it has mounted, not a ref. Base UI 1.9
+// reads a ref during layout, before React attaches this later sibling.
 function Portaled({ children }: { readonly children: ReactNode }) {
-  const container = useRef<HTMLDivElement | null>(null);
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
   return (
     <EditorPortalProvider container={container}>
       {children}
-      <div ref={container} data-testid={PORTAL_ID} />
+      <div ref={setContainer} data-testid={PORTAL_ID} />
     </EditorPortalProvider>
   );
 }

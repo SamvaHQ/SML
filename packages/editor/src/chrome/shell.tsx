@@ -259,7 +259,7 @@ export function EditorRoot({
   const saveVersionInFlight = useRef<Promise<void> | null>(null);
   const saveVersionRef = useRef<() => void>(() => {});
   const frameRef = useRef<HTMLDivElement>(null);
-  const portalRef = useRef<HTMLDivElement>(null);
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
 
   const canExport =
     exportable === true &&
@@ -528,7 +528,7 @@ export function EditorRoot({
       >
         <PreviewChromeProvider value={previewChrome}>
           <ShellChromeProvider value={{ topBar, statusBar, overlayOpen, idBase }}>
-            <EditorPortalProvider container={portalRef}>
+            <EditorPortalProvider container={portalContainer}>
               <div ref={frameRef} className="samva-editor-frame flex" style={{ height }}>
                 {frameStart?.render()}
                 {root}
@@ -538,7 +538,11 @@ export function EditorRoot({
                   onClose={() => setLifecycleOpen(false)}
                   onLockedAction={onLockedLifecycle}
                 />
-                <div ref={portalRef} data-samva-editor-portal-root className="samva-editor-shell" />
+                <div
+                  ref={setPortalContainer}
+                  data-samva-editor-portal-root
+                  className="samva-editor-shell"
+                />
               </div>
             </EditorPortalProvider>
           </ShellChromeProvider>
