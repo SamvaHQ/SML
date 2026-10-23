@@ -319,7 +319,7 @@ runs a template any more.
   runtime tracing (`@samva/markup/tsx-source-instrumentation`, `@samva/markup/email/selection`); and
   the textual structured SML grammar with its JSX runtime and components
   (`@samva/markup/{ast,components,compile,compile-sms,compile-whatsapp,conditionals,emit,
-interpolate,jsx-runtime,jsx-dev-runtime,lexer,parser,predicate,printer,render-template,variables}`).
+  interpolate,jsx-runtime,jsx-dev-runtime,lexer,parser,predicate,printer,render-template,variables}`).
   SMS and WhatsApp bodies are the `sms` and `whatsapp` fields of `defineTemplate`, written with
   `Sms` from `@samva/markup/sms` and `WhatsApp` from `@samva/markup/whatsapp`.
 - **`@samva/markup/preview`** adds `renderIrPreview`, which renders a fixture from the IR with an
