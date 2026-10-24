@@ -82,6 +82,45 @@ describe("dark classes", () => {
     );
   });
 
+  it("keeps a stronger inline longhand when an important hover replays a shorthand", () => {
+    const applied = styled(
+      `${THEME}.card{background:var(--color-card)!important}.card:hover{background:blue}.card:hover{background:green!important}`,
+      <div className="card" style={{ backgroundColor: "red !important" }}>
+        hi
+      </div>,
+    );
+    const lock = /sml-lock-[a-z0-9]+/.exec(applied.html)?.[0];
+    expect(lock).toBeDefined();
+    expect(applied.html).toContain("background:#ffffff");
+    expect(applied.html).toContain("background-color:red");
+    expect(applied.html).not.toContain("background-color:red!important");
+    const guarded = applied.headCss.indexOf(
+      `.card.${lock}:hover{background:#ffffff!important;background-color:red!important}`,
+    );
+    const replay = applied.headCss.indexOf(
+      `.card.${lock}:hover{background:green!important;background-color:red!important}`,
+    );
+    expect(guarded).toBeGreaterThanOrEqual(0);
+    expect(replay).toBeGreaterThan(guarded);
+  });
+
+  it("keeps a themed inline longhand's dark value when a hover replays a shorthand", () => {
+    const applied = styled(
+      `${THEME}.card{border:1px solid var(--color-border)!important}.card:hover{border:1px solid blue}.card:hover{border:2px solid green!important}`,
+      <div className="card" style={{ borderTopColor: "var(--color-primary) !important" }}>
+        hi
+      </div>,
+    );
+    const lock = /sml-lock-[a-z0-9]+/.exec(applied.html)?.[0];
+    expect(lock).toBeDefined();
+    expect(applied.headCss).toContain(
+      `.card.${lock}:hover{border:2px solid green!important;border-top-color:#111111!important}`,
+    );
+    expect(applied.headCss).toContain(
+      `@media (prefers-color-scheme:dark){.card.${lock}:hover{border:2px solid green!important;border-top-color:#eeeeee!important}}`,
+    );
+  });
+
   it("does not copy an important element color onto a pseudo-element", () => {
     const applied = styled(
       `${THEME}.card::before{content:"*";color:red}`,

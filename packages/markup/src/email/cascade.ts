@@ -357,8 +357,11 @@ const nestConditions = (conditions: readonly string[], body: string): string =>
  * each weaker retained selector. The copy carries one more class, so it beats
  * the retained rule, and the dark-scheme copy of it keeps the theme switch.
  * A rule that outranks the themed color is copied again afterwards, on that
- * same class, so the guard does not bury it. Pseudo-elements are left alone:
- * their color is not the element's.
+ * same class, so the guard does not bury it. A shorthand in that copy also
+ * restates every locked declaration that still outranks it, in cascade order,
+ * so the shorthand does not reset a stronger inline longhand. When that
+ * longhand changes in dark mode, the copy is repeated inside the dark-mode
+ * query. Pseudo-elements are left alone: their color is not the element's.
  */
 const renderLockGuards = (
   locks: ReadonlyMap<string, readonly LockedDeclaration[]>,
@@ -393,30 +396,43 @@ const renderLockGuards = (
     }
   }
   // A stronger rule, such as an important hover beside a normal one, has to
-  // stay ahead of the guard that the weaker rule produced.
+  // stay ahead of the guard that the weaker rule produced. Beating one lock is
+  // not enough to drop the others: a shorthand that wins over a themed
+  // `background` still loses to an important inline `background-color`, and
+  // writing the shorthand alone would reset that color.
   for (const [className, declarations] of locks) {
     if (!guarded.has(className)) continue;
     for (const rule of rules) {
       if (targetsPseudoElement(rule.selector)) continue;
-      const winning = rule.declarations.filter((declaration, position) =>
-        declarations.some(
-          (item) =>
-            overlaps(declaration.property, item.property) &&
-            compareRank(retainedKey(rule, declaration, position), item.key) > 0,
-        ),
-      );
-      if (winning.length === 0) continue;
       const selector = strengthenSelector(rule.selector, className);
       if (selector === undefined) continue;
       const conditions = rule.conditions.map(downlevelMediaQuery);
-      const scope = withinDarkScheme(conditions) ? { ...variables, ...darkVariables } : variables;
-      const body = winning
-        .map(
-          (declaration) =>
+      const inDark = withinDarkScheme(conditions);
+      const scope = inDark ? { ...variables, ...darkVariables } : variables;
+      const replay = (mode: "light" | "dark"): string => {
+        const parts: string[] = [];
+        for (const [position, declaration] of rule.declarations.entries()) {
+          const key = retainedKey(rule, declaration, position);
+          const beatsLock = declarations.some(
+            (item) =>
+              overlaps(declaration.property, item.property) && compareRank(key, item.key) > 0,
+          );
+          if (!beatsLock) continue;
+          parts.push(
             `${declaration.property}:${finalizeValue(declaration.value, scope)}!important`,
-        )
-        .join(";");
-      emit(conditions, selector, body);
+          );
+          for (const item of declarations)
+            if (overlaps(declaration.property, item.property) && compareRank(item.key, key) > 0)
+              parts.push(`${item.property}:${mode === "dark" ? item.dark : item.light}!important`);
+        }
+        return parts.join(";");
+      };
+      const lightBody = replay(inDark ? "dark" : "light");
+      if (lightBody === "") continue;
+      emit(conditions, selector, lightBody);
+      if (inDark) continue;
+      const darkBody = replay("dark");
+      if (darkBody !== lightBody) emit([...conditions, darkQuery], selector, darkBody);
     }
   }
   return blocks.join("");
