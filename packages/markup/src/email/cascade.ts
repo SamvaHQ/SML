@@ -1,8 +1,8 @@
 import { isObject } from "../internal/guards";
 import type { JsxSourceLocation } from "../source-locations";
 import type { CssDeclaration, CssRule, Specificity, Stylesheet } from "./css";
-import { finalizeValue, renderHeadCss } from "./css-values";
-import { DARK_SCHEME_MEDIA } from "./dark-scheme";
+import { downlevelMediaQuery, finalizeValue, renderHeadCss } from "./css-values";
+import { DARK_SCHEME_MEDIA, withinDarkScheme } from "./dark-scheme";
 import type { EmailDiagnostic } from "./diagnostics";
 import { fontFallbackDiagnostic, fontShorthandFamilies, lacksGenericFallback } from "./font-stacks";
 import { declarationValue, escapeAttribute, kebab } from "./html";
@@ -166,16 +166,27 @@ export interface AppliedStyles {
 /** Generated dark-mode classes share this prefix; it is reserved for the compiler. */
 export const DARK_CLASS_PREFIX = "sml-dark-";
 
-/** A class named for its declarations, so equal sets share one rule and builds are stable. */
-const darkClassName = (body: string): string => {
-  // FNV-1a, 32-bit.
+/**
+ * Generated lock classes share this prefix; it is reserved for the compiler.
+ * An important color the dark-mode class restates is inlined without
+ * `!important`, so a weaker retained rule (also marked `!important`) would
+ * otherwise take it. The lock class carries that color on a more specific copy
+ * of the retained selector.
+ */
+const LOCK_CLASS_PREFIX = "sml-lock-";
+
+/** FNV-1a, 32-bit, so equal declaration sets share one class and builds are stable. */
+const classSuffix = (body: string): string => {
   let hash = 0x811c9dc5;
   for (let index = 0; index < body.length; index++) {
     hash ^= body.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return `${DARK_CLASS_PREFIX}${hash.toString(36)}`;
+  return hash.toString(36);
 };
+
+/** A class named for its declarations, so equal sets share one rule and builds are stable. */
+const darkClassName = (body: string): string => `${DARK_CLASS_PREFIX}${classSuffix(body)}`;
 
 const SIDES = ["top", "right", "bottom", "left"] as const;
 const BORDER_PARTS = ["width", "style", "color"] as const;
@@ -239,6 +250,99 @@ const withClass = (
   };
 };
 
+interface LockedDeclaration {
+  readonly property: string;
+  readonly light: string;
+  readonly dark: string;
+  readonly key: readonly number[];
+}
+
+/** Insert `className` into the subject compound, before its first pseudo. */
+const strengthenSelector = (selector: string, className: string): string | undefined => {
+  const token = `.${className}`;
+  let depth = 0;
+  let split = 0;
+  for (let index = 0; index < selector.length; index++) {
+    const character = selector[index];
+    if (character === "(" || character === "[") depth++;
+    else if (character === ")" || character === "]") depth = Math.max(0, depth - 1);
+    else if (depth === 0 && (character === ">" || character === "+" || character === "~"))
+      split = index + 1;
+    else if (depth === 0 && character === " ") split = index + 1;
+  }
+  const subject = selector.slice(split);
+  if (subject.trim() === "") return undefined;
+  let subjectDepth = 0;
+  let pseudo = -1;
+  for (let index = 0; index < subject.length; index++) {
+    const character = subject[index];
+    if (character === "(" || character === "[") subjectDepth++;
+    else if (character === ")" || character === "]") subjectDepth = Math.max(0, subjectDepth - 1);
+    else if (subjectDepth === 0 && character === ":") {
+      pseudo = index;
+      break;
+    }
+  }
+  const strengthened =
+    pseudo < 0
+      ? `${subject}${token}`
+      : `${subject.slice(0, pseudo)}${token}${subject.slice(pseudo)}`;
+  return `${selector.slice(0, split)}${strengthened}`;
+};
+
+const retainedKey = (
+  rule: CssRule,
+  declaration: CssDeclaration,
+  position: number,
+): readonly number[] =>
+  rank(declaration.important, false, rule.layer, rule.specificity, rule.order, position);
+
+/** Whether `item` wins the real cascade over this rule's overlapping declaration. */
+const threatens = (item: LockedDeclaration, rule: CssRule): boolean =>
+  rule.declarations.some(
+    (declaration, position) =>
+      overlaps(declaration.property, item.property) &&
+      compareRank(item.key, retainedKey(rule, declaration, position)) > 0,
+  );
+
+const nestConditions = (conditions: readonly string[], body: string): string =>
+  conditions.reduceRight((inner, condition) => `${condition}{${inner}}`, body);
+
+/**
+ * Restate important colors that were inlined without `!important` on a copy of
+ * each weaker retained selector. The copy carries one more class, so it beats
+ * the retained rule, and the dark-scheme copy of it keeps the theme switch.
+ */
+const renderLockGuards = (
+  locks: ReadonlyMap<string, readonly LockedDeclaration[]>,
+  rules: readonly CssRule[],
+): string => {
+  const seen = new Set<string>();
+  const blocks: string[] = [];
+  const darkQuery = DARK_SCHEME_MEDIA.replace(": ", ":");
+  for (const rule of rules) {
+    const conditions = rule.conditions.map(downlevelMediaQuery);
+    for (const [className, declarations] of locks) {
+      const beaten = declarations.filter((item) => threatens(item, rule));
+      if (beaten.length === 0) continue;
+      const selector = strengthenSelector(rule.selector, className);
+      if (selector === undefined) continue;
+      const inDark = withinDarkScheme(conditions);
+      const emit = (wrapping: readonly string[], body: string) => {
+        const block = nestConditions(wrapping, `${selector}{${body}}`);
+        if (seen.has(block)) return;
+        seen.add(block);
+        blocks.push(block);
+      };
+      const lightBody = beaten.map((item) => `${item.property}:${item.light}!important`).join(";");
+      const darkBody = beaten.map((item) => `${item.property}:${item.dark}!important`).join(";");
+      if (!inDark) emit(conditions, lightBody);
+      emit(inDark ? conditions : [...conditions, darkQuery], darkBody);
+    }
+  }
+  return blocks.join("");
+};
+
 /** The generated dark-mode classes as one `@media (prefers-color-scheme:dark)` block, written as the head CSS writes its media queries. */
 export const renderDarkRules = (rules: ReadonlyMap<string, string>): string =>
   rules.size === 0
@@ -278,6 +382,17 @@ export const applyStylesheet = (
     (rule.inlinable ? inlinable : retained).push(rule);
     for (const name of rule.classes) styledClasses.add(name);
   }
+  const locks = new Map<string, readonly LockedDeclaration[]>();
+  const lockClassFor = (declarations: readonly LockedDeclaration[]): string | undefined => {
+    if (!declarations.some((item) => retained.some((rule) => threatens(item, rule))))
+      return undefined;
+    const body = declarations
+      .map((item) => `${item.property}:${item.light}=${item.dark}@${item.key.join(".")}`)
+      .join(";");
+    const name = `${LOCK_CLASS_PREFIX}${classSuffix(body)}`;
+    locks.set(name, declarations);
+    return name;
+  };
   // Only matching elements and their descendants inherit a conditional writing
   // context. An opaque selector cannot safely exclude any element.
   const conditionalWritingRules = retained.filter((rule) =>
@@ -470,7 +585,9 @@ export const applyStylesheet = (
         // `!important`: inlining the value alone lets a later important rule win.
         // The whole dark-mode set stays plain, not only the color that changed.
         // Stripping the flag from just that color would let an overlapping
-        // important longhand beat the themed shorthand in light mode.
+        // important longhand beat the themed shorthand in light mode. A weaker
+        // retained rule is copied onto the lock class so it does not take the
+        // color back.
         const important = entry.key[0] === 1 && !restated.has(property);
         return [property, value, important];
       });
@@ -502,11 +619,22 @@ export const applyStylesheet = (
     // `background-color` after a class's `background`) still wins in dark mode, and nothing it
     // cannot touch (a `border-radius` beside a `border-color`) is pinned with `!important`.
     const dark: [string, string][] = [];
+    const locked: LockedDeclaration[] = [];
     if (hasDarkTheme) {
       for (const [property, entry] of [...winners].sort(([, left], [, right]) =>
         compareRank(left.key, right.key),
-      ))
-        if (restated.has(property)) dark.push([property, finalizeValue(entry.value, darkScope)]);
+      )) {
+        if (!restated.has(property)) continue;
+        const darkValue = finalizeValue(entry.value, darkScope);
+        dark.push([property, darkValue]);
+        if (entry.key[0] === 1)
+          locked.push({
+            property,
+            light: finalizeValue(entry.value, variables),
+            dark: darkValue,
+            key: entry.key,
+          });
+      }
       if (
         typeof bgcolor === "string" &&
         bgcolor.includes("var(") &&
@@ -518,7 +646,9 @@ export const applyStylesheet = (
       }
     }
     const darkClass = dark.length === 0 ? undefined : darkClassFor(dark);
-    const props = darkClass === undefined ? lightProps : withClass(lightProps, darkClass);
+    const lockClass = lockClassFor(locked);
+    const themed = darkClass === undefined ? lightProps : withClass(lightProps, darkClass);
+    const props = lockClass === undefined ? themed : withClass(themed, lockClass);
     return EmailNode.Element({
       ...element,
       props: emitted.length === 0 ? props : { ...props, style: Object.fromEntries(physical) },
@@ -566,7 +696,7 @@ export const applyStylesheet = (
     });
   return {
     tree,
-    headCss: renderHeadCss(retained, sheet.headAtRules, sheet.variables, sheet.darkVariables),
+    headCss: `${renderHeadCss(retained, sheet.headAtRules, sheet.variables, sheet.darkVariables)}${renderLockGuards(locks, retained)}`,
     darkRules,
     fontFaceCss: sheet.fontFaces.map((face) => face.css).join(""),
     diagnostics,

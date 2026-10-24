@@ -36,6 +36,35 @@ describe("dark classes", () => {
     expect(applied.darkRules.get(name)).not.toContain("#dddddd");
   });
 
+  it("keeps an important themed color ahead of a weaker hover rule", () => {
+    const applied = styled(
+      `${THEME}.card:hover{color:red}`,
+      <p className="card" style={{ color: "var(--color-primary) !important" }}>
+        hi
+      </p>,
+    );
+    const lock = /sml-lock-[a-z0-9]+/.exec(applied.html)?.[0];
+    expect(applied.html).toContain("color:#111111");
+    expect(applied.html).not.toContain("color:#111111!important");
+    expect(lock).toBeDefined();
+    expect(applied.darkRules.get(darkClass(applied.html))).toBe("color:#eeeeee!important");
+    expect(applied.headCss).toContain(".card:hover{color:red!important}");
+    expect(applied.headCss).toContain(`.card.${lock}:hover{color:#111111!important}`);
+    expect(applied.headCss).toContain(
+      `@media (prefers-color-scheme:dark){.card.${lock}:hover{color:#eeeeee!important}}`,
+    );
+  });
+
+  it("lets an important hover beat a less specific important themed color", () => {
+    const applied = styled(
+      `${THEME}.card{color:var(--color-primary)!important}.card:hover{color:red!important}`,
+      <p className="card">hi</p>,
+    );
+    expect(applied.html).not.toContain("sml-lock-");
+    expect(applied.headCss).toContain(".card:hover{color:red!important}");
+    expect(applied.headCss).not.toContain("sml-lock-");
+  });
+
   it("lets a dark theme override an important themed color", () => {
     const applied = styled(
       `${THEME}.card{color:var(--color-primary)!important;padding:2px!important}`,
