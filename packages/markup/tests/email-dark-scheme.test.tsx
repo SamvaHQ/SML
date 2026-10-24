@@ -68,6 +68,20 @@ describe("dark classes", () => {
     expect(greenReplay).toBeGreaterThan(themeGuard);
   });
 
+  it("keeps an escaped hover class intact on the lock selector", () => {
+    const applied = styled(
+      `${THEME}.hover\\:text-red-500:hover{color:red}`,
+      <p className="hover:text-red-500" style={{ color: "var(--color-primary) !important" }}>
+        hi
+      </p>,
+    );
+    const lock = /sml-lock-[a-z0-9]+/.exec(applied.html)?.[0];
+    expect(lock).toBeDefined();
+    expect(applied.headCss).toContain(
+      `.hover\\:text-red-500.${lock}:hover{color:#111111!important}`,
+    );
+  });
+
   it("does not copy an important element color onto a pseudo-element", () => {
     const applied = styled(
       `${THEME}.card::before{content:"*";color:red}`,

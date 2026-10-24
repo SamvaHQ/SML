@@ -263,6 +263,10 @@ const subjectSplit = (selector: string): number | undefined => {
   let split = 0;
   for (let index = 0; index < selector.length; index++) {
     const character = selector[index];
+    if (character === "\\") {
+      index += 1;
+      continue;
+    }
     if (character === "(" || character === "[") depth++;
     else if (character === ")" || character === "]") depth = Math.max(0, depth - 1);
     else if (depth === 0 && (character === ">" || character === "+" || character === "~"))
@@ -287,6 +291,10 @@ const targetsPseudoElement = (selector: string): boolean => {
   let depth = 0;
   for (let index = 0; index < subject.length; index++) {
     const character = subject[index];
+    if (character === "\\") {
+      index += 1;
+      continue;
+    }
     if (character === "(" || character === "[") depth++;
     else if (character === ")" || character === "]") depth = Math.max(0, depth - 1);
     else if (depth !== 0 || character !== ":") continue;
@@ -307,6 +315,11 @@ const strengthenSelector = (selector: string, className: string): string | undef
   let pseudo = -1;
   for (let index = 0; index < subject.length; index++) {
     const character = subject[index];
+    // An escaped colon belongs to a class (`hover\:text`), not to a pseudo.
+    if (character === "\\") {
+      index += 1;
+      continue;
+    }
     if (character === "(" || character === "[") depth++;
     else if (character === ")" || character === "]") depth = Math.max(0, depth - 1);
     else if (depth === 0 && character === ":") {
