@@ -68,7 +68,7 @@ Tooling entries are what a host (Vite, the CLI, the editor, the API, the templat
   `whatsapp` channel bodies (`readSmsChannel`, `editSmsChannel`, `readWhatsAppChannel`,
   `editWhatsAppChannel`), where text between expressions is editable and every expression,
   conditional or element is a locked segment; JSX source locations; and `previewEmail(template,
-input)`, the render an editor shows, with an instance path (`INSTANCE_PATH_ATTRIBUTE`) on every
+  input)`, the render an editor shows, with an instance path (`INSTANCE_PATH_ATTRIBUTE`) on every
   element and the `selections` that map each one to its TSX span. Browser-safe: its closure holds
   Babel's parser and css-tree only (`tests/entry-closure.test.ts`).
 - `@samva/markup/brand` — brand records and their CSS model (`parseBrandCss`, `printBrandCss`), the
