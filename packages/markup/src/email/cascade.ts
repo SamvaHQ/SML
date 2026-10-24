@@ -359,9 +359,10 @@ const nestConditions = (conditions: readonly string[], body: string): string =>
  * A rule that outranks the themed color is copied again afterwards, on that
  * same class, so the guard does not bury it. A shorthand in that copy also
  * restates every locked declaration that still outranks it, in cascade order,
- * so the shorthand does not reset a stronger inline longhand. When that
- * longhand changes in dark mode, the copy is repeated inside the dark-mode
- * query. Pseudo-elements are left alone: their color is not the element's.
+ * so the shorthand does not reset a stronger inline longhand. When either
+ * value changes in dark mode, the copy is repeated inside the dark-mode query
+ * at the dark values. Pseudo-elements are left alone: their color is not the
+ * element's.
  */
 const renderLockGuards = (
   locks: ReadonlyMap<string, readonly LockedDeclaration[]>,
@@ -408,8 +409,8 @@ const renderLockGuards = (
       if (selector === undefined) continue;
       const conditions = rule.conditions.map(downlevelMediaQuery);
       const inDark = withinDarkScheme(conditions);
-      const scope = inDark ? { ...variables, ...darkVariables } : variables;
       const replay = (mode: "light" | "dark"): string => {
+        const scope = mode === "dark" ? { ...variables, ...darkVariables } : variables;
         const parts: string[] = [];
         for (const [position, declaration] of rule.declarations.entries()) {
           const key = retainedKey(rule, declaration, position);

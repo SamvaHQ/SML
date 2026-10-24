@@ -121,6 +121,23 @@ describe("dark classes", () => {
     );
   });
 
+  it("resolves a replayed shorthand at its dark value", () => {
+    const applied = styled(
+      `${THEME}.card{background:var(--color-card)!important}.card:hover{background:blue}.card:hover{background:var(--color-primary)!important}`,
+      <div className="card" style={{ backgroundColor: "red !important" }}>
+        hi
+      </div>,
+    );
+    const lock = /sml-lock-[a-z0-9]+/.exec(applied.html)?.[0];
+    expect(lock).toBeDefined();
+    expect(applied.headCss).toContain(
+      `.card.${lock}:hover{background:#111111!important;background-color:red!important}`,
+    );
+    expect(applied.headCss).toContain(
+      `@media (prefers-color-scheme:dark){.card.${lock}:hover{background:#eeeeee!important;background-color:red!important}}`,
+    );
+  });
+
   it("does not copy an important element color onto a pseudo-element", () => {
     const applied = styled(
       `${THEME}.card::before{content:"*";color:red}`,
