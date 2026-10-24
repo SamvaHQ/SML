@@ -209,6 +209,17 @@ describe("cascade", () => {
     ).toContain('style="padding:2px;padding-left:3px!important"');
   });
 
+  it("keeps importance on every side of a two-value logical padding", () => {
+    expect(
+      styled(
+        ".card{padding:2px!important;padding-inline:3px 4px!important}",
+        <td className="card" />,
+      ).html,
+    ).toContain(
+      'style="padding:2px!important;padding-left:3px!important;padding-right:4px!important"',
+    );
+  });
+
   it("uses inherited RTL, child direction overrides, and resolved custom values", () => {
     const result = styled(
       ".card{--pad:3px;padding-inline:var(--pad) 4px;padding-block-start:5px;padding-inline-end:6px}",

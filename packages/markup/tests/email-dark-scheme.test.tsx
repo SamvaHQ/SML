@@ -36,6 +36,26 @@ describe("dark classes", () => {
     expect(applied.darkRules.get(name)).not.toContain("#dddddd");
   });
 
+  it("lets a dark theme override an important themed color", () => {
+    const applied = styled(
+      `${THEME}.card{color:var(--color-primary)!important;padding:2px!important}`,
+      <p className="card">hi</p>,
+    );
+    expect(applied.html).toContain('style="color:#111111;padding:2px!important"');
+    expect(applied.darkRules.get(darkClass(applied.html))).toBe("color:#eeeeee!important");
+  });
+
+  it("keeps an important themed shorthand ahead of an overlapping longhand", () => {
+    const applied = styled(
+      `${THEME}.box{background-color:#ff0000!important;background:var(--color-card)!important}`,
+      <div className="box">hi</div>,
+    );
+    expect(applied.html).toContain('style="background-color:#ff0000;background:#ffffff"');
+    expect(applied.darkRules.get(darkClass(applied.html))).toBe(
+      "background-color:#ff0000!important;background:#222222!important",
+    );
+  });
+
   it("covers an inline var() style too", () => {
     const applied = styled(THEME, <p style={{ color: "var(--color-primary)" }}>hi</p>);
     expect(applied.html).toContain("color:#111111");

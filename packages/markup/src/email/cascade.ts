@@ -431,6 +431,32 @@ export const applyStylesheet = (
         ? "unknown"
         : inheritedValue("writing-mode", inheritedWriting.writingMode, "horizontal-tb"),
     };
+    // Dark mode restates every inlined declaration whose color changes, plus
+    // every winner that overlaps one, so the generated class can replay the
+    // cascade. Computed before inlining: those properties must not carry
+    // `!important` on the element, or the class cannot override them.
+    const restated = new Set<string>();
+    if (hasDarkTheme) {
+      for (const [property, entry] of winners) {
+        if (property.startsWith("--") || !entry.value.includes("var(")) continue;
+        if (finalizeValue(entry.value, darkScope) !== finalizeValue(entry.value, variables))
+          restated.add(property);
+      }
+      // Restating a declaration with `!important` lets it beat everything it overlaps, so each
+      // restated declaration brings in the winners it overlaps, until none is added.
+      for (let grew = restated.size > 0; grew;) {
+        grew = false;
+        for (const property of winners.keys())
+          if (
+            !property.startsWith("--") &&
+            !restated.has(property) &&
+            [...restated].some((candidate) => overlaps(candidate, property))
+          ) {
+            restated.add(property);
+            grew = true;
+          }
+      }
+    }
     // Declarations are emitted in cascade order, which is what settles a
     // shorthand against a longhand it covers: `margin` and `margin-top` are
     // separate properties, so both can win, and the order they appear in is
@@ -438,25 +464,30 @@ export const applyStylesheet = (
     const emitted = [...winners]
       .filter(([property]) => !property.startsWith("--"))
       .sort(([, left], [, right]) => compareRank(left.key, right.key))
-      .map(([property, entry]): [string, string] => {
+      .map(([property, entry]): readonly [string, string, boolean] => {
         const value = finalizeValue(entry.value, variables);
         // Rank's first term is importance. The style attribute has to keep
         // `!important`: inlining the value alone lets a later important rule win.
-        return [property, entry.key[0] === 1 ? `${value}!important` : value];
+        // The whole dark-mode set stays plain, not only the color that changed.
+        // Stripping the flag from just that color would let an overlapping
+        // important longhand beat the themed shorthand in light mode.
+        const important = entry.key[0] === 1 && !restated.has(property);
+        return [property, value, important];
       });
 
     for (const [property, value] of emitted)
       checkFallback(property, value, element.origins.slice(0, 1));
 
     const physical = new Map<string, string>();
-    for (const [property, value] of emitted) {
+    for (const [property, value, important] of emitted) {
       for (const [name, lowered] of conditionalWriting
         ? [[property, value] as const]
         : physicalPadding(property, value, writing)) {
         // A later logical declaration can reclaim a physical longhand after a
-        // shorthand. Move its key as well as replacing its value.
+        // shorthand. Move its key as well as replacing its value. Importance
+        // is applied after the split, so both sides of `3px 4px` keep it.
         physical.delete(name);
-        physical.set(name, lowered);
+        physical.set(name, important ? `${lowered}!important` : lowered);
       }
     }
     const bgcolor = element.props.bgcolor;
@@ -472,27 +503,6 @@ export const applyStylesheet = (
     // cannot touch (a `border-radius` beside a `border-color`) is pinned with `!important`.
     const dark: [string, string][] = [];
     if (hasDarkTheme) {
-      const changed: string[] = [];
-      for (const [property, entry] of winners) {
-        if (property.startsWith("--") || !entry.value.includes("var(")) continue;
-        if (finalizeValue(entry.value, darkScope) !== finalizeValue(entry.value, variables))
-          changed.push(property);
-      }
-      // Restating a declaration with `!important` lets it beat everything it overlaps, so each
-      // restated declaration brings in the winners it overlaps, until none is added.
-      const restated = new Set(changed);
-      for (let grew = changed.length > 0; grew;) {
-        grew = false;
-        for (const property of winners.keys())
-          if (
-            !property.startsWith("--") &&
-            !restated.has(property) &&
-            [...restated].some((candidate) => overlaps(candidate, property))
-          ) {
-            restated.add(property);
-            grew = true;
-          }
-      }
       for (const [property, entry] of [...winners].sort(([, left], [, right]) =>
         compareRank(left.key, right.key),
       ))
