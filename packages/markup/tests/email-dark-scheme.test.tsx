@@ -55,6 +55,31 @@ describe("dark classes", () => {
     );
   });
 
+  it("lets an important hover win when a weaker hover also guards the color", () => {
+    const applied = styled(
+      `${THEME}.card{color:var(--color-primary)!important}.card:hover{color:red}.card:hover{color:green!important}`,
+      <p className="card">hi</p>,
+    );
+    const lock = /sml-lock-[a-z0-9]+/.exec(applied.html)?.[0];
+    expect(lock).toBeDefined();
+    const themeGuard = applied.headCss.indexOf(`.card.${lock}:hover{color:#111111!important}`);
+    const greenReplay = applied.headCss.lastIndexOf(`.card.${lock}:hover{color:green!important}`);
+    expect(themeGuard).toBeGreaterThanOrEqual(0);
+    expect(greenReplay).toBeGreaterThan(themeGuard);
+  });
+
+  it("does not copy an important element color onto a pseudo-element", () => {
+    const applied = styled(
+      `${THEME}.card::before{content:"*";color:red}`,
+      <p className="card" style={{ color: "var(--color-primary) !important" }}>
+        hi
+      </p>,
+    );
+    expect(applied.html).not.toContain("sml-lock-");
+    expect(applied.headCss).toContain('.card::before{content:"*"!important;color:red!important}');
+    expect(applied.headCss).not.toContain("sml-lock-");
+  });
+
   it("lets an important hover beat a less specific important themed color", () => {
     const applied = styled(
       `${THEME}.card{color:var(--color-primary)!important}.card:hover{color:red!important}`,

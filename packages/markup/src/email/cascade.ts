@@ -257,9 +257,8 @@ interface LockedDeclaration {
   readonly key: readonly number[];
 }
 
-/** Insert `className` into the subject compound, before its first pseudo. */
-const strengthenSelector = (selector: string, className: string): string | undefined => {
-  const token = `.${className}`;
+/** Index where the subject compound starts, after the last combinator. */
+const subjectSplit = (selector: string): number | undefined => {
   let depth = 0;
   let split = 0;
   for (let index = 0; index < selector.length; index++) {
@@ -270,15 +269,47 @@ const strengthenSelector = (selector: string, className: string): string | undef
       split = index + 1;
     else if (depth === 0 && character === " ") split = index + 1;
   }
+  return selector.slice(split).trim() === "" ? undefined : split;
+};
+
+/** Single-colon names that still select a pseudo-element, not a pseudo-class. */
+const LEGACY_PSEUDO_ELEMENTS = new Set(["before", "after", "first-line", "first-letter"]);
+
+/**
+ * A pseudo-element is a different box. An important color on the element does
+ * not override a color the pseudo-element sets for itself, so a lock guard must
+ * not be copied onto `::before`.
+ */
+const targetsPseudoElement = (selector: string): boolean => {
+  const split = subjectSplit(selector);
+  if (split === undefined) return false;
   const subject = selector.slice(split);
-  if (subject.trim() === "") return undefined;
-  let subjectDepth = 0;
+  let depth = 0;
+  for (let index = 0; index < subject.length; index++) {
+    const character = subject[index];
+    if (character === "(" || character === "[") depth++;
+    else if (character === ")" || character === "]") depth = Math.max(0, depth - 1);
+    else if (depth !== 0 || character !== ":") continue;
+    if (subject[index + 1] === ":") return true;
+    const name = /^:([A-Za-z-]+)/.exec(subject.slice(index))?.[1]?.toLowerCase();
+    if (name !== undefined && LEGACY_PSEUDO_ELEMENTS.has(name)) return true;
+  }
+  return false;
+};
+
+/** Insert `className` into the subject compound, before its first pseudo. */
+const strengthenSelector = (selector: string, className: string): string | undefined => {
+  const split = subjectSplit(selector);
+  if (split === undefined) return undefined;
+  const subject = selector.slice(split);
+  const token = `.${className}`;
+  let depth = 0;
   let pseudo = -1;
   for (let index = 0; index < subject.length; index++) {
     const character = subject[index];
-    if (character === "(" || character === "[") subjectDepth++;
-    else if (character === ")" || character === "]") subjectDepth = Math.max(0, subjectDepth - 1);
-    else if (subjectDepth === 0 && character === ":") {
+    if (character === "(" || character === "[") depth++;
+    else if (character === ")" || character === "]") depth = Math.max(0, depth - 1);
+    else if (depth === 0 && character === ":") {
       pseudo = index;
       break;
     }
@@ -312,15 +343,28 @@ const nestConditions = (conditions: readonly string[], body: string): string =>
  * Restate important colors that were inlined without `!important` on a copy of
  * each weaker retained selector. The copy carries one more class, so it beats
  * the retained rule, and the dark-scheme copy of it keeps the theme switch.
+ * A rule that outranks the themed color is copied again afterwards, on that
+ * same class, so the guard does not bury it. Pseudo-elements are left alone:
+ * their color is not the element's.
  */
 const renderLockGuards = (
   locks: ReadonlyMap<string, readonly LockedDeclaration[]>,
   rules: readonly CssRule[],
+  variables: Readonly<Record<string, string>>,
+  darkVariables: Readonly<Record<string, string>>,
 ): string => {
   const seen = new Set<string>();
   const blocks: string[] = [];
+  const guarded = new Set<string>();
   const darkQuery = DARK_SCHEME_MEDIA.replace(": ", ":");
+  const emit = (wrapping: readonly string[], selector: string, body: string) => {
+    const block = nestConditions(wrapping, `${selector}{${body}}`);
+    if (seen.has(block)) return;
+    seen.add(block);
+    blocks.push(block);
+  };
   for (const rule of rules) {
+    if (targetsPseudoElement(rule.selector)) continue;
     const conditions = rule.conditions.map(downlevelMediaQuery);
     for (const [className, declarations] of locks) {
       const beaten = declarations.filter((item) => threatens(item, rule));
@@ -328,16 +372,38 @@ const renderLockGuards = (
       const selector = strengthenSelector(rule.selector, className);
       if (selector === undefined) continue;
       const inDark = withinDarkScheme(conditions);
-      const emit = (wrapping: readonly string[], body: string) => {
-        const block = nestConditions(wrapping, `${selector}{${body}}`);
-        if (seen.has(block)) return;
-        seen.add(block);
-        blocks.push(block);
-      };
       const lightBody = beaten.map((item) => `${item.property}:${item.light}!important`).join(";");
       const darkBody = beaten.map((item) => `${item.property}:${item.dark}!important`).join(";");
-      if (!inDark) emit(conditions, lightBody);
-      emit(inDark ? conditions : [...conditions, darkQuery], darkBody);
+      if (!inDark) emit(conditions, selector, lightBody);
+      emit(inDark ? conditions : [...conditions, darkQuery], selector, darkBody);
+      guarded.add(className);
+    }
+  }
+  // A stronger rule, such as an important hover beside a normal one, has to
+  // stay ahead of the guard that the weaker rule produced.
+  for (const [className, declarations] of locks) {
+    if (!guarded.has(className)) continue;
+    for (const rule of rules) {
+      if (targetsPseudoElement(rule.selector)) continue;
+      const winning = rule.declarations.filter((declaration, position) =>
+        declarations.some(
+          (item) =>
+            overlaps(declaration.property, item.property) &&
+            compareRank(retainedKey(rule, declaration, position), item.key) > 0,
+        ),
+      );
+      if (winning.length === 0) continue;
+      const selector = strengthenSelector(rule.selector, className);
+      if (selector === undefined) continue;
+      const conditions = rule.conditions.map(downlevelMediaQuery);
+      const scope = withinDarkScheme(conditions) ? { ...variables, ...darkVariables } : variables;
+      const body = winning
+        .map(
+          (declaration) =>
+            `${declaration.property}:${finalizeValue(declaration.value, scope)}!important`,
+        )
+        .join(";");
+      emit(conditions, selector, body);
     }
   }
   return blocks.join("");
@@ -384,7 +450,11 @@ export const applyStylesheet = (
   }
   const locks = new Map<string, readonly LockedDeclaration[]>();
   const lockClassFor = (declarations: readonly LockedDeclaration[]): string | undefined => {
-    if (!declarations.some((item) => retained.some((rule) => threatens(item, rule))))
+    if (
+      !declarations.some((item) =>
+        retained.some((rule) => !targetsPseudoElement(rule.selector) && threatens(item, rule)),
+      )
+    )
       return undefined;
     const body = declarations
       .map((item) => `${item.property}:${item.light}=${item.dark}@${item.key.join(".")}`)
@@ -696,7 +766,7 @@ export const applyStylesheet = (
     });
   return {
     tree,
-    headCss: `${renderHeadCss(retained, sheet.headAtRules, sheet.variables, sheet.darkVariables)}${renderLockGuards(locks, retained)}`,
+    headCss: `${renderHeadCss(retained, sheet.headAtRules, sheet.variables, sheet.darkVariables)}${renderLockGuards(locks, retained, sheet.variables, sheet.darkVariables)}`,
     darkRules,
     fontFaceCss: sheet.fontFaces.map((face) => face.css).join(""),
     diagnostics,
