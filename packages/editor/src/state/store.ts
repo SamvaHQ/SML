@@ -17,7 +17,12 @@ import type {
   EditorEvent,
 } from "@samva/editor/host";
 import { isPageRender } from "@samva/editor/host";
-import { applySourceReplacements, type SourceReplacement } from "@samva/markup/edit";
+import {
+  applySourceReplacements,
+  inspectMarkdownNode,
+  type SourceElement,
+  type SourceReplacement,
+} from "@samva/markup/edit";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 import type { DeviceMode } from "../canvas/device";
@@ -35,6 +40,7 @@ import {
   resolveSelection,
   withDocumentChange,
 } from "./derive";
+import { markdownEdit } from "./markdown-edit";
 import { createEditorSpine, type EditorSpine } from "./spine";
 import { correspondingPath } from "./target-map";
 import {
@@ -203,6 +209,10 @@ const clampZoom = (zoom: CanvasZoom): CanvasZoom =>
  * is stable forever — `useEditorStore((s) => s.actions)` never re-renders.
  */
 export interface EditorActions {
+  /** Read the selected content through the host's project lifecycle. */
+  readonly inspectMarkdown: (instancePath: string) => Promise<SourceElement | null>;
+  /** Save plain text through the host; consecutive typing is debounced into one edit. */
+  readonly editMarkdownText: (instancePath: string, text: string) => void;
   readonly applySourceEdit: (input: {
     readonly revision: string;
     readonly source: string;
@@ -511,6 +521,8 @@ export const createEditorBundle = (
   let userSelectListener: ((selection: UserSelection) => void) | undefined;
   let pinsListener: ((pins: ReadonlyArray<EditorPin>) => void) | undefined;
   let pinSequence = 0;
+  let markdownTimer: ReturnType<typeof setTimeout> | undefined;
+  let markdownGeneration = 0;
 
   /**
    * An uneditable host, readonly document, active lifecycle operation, or a refresh still waiting
@@ -549,6 +561,116 @@ export const createEditorBundle = (
   };
 
   const store: EditorStore = createStore<EditorState>((set, get) => {
+    const markdownTarget = (instancePath: string) => {
+      const state = get();
+      const { doc, render, selection } = state;
+      if (
+        gated(state) ||
+        !state.editable ||
+        state.hostBusy ||
+        state.conflict ||
+        state.pendingAuthoredSource !== null ||
+        doc?.channel !== "email" ||
+        render === null ||
+        selection.kind !== "element" ||
+        selection.instancePath !== instancePath ||
+        selection.revision !== render.revision ||
+        render.revision !== doc.rev ||
+        selection.fixture !== doc.fixture ||
+        state.lifecycleCapability?.status !== "ready"
+      )
+        return null;
+      const element = render.selections.find((entry) => entry.instancePath === instancePath);
+      const origin = element?.origins.find((entry) => entry.fileName.endsWith(".md"));
+      if (element === undefined || origin === undefined) return null;
+      return {
+        doc,
+        render,
+        selection,
+        origin,
+        tag: element.tag,
+        api: state.lifecycleCapability.api,
+      };
+    };
+    const markdownCurrent = (target: NonNullable<ReturnType<typeof markdownTarget>>) => {
+      const state = get();
+      return (
+        state.doc === target.doc &&
+        state.render === target.render &&
+        state.selection === target.selection
+      );
+    };
+    const staleMarkdown = "This content changed. Select it again before editing.";
+    const saveMarkdown = (
+      target: NonNullable<ReturnType<typeof markdownTarget>>,
+      text: string,
+      generation: number,
+    ): void => {
+      markdownTimer = undefined;
+      if (generation !== markdownGeneration) return;
+      if (!markdownCurrent(target) || markdownTarget(target.selection.instancePath) === null) {
+        set({ sourceEditError: staleMarkdown });
+        return;
+      }
+      if (!actions.beginLifecycle()) return;
+      void spine
+        .flushSaves()
+        .then(() => target.api.inspect())
+        .then((project) => {
+          if (generation !== markdownGeneration) return;
+          const state = get();
+          if (
+            !markdownCurrent(target) ||
+            state.hostBusy ||
+            !state.editable ||
+            state.conflict ||
+            state.pendingAuthoredSource !== null ||
+            state.previewRefreshing ||
+            project.rev !== target.doc.rev
+          ) {
+            set({ sourceEditError: staleMarkdown });
+            return;
+          }
+          const file = project.files.find((entry) => entry.path === target.origin.fileName);
+          if (file?.content == null || file.binary === true || file.status === "deleted") {
+            set({
+              sourceEditError: "This content is unavailable. Select it again before editing.",
+            });
+            return;
+          }
+          const result = markdownEdit(
+            file.content,
+            file.path,
+            target.origin,
+            { kind: "text", text },
+            { tag: target.tag },
+          );
+          if (!result.ok) {
+            set({ sourceEditError: result.reason });
+            return;
+          }
+          if (result.edits.length === 0) return;
+          const changed = applySourceReplacements(file.content, result.edits, {
+            markdown: { file: file.path },
+          });
+          if (!changed.ok) {
+            set({ sourceEditError: "This change cannot keep the text and formatting intact." });
+            return;
+          }
+          return target.api.updateFile({
+            path: file.path,
+            baseRev: project.rev,
+            content: changed.source,
+          });
+        })
+        .catch(() => {
+          if (generation === markdownGeneration)
+            set({ sourceEditError: "Couldn't save this change. Try again." });
+        })
+        .finally(() => {
+          if (generation === markdownGeneration) actions.endLifecycle();
+        });
+    };
     const commitSource = (
       authoredSource: string,
       enqueueOptions?: { readonly coalesceKey?: string | undefined },
@@ -685,6 +807,47 @@ export const createEditorBundle = (
     };
     const initialWorkTabs = readStoredWorkTabs();
     const actions: EditorActions = {
+      inspectMarkdown: async (instancePath) => {
+        const target = markdownTarget(instancePath);
+        if (target === null) return null;
+        const generation = markdownGeneration;
+        return target.api.inspect().then(
+          (project) => {
+            if (
+              generation !== markdownGeneration ||
+              !markdownCurrent(target) ||
+              markdownTarget(instancePath) === null ||
+              project.rev !== target.doc.rev
+            )
+              return null;
+            const file = project.files.find((entry) => entry.path === target.origin.fileName);
+            return file?.content == null || file.binary === true || file.status === "deleted"
+              ? null
+              : inspectMarkdownNode(file.content, file.path, target.origin, { tag: target.tag });
+          },
+          () => {
+            if (generation === markdownGeneration)
+              set({ sourceEditError: "Couldn't read this content. Try again." });
+            return null;
+          },
+        );
+      },
+      editMarkdownText: (instancePath, text) => {
+        if (markdownTimer !== undefined) clearTimeout(markdownTimer);
+        markdownTimer = undefined;
+        const target = markdownTarget(instancePath);
+        if (target === null) {
+          set({
+            sourceEditError: "This content cannot be edited right now. Select it again to retry.",
+          });
+          return;
+        }
+        set({ sourceEditError: null });
+        // The lifecycle has no coalesce key. Only the latest text in a typing burst is saved,
+        // and the lifecycle gate serializes that save with all other project operations.
+        const generation = markdownGeneration;
+        markdownTimer = setTimeout(() => saveMarkdown(target, text, generation), 300);
+      },
       requestSourceAssistance: (originIndex) =>
         set({
           assistantOriginIndex: originIndex,
@@ -1511,7 +1674,16 @@ export const createEditorBundle = (
   return {
     host,
     store,
-    spine,
+    spine: {
+      ...spine,
+      dispose: () => {
+        markdownGeneration += 1;
+        if (markdownTimer !== undefined) clearTimeout(markdownTimer);
+        markdownTimer = undefined;
+        store.setState({ lifecycleBusy: false });
+        spine.dispose();
+      },
+    },
     setUserSelectListener: (listener) => {
       userSelectListener = listener;
     },
