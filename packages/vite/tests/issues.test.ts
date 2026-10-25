@@ -68,6 +68,21 @@ describe("Markdown issue projects", () => {
     );
   });
 
+  it("keeps issue slug conflicts separate from template identity", async () => {
+    const ordinary = layout
+      .replace('id: "newsletter-layout"', 'id: "same"')
+      .replace("<IssueContent />", "<p>Ordinary template</p>");
+    const root = await tempProject({
+      "layout.tsx": layout,
+      "templates/same.tsx": ordinary,
+      "issues/first.md": issue("same", "First"),
+      "issues/second.md": issue("same", "Second"),
+    });
+    const result = await renderTemplate({ root, template: "same", fixture: "default" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.html).toContain("Ordinary template");
+  });
+
   it("rejects duplicate slugs and reports a missing layout against the issue", async () => {
     const root = await tempProject({
       "layout.tsx": layout,

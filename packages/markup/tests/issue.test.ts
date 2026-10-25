@@ -76,6 +76,36 @@ describe("issue layout compilation", () => {
     expect(result.diagnostics.some((item) => item.code === "issue-slot")).toBe(true);
   });
 
+  it.each([
+    ["({ children }) => <Section>Discarded</Section>", "<Wrap><IssueContent /></Wrap>"],
+    ["({ children }) => <Section>{children}{children}</Section>", "<Wrap><IssueContent /></Wrap>"],
+    [
+      "({ children, show }) => <Section>{show && children}</Section>",
+      "<Wrap show={input.show}><IssueContent /></Wrap>",
+    ],
+    [
+      "({ content, items }) => <Section>{items.map((item) => <Section>{content}</Section>)}</Section>",
+      "<Wrap content={<IssueContent />} items={input.items} />",
+    ],
+  ])("validates slot count and control flow after partial expansion", async (partial, body) => {
+    const shell = layout(body).replace(
+      "export default",
+      `const Wrap = ${partial};\nexport default`,
+    );
+    const result = await compile("Hello", shell);
+    expect(result.template).toBeUndefined();
+    expect(result.diagnostics.some((item) => item.code === "issue-slot")).toBe(true);
+  });
+
+  it("allows one unconditional slot forwarded through partial children", async () => {
+    const shell = layout("<Wrap><IssueContent /></Wrap>").replace(
+      "export default",
+      "const Wrap = ({ children }) => <Section>{children}</Section>;\nexport default",
+    );
+    const result = await compile("Hello", shell);
+    expect(result.template).toBeDefined();
+  });
+
   it("refuses an unresolved slot in an ordinary template", async () => {
     const result = await compileTemplate({
       files: { "layout.tsx": layout() },
@@ -126,6 +156,58 @@ describe("Markdown source replacements", () => {
       })?.properties[0]?.value,
     ).toBe("Changed *literal* <text> {safe}");
   });
+
+  it.each(["Line one\nLine two", "    Indented", "First\n\nSecond"])(
+    "preserves a selected prose node for %j",
+    (value) => {
+      const source = issue("# Before");
+      const target = inspectMarkdownNode(source, "issues/october.md", {
+        fileName: "issues/october.md",
+        lineNumber: 7,
+        columnNumber: 1,
+      })!;
+      const edit = literalReplacement(source, target.properties[0]!, value)!;
+      const changed = applySourceReplacements(source, [edit], {
+        markdown: { file: "issues/october.md" },
+      });
+      expect(changed.ok).toBe(true);
+      if (changed.ok) {
+        const selected = inspectMarkdownNode(changed.source, "issues/october.md", {
+          fileName: "issues/october.md",
+          lineNumber: 7,
+          columnNumber: 1,
+        });
+        expect(selected?.properties[0]?.value).toBe(value);
+        expect(changed.source.split("\n").length).toBe(source.split("\n").length);
+      }
+    },
+  );
+
+  it.each(["[label](https://example.com)", "[label][ref]\n\n[ref]: https://example.com"])(
+    "keeps a link when its destination gains spaces",
+    (body) => {
+      const source = issue(body);
+      const target = inspectMarkdownNode(source, "issues/october.md", {
+        fileName: "issues/october.md",
+        lineNumber: 7,
+        columnNumber: 1,
+      })!;
+      const field = target.properties.find((property) => property.name === "href")!;
+      const edit = literalReplacement(source, field, "https://example.com/a b")!;
+      const changed = applySourceReplacements(source, [edit], {
+        markdown: { file: "issues/october.md" },
+      });
+      expect(changed.ok).toBe(true);
+      if (changed.ok)
+        expect(
+          inspectMarkdownNode(changed.source, "issues/october.md", {
+            fileName: "issues/october.md",
+            lineNumber: 7,
+            columnNumber: 1,
+          })?.properties.find((property) => property.name === "href")?.value,
+        ).toBe("https://example.com/a b");
+    },
+  );
 
   it("round-trips escaped component props and refuses injected HTML", () => {
     const source = issue('<Button href="https://example.com">Read</Button>');

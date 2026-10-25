@@ -69,8 +69,11 @@ what pins the compiler version your previews, checks, and builds use.
   plugin through compilation, preview and rendering together; dropping the plugin changes footer
   and unsubscribe behavior. Brand-resolution and editor-plugin tests enforce this boundary.
 
-- **Template entries are `.tsx`.** Discovery ignores every other extension, hidden folders and
-  `node_modules`.
+- **Template entries are `.tsx`; issue documents are `issues/*.md`.** Issues are discovered by
+  path separately from template registration and returned in `catalog.issues`. They use the
+  `issueLayout` option (default root `layout.tsx`), an email-only definition with one static
+  `IssueContent` slot. Build, render and export include issues; duplicate issue slugs fail the
+  project. Discovery ignores hidden folders and `node_modules`.
 - **Template ids and fixture keys match `TEMPLATE_NAME_PATTERN`** from `@samva/markup/compiler`,
   because both are written into export paths. Code that builds a path from them imports that
   pattern instead of restating it.

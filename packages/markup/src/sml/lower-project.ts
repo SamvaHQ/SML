@@ -26,7 +26,7 @@ import { isValueNode, type Binding } from "./bindings";
 import { channelBodies, channelLowering } from "./channels";
 import { checkBindings, checkStructure, type CheckFinding } from "./check";
 import { Findings } from "./diagnostics";
-import type { IssueContentInput } from "./issue-content";
+import { issueNodes, replaceIssueSlots, type IssueContentInput } from "./issue-content";
 import { Lowerer, type Ctx } from "./lower";
 import type { Project, ProjectModule } from "./project";
 import { applyStyles } from "./styles";
@@ -537,15 +537,38 @@ export const lowerProject = (
     else if (bodyNode !== undefined) {
       const opened = openFunction(bodyNode);
       if (opened !== undefined) {
-        const nodes = lowerer.content({ ...opened.ctx, semantic: true }, opened.body);
-        if (options.issueContent !== undefined && lowerer.issueSlots !== 1)
-          findings.add(
-            opened.ctx.module.parsed,
-            opened.body,
-            "issue-slot",
-            "An issue layout must contain exactly one unconditional IssueContent slot.",
-            "Place one <IssueContent /> inside the email body, outside loops and conditions.",
-          );
+        let nodes = lowerer.content({ ...opened.ctx, semantic: true }, opened.body);
+        if (options.issueContent !== undefined) {
+          let index = lowerer.sources.indexOf(options.issueContent.file);
+          if (index < 0) {
+            index = lowerer.sources.length;
+            lowerer.sources.push(options.issueContent.file);
+          }
+          const content = issueNodes(options.issueContent.nodes, index + 1, options.brand);
+          const resolved = replaceIssueSlots(nodes, content, (source) => {
+            const file =
+              source?.[2] === undefined
+                ? options.entry
+                : (lowerer.sources[source[2] - 1] ?? options.entry);
+            findings.report({
+              code: "issue-slot",
+              severity: "error",
+              message: "IssueContent must render unconditionally, outside loops and conditions.",
+              origins: [
+                { fileName: file, lineNumber: source?.[0] ?? 1, columnNumber: source?.[1] ?? 1 },
+              ],
+            });
+          });
+          nodes = resolved.nodes;
+          if (resolved.count !== 1)
+            findings.add(
+              opened.ctx.module.parsed,
+              opened.body,
+              "issue-slot",
+              "An issue layout must render exactly one IssueContent slot after expanding partials.",
+              "Render one <IssueContent /> outside loops and conditions; do not discard or duplicate its children.",
+            );
+        }
         const roots = lowerEmailNodes(nodes, staticPart.brandPlugin);
         if (nodes.length === 1 && roots.length === 1) {
           body = nodes[0];

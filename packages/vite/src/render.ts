@@ -84,9 +84,11 @@ const locate = async (input: RenderTemplateInput): Promise<Located> => {
       ? []
       : catalog.diagnostics.filter(
           (item) =>
-            (item.code === "duplicate-template-id" &&
+            (!entry.entryPath.endsWith(".md") &&
+              item.code === "duplicate-template-id" &&
               item.message.startsWith(`Template id ${JSON.stringify(entry.id)} `)) ||
-            (item.code === "duplicate-issue-slug" &&
+            (entry.entryPath.endsWith(".md") &&
+              item.code === "duplicate-issue-slug" &&
               item.message.startsWith(`Issue slug ${JSON.stringify(entry.id)} `)),
         );
   if (entry !== undefined && ambiguous.length === 0)

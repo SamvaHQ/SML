@@ -318,14 +318,22 @@ export const literalReplacement = (
       .replaceAll('"', "&quot;")
       .replaceAll("<", "&lt;")
       .replaceAll("{", "&#123;")
-      .replaceAll("}", "&#125;");
+      .replaceAll("}", "&#125;")
+      .replace(/[\r\n\t]/g, (character) => `&#${character.charCodeAt(0)};`);
+    const markdown = value
+      .replace(/[!-/:-@[-`{-~]/g, "\\$&")
+      .replace(
+        field.name === "href" || field.name === "src" ? /\s/g : /[\r\n\t]|^ +| +$/g,
+        (whitespace) =>
+          [...whitespace].map((character) => `&#${character.charCodeAt(0)};`).join(""),
+      );
     return {
       start: field.start,
       end: field.end,
       before: source.slice(field.start, field.end),
       after:
         field.syntax === "markdown"
-          ? value.replace(/[!-/:-@[-`{-~]/g, "\\$&")
+          ? markdown
           : field.syntax === "markdown-boolean"
             ? `${field.name}="${encoded}"`
             : `"${encoded}"`,

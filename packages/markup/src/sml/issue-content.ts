@@ -47,3 +47,43 @@ export const issueClasses = (nodes: readonly CompiledNode[]): readonly string[] 
       ...issueClasses(node.children ?? []),
     ];
   });
+
+/** Internal marker: authored intrinsic tags cannot use this compiler-owned name. */
+export const ISSUE_SLOT_TAG = "sml-issue-content";
+
+/** Resolve the final expanded layout, where partials have already used or discarded children. */
+export const replaceIssueSlots = (
+  nodes: readonly CompiledNode[],
+  content: readonly CompiledNode[],
+  report: (source: import("../compiled-template").CompiledSource | undefined) => void,
+): { readonly nodes: CompiledNode[]; readonly count: number } => {
+  let count = 0;
+  const walk = (items: readonly CompiledNode[], conditional: boolean): CompiledNode[] =>
+    items.flatMap((node): CompiledNode[] => {
+      if (isValueNode(node)) return [node];
+      if ("type" in node && node.type !== "component" && node.tag === ISSUE_SLOT_TAG) {
+        count++;
+        if (conditional) report(node.src);
+        return [...content];
+      }
+      if ("if" in node)
+        return [
+          {
+            ...node,
+            then: walk(node.then, true),
+            ...(node.else === undefined ? {} : { else: walk(node.else, true) }),
+          },
+        ];
+      if ("each" in node) return [{ ...node, children: walk(node.children, true) }];
+      return [
+        {
+          ...node,
+          ...("children" in node && node.children !== undefined
+            ? { children: walk(node.children, conditional) }
+            : {}),
+        },
+      ];
+    });
+  const expanded = walk(nodes, false);
+  return { nodes: expanded, count };
+};

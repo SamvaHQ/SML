@@ -21,7 +21,7 @@ import { child, children, keyName, text, unwrap, type Node } from "./ast";
 import { bindingValue, joinPath, type Binding, type Env } from "./bindings";
 import { runBuiltinComponent, type ChannelLowering } from "./components";
 import type { Findings } from "./diagnostics";
-import { issueNodes, type IssueContentInput } from "./issue-content";
+import { ISSUE_SLOT_TAG, type IssueContentInput } from "./issue-content";
 import type { Project, ProjectModule } from "./project";
 import { didYouMean } from "./suggest";
 import { readStatic, type StaticContext } from "./values";
@@ -49,7 +49,6 @@ export interface Ctx {
   /** Loop variable names in scope, so an inner loop does not shadow a name a binding still holds. */
   readonly loops: readonly string[];
   readonly depth: number;
-  readonly conditional?: boolean | undefined;
   /** Email bodies retain authored nodes; plain-channel checking keeps its existing element IR. */
   readonly semantic?: boolean | undefined;
   /** Inside a chunked `<Columns each>`: the width a `Column` that states none takes. */
@@ -150,7 +149,6 @@ const statementKind = (type: string): string => {
 export class Lowerer {
   readonly sources: string[] = [];
   private uniqueId = 0;
-  issueSlots = 0;
 
   private readonly reservedAttributes: ReadonlySet<string>;
 
@@ -854,7 +852,7 @@ export class Lowerer {
         const right = child(node, "right");
         if (operator === "&&" && left !== undefined && right !== undefined) {
           const test = this.predicate(ctx, left);
-          const then = this.content({ ...ctx, conditional: true }, right);
+          const then = this.content(ctx, right);
           if (test === undefined) return [];
           return [{ if: test, then, src: this.src(ctx.module, node) }];
         }
@@ -866,8 +864,8 @@ export class Lowerer {
         const alternate = child(node, "alternate");
         if (test === undefined || consequent === undefined || alternate === undefined) return [];
         const predicate = this.predicate(ctx, test);
-        const then = this.content({ ...ctx, conditional: true }, consequent);
-        const otherwise = this.content({ ...ctx, conditional: true }, alternate);
+        const then = this.content(ctx, consequent);
+        const otherwise = this.content(ctx, alternate);
         if (predicate === undefined) return [];
         const branch: CompiledIf = {
           if: predicate,
@@ -1353,13 +1351,10 @@ export class Lowerer {
       imported.specifier === "@samva/markup/email" &&
       imported.imported === "IssueContent"
     ) {
-      this.issueSlots++;
       const issue = this.options.issueContent;
       if (
         issue === undefined ||
         ctx.semantic !== true ||
-        ctx.conditional === true ||
-        ctx.loops.length > 0 ||
         attributes.length > 0 ||
         children(node, "children").some(
           (item) => item.type !== "JSXText" || (text(item, "value") ?? "").trim() !== "",
@@ -1373,11 +1368,6 @@ export class Lowerer {
           "Place one <IssueContent /> outside loops and conditions in the email layout.",
         );
         return [];
-      }
-      let index = this.sources.indexOf(issue.file);
-      if (index < 0) {
-        index = this.sources.length;
-        this.sources.push(issue.file);
       }
       const needsBrand = (nodes: readonly CompiledNode[]): boolean =>
         nodes.some(
@@ -1399,7 +1389,7 @@ export class Lowerer {
         );
         return [];
       }
-      return issueNodes(issue.nodes, index + 1, this.options.brand);
+      return [{ type: "block", tag: ISSUE_SLOT_TAG, src: this.src(ctx.module, node) }];
     }
     if (imported?.kind === "markup" || imported?.kind === "brand") {
       return runBuiltinComponent({
@@ -1571,7 +1561,6 @@ export class Lowerer {
       env: new Map(),
       stack: [...ctx.stack, id],
       loops: ctx.loops,
-      conditional: ctx.conditional,
       depth: ctx.depth + 1,
       semantic: ctx.semantic,
     };

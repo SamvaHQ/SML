@@ -300,6 +300,7 @@ Read the **latest updates**.
 `image`; `gate.leadIn` counts leading top-level content blocks before a host-owned subscription
 wall. SML preserves this metadata; the host owns SEO tags, gating, and publication. Unknown fields,
 invalid YAML, raw HTML, unknown components, expressions, spreads, and nonliteral props are errors.
+Use explicit `[label](url)` links; angle autolinks are outside this grammar.
 Numeric and boolean props use quoted values (`height="24"`, `stack="false"`); bare boolean flags
 mean true. Fenced code is literal content, including any HTML or braces inside it.
 

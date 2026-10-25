@@ -279,7 +279,8 @@ export const parseIssue = (source: string, file: string): ParseIssueResult => {
       const value = propValue(field, attr.value ?? true, offset);
       if (value === undefined) continue;
       props[attr.name] = value;
-      if (name === "BrandLogo" && attr.name === "width") attribute("img", "width", value, offset);
+      if (name === "BrandLogo" && attr.name === "width" && typeof value === "number")
+        attribute("img", "width", value, offset);
       const attrEnd = attr.position?.end.offset ?? offset + attr.name.length;
       const raw = source.slice(offset, attrEnd);
       const quote = raw.search(/["']/);
