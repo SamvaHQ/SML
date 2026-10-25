@@ -275,7 +275,14 @@ export function CanvasPane({
   const canEditPageText = useCallback(
     (pagePath: string) => {
       const { pageRender: page, render: email, editable, lifecycleCapability } = store.getState();
-      if (page === null || email === null || !editable || lifecycleCapability?.status !== "ready")
+      // A page that is behind the email on screen would map its text onto the wrong origin.
+      if (
+        page === null ||
+        email === null ||
+        page.revision !== email.revision ||
+        !editable ||
+        lifecycleCapability?.status !== "ready"
+      )
         return false;
       const emailPath = correspondingPath(page.selections, email.selections, pagePath);
       const entry = email.selections.find((item) => item.instancePath === emailPath);
@@ -286,7 +293,7 @@ export function CanvasPane({
   const onEditPageText = useCallback(
     (pagePath: string, text: string) => {
       const { pageRender: page, render: email } = store.getState();
-      if (page === null || email === null) return;
+      if (page === null || email === null || page.revision !== email.revision) return;
       const emailPath = correspondingPath(page.selections, email.selections, pagePath);
       if (emailPath === null) return;
       selectFromPage(pagePath);

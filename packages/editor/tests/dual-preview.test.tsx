@@ -251,6 +251,20 @@ describe("web frame", () => {
   });
 });
 
+describe("a web page behind the email", () => {
+  it("ignores a click on a page that is for an earlier revision", async () => {
+    const view = await mount();
+    await toWeb(view);
+    const entry = firstAuthored();
+    const page = storeOf().getState().pageRender;
+    if (page === null) throw new Error("The page did not render");
+    // An edit landed; the page for it has not arrived, so what is on screen is stale.
+    storeOf().setState({ pageRender: { ...page, revision: "an-earlier-revision" } });
+    storeOf().getState().actions.selectFromPage(entry.instancePath);
+    expect(storeOf().getState().selection.kind).not.toBe("element");
+  });
+});
+
 describe("Email differences", () => {
   it("lists a Chart row that equals the degradation diagnostic", async () => {
     const view = await mount({ chart: true });

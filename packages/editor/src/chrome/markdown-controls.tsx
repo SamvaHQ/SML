@@ -1,5 +1,5 @@
 import type { EmailElementSelection } from "@samva/markup/edit";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useEditorStore } from "../state/context";
 import { cn, focusRing } from "./ui-classes";
@@ -22,20 +22,20 @@ export function MarkdownControls({ selection }: { readonly selection: EmailEleme
   const busy = useEditorStore((state) => state.lifecycleBusy);
   const revision = useEditorStore((state) => state.render?.revision);
   const [text, setText] = useState<string | null | "loading">("loading");
+  // What the author has typed that the host has not yet shown back. While it is pending the
+  // field keeps it; once the host's text matches, or when nothing was typed, the field follows
+  // the host, so a change made elsewhere is never saved over.
+  const typed = useRef<string | null>(null);
   useEffect(() => {
     if (busy) return;
     let cancelled = false;
     void inspectMarkdown(selection.instancePath).then((element) => {
       if (cancelled) return;
       const prose = element?.properties.find((field) => field.name === "children");
-      // What is being typed is never replaced by a re-read.
-      setText((current) =>
-        current === "loading" || current === null
-          ? prose === undefined
-            ? null
-            : prose.value
-          : current,
-      );
+      const fresh = prose === undefined ? null : prose.value;
+      if (typed.current !== null && fresh !== typed.current) return;
+      typed.current = null;
+      setText(fresh);
     });
     return () => {
       cancelled = true;
@@ -59,6 +59,7 @@ export function MarkdownControls({ selection }: { readonly selection: EmailEleme
               className={cn(inputClass, "mt-1 min-h-20")}
               value={text}
               onChange={(event) => {
+                typed.current = event.target.value;
                 setText(event.target.value);
                 editMarkdownText(selection.instancePath, event.target.value);
               }}

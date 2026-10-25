@@ -229,7 +229,21 @@ describe("Markdown editing through the real editor store", () => {
     expect(editor.fileWrites).toEqual([]);
   });
 
-  it("rechecks the selection after the asynchronous project inspection", async () => {
+  it("saves a pending edit after the author selects another element", async () => {
+    const editor = await harness("First\n\nSecond");
+    act(() => editor.probe.editMarkdownText(editor.path, "First changed"));
+    const other = editor.probe.render!.selections.find(
+      (item) =>
+        item.tag === "p" &&
+        item.origins[0]?.fileName === ISSUE &&
+        item.instancePath !== editor.path,
+    )!.instancePath;
+    act(() => editor.probe.select(other));
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(1));
+    expect(editor.fileWrites[0]?.content).toBe(metadata + "First changed\n\nSecond");
+  });
+
+  it("drops a pending edit when the project moved past it", async () => {
     const editor = await harness();
     let finish!: (state: ProjectLifecycleState) => void;
     editor.inspect.mockImplementationOnce(
@@ -240,11 +254,33 @@ describe("Markdown editing through the real editor store", () => {
     );
     act(() => editor.probe.editMarkdownText(editor.path, "Changed"));
     await waitFor(() => expect(editor.inspect).toHaveBeenCalledTimes(1));
-    act(() => editor.probe.selectDocument());
-    await act(async () => finish(editor.state()));
+    await act(async () => finish({ ...editor.state(), rev: "rev_elsewhere" }));
     await waitFor(() => expect(editor.probe.lifecycleBusy).toBe(false));
     expect(editor.probe.sourceEditError).toContain("Select it again");
     expect(editor.fileWrites).toEqual([]);
+  });
+
+  it("saves the text typed while an earlier save is running", async () => {
+    const editor = await harness();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = editor.inspect.getMockImplementation()!;
+    editor.inspect.mockImplementationOnce(async () => {
+      await gate;
+      return first();
+    });
+    act(() => editor.probe.editMarkdownText(editor.path, "One"));
+    await waitFor(() => expect(editor.inspect).toHaveBeenCalledTimes(1));
+    act(() => editor.probe.editMarkdownText(editor.path, "One two"));
+    expect(editor.probe.sourceEditError).toBeNull();
+    await act(async () => release());
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(2));
+    expect(editor.fileWrites.map((write) => write.content)).toEqual([
+      metadata + "One",
+      metadata + "One two",
+    ]);
   });
 
   it("cancels pending writes when the provider unmounts", async () => {
@@ -310,5 +346,22 @@ describe("Markdown editing through the real editor store", () => {
     expect(await editor.probe.inspectMarkdown(editor.path)).toMatchObject({
       properties: [{ name: "children", value: "Welcome, friend." }],
     });
+  });
+
+  it("shows a change made elsewhere instead of the text it showed before", async () => {
+    function SelectedControls() {
+      const selection = useEditorStore((state) => state.selection);
+      const selections = useEditorStore((state) => state.render?.selections);
+      const entry =
+        selection.kind === "element"
+          ? selections?.find((item) => item.instancePath === selection.instancePath)
+          : undefined;
+      return entry === undefined ? null : <MarkdownControls selection={entry} />;
+    }
+    const editor = await harness("Hello", "editable", <SelectedControls />);
+    const field = (await editor.view.findByTestId("markdown.text")) as HTMLTextAreaElement;
+    expect(field.value).toBe("Hello");
+    await act(() => editor.publish("Hallo"));
+    await waitFor(() => expect(field.value).toBe("Hallo"));
   });
 });
