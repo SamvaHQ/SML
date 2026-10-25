@@ -235,7 +235,7 @@ export const parseIssue = (source: string, file: string): ParseIssueResult => {
     report("markdown-prop", `${spec.name} requires a static ${spec.type} value.`, offset);
     return undefined;
   };
-  const component = (node: JsxNode): CompiledNode[] => {
+  const component = (node: JsxNode, columnStack: boolean): CompiledNode[] => {
     const name = node.name;
     if (name === null || !componentName(name)) {
       report(
@@ -308,7 +308,9 @@ export const parseIssue = (source: string, file: string): ParseIssueResult => {
     for (const field of spec.props)
       if (!field.optional && !Object.hasOwn(props, field.name))
         report("markdown-prop", `<${name}> requires the ${field.name} attribute.`, start(node));
-    const kids = node.children.flatMap(walk);
+    const kids = node.children.flatMap((child) =>
+      walk(child, name === "Columns" && props.stack !== false),
+    );
     const raw = source.slice(start(node), end(node));
     // Attribute positions are tokenizer-owned, so quoted > characters cannot end the opener.
     const lastAttribute = node.attributes[node.attributes.length - 1];
@@ -318,7 +320,16 @@ export const parseIssue = (source: string, file: string): ParseIssueResult => {
     record(node, "component", name, properties, [openEnd + 1, closeStart]);
     if (kids.length > 0 && !spec.props.some((field) => field.name === "children"))
       report("markdown-prop", `<${name}> does not accept children.`, start(node));
-    return [{ type: "component", name, props, children: kids, src: src(node) }];
+    return [
+      {
+        type: "component",
+        name,
+        props,
+        children: kids,
+        ...(name === "Column" ? { emailColumn: { stack: columnStack } } : {}),
+        src: src(node),
+      },
+    ];
   };
   const intrinsic = (
     node: Nodes,
@@ -333,10 +344,11 @@ export const parseIssue = (source: string, file: string): ParseIssueResult => {
       { type, tag, children: kids, ...(attrs === undefined ? {} : { attrs }), src: src(node) },
     ];
   };
-  const walk = (node: Nodes): CompiledNode[] => {
+  const walk = (node: Nodes, columnStack = false): CompiledNode[] => {
+    const walkChild = (child: Nodes): CompiledNode[] => walk(child, columnStack);
     switch (node.type) {
       case "root":
-        return node.children.flatMap(walk);
+        return node.children.flatMap(walkChild);
       case "text":
         record(node, "text", "#text");
         if (/[\uE000\uE001]/.test(node.value))
@@ -347,27 +359,27 @@ export const parseIssue = (source: string, file: string): ParseIssueResult => {
           );
         return [node.value];
       case "paragraph":
-        return intrinsic(node, "block", "p", node.children.flatMap(walk));
+        return intrinsic(node, "block", "p", node.children.flatMap(walkChild));
       case "heading":
-        return intrinsic(node, "block", `h${node.depth}`, node.children.flatMap(walk));
+        return intrinsic(node, "block", `h${node.depth}`, node.children.flatMap(walkChild));
       case "blockquote":
-        return intrinsic(node, "block", "blockquote", node.children.flatMap(walk));
+        return intrinsic(node, "block", "blockquote", node.children.flatMap(walkChild));
       case "list":
         return intrinsic(
           node,
           "block",
           node.ordered ? "ol" : "ul",
-          node.children.flatMap(walk),
+          node.children.flatMap(walkChild),
           node.ordered && node.start !== null && node.start !== undefined && node.start !== 1
             ? { start: node.start }
             : undefined,
         );
       case "listItem":
-        return intrinsic(node, "block", "li", node.children.flatMap(walk));
+        return intrinsic(node, "block", "li", node.children.flatMap(walkChild));
       case "strong":
-        return intrinsic(node, "inline", "strong", node.children.flatMap(walk));
+        return intrinsic(node, "inline", "strong", node.children.flatMap(walkChild));
       case "emphasis":
-        return intrinsic(node, "inline", "em", node.children.flatMap(walk));
+        return intrinsic(node, "inline", "em", node.children.flatMap(walkChild));
       case "inlineCode":
         return intrinsic(node, "inline", "code", [node.value]);
       case "code":
@@ -401,7 +413,7 @@ export const parseIssue = (source: string, file: string): ParseIssueResult => {
           node,
           "inline",
           image ? "img" : "a",
-          "children" in node ? node.children.flatMap(walk) : [],
+          "children" in node ? node.children.flatMap(walkChild) : [],
           attrs,
           linkProperties(node, reference, image),
         );
@@ -410,7 +422,7 @@ export const parseIssue = (source: string, file: string): ParseIssueResult => {
         return [];
       case "mdxJsxFlowElement":
       case "mdxJsxTextElement":
-        return component(node);
+        return component(node, columnStack);
       case "mdxFlowExpression":
       case "mdxTextExpression":
         report(
