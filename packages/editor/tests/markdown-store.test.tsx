@@ -11,8 +11,11 @@ import type {
 } from "@samva/editor/host";
 import { previewEmail } from "@samva/markup/edit";
 import { compileIssue } from "@samva/markup/markdown";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { type ReactNode } from "react";
 
+import { MarkdownControls } from "../src/chrome/markdown-controls";
+import { useEditorStore } from "../src/state/context";
 import { EditorProvider } from "../src/state/provider";
 import { emitChange, mockEditor } from "./mock-host";
 import { useEditorProbe, type EditorProbe } from "./store-probe";
@@ -34,6 +37,7 @@ const unused = (): never => {
 const harness = async (
   body = "Hello",
   mode: "editable" | "readonly" | "no-lifecycle" = "editable",
+  extra: ReactNode = null,
 ) => {
   const base = await mockEditor();
   const project: Record<string, string> = { [ENTRY]: layout, [ISSUE]: metadata + body };
@@ -131,6 +135,7 @@ const harness = async (
   const view = render(
     <EditorProvider host={mode === "readonly" ? readonly : editable}>
       <Probe />
+      {extra}
     </EditorProvider>,
   );
   await waitFor(() => expect(probe.doc).not.toBeNull());
@@ -274,5 +279,36 @@ describe("Markdown editing through the real editor store", () => {
     act(() => editor.probe.editMarkdownText(editor.path, "Changed again"));
     expect(editor.inspect).not.toHaveBeenCalled();
     expect(editor.fileWrites).toEqual([]);
+  });
+
+  it("edits the selected text from the inspector without naming the file", async () => {
+    function SelectedControls() {
+      const selection = useEditorStore((state) => state.selection);
+      const selections = useEditorStore((state) => state.render?.selections);
+      const entry =
+        selection.kind === "element"
+          ? selections?.find((item) => item.instancePath === selection.instancePath)
+          : undefined;
+      return entry === undefined ? null : <MarkdownControls selection={entry} />;
+    }
+    const editor = await harness("Hello", "editable", <SelectedControls />);
+    const field = (await editor.view.findByTestId("markdown.text")) as HTMLTextAreaElement;
+    expect(field.value).toBe("Hello");
+    expect(editor.view.container.textContent).not.toContain(ISSUE);
+    fireEvent.change(field, { target: { value: "Welcome" } });
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(1));
+    expect(editor.fileWrites[0]?.content).toBe(metadata + "Welcome");
+  });
+
+  it("reads the text again after its own save is rendered", async () => {
+    const editor = await harness();
+    act(() => editor.probe.editMarkdownText(editor.path, "Welcome, friend."));
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(1));
+    await act(() => editor.publish("Welcome\\, friend\\."));
+    await waitFor(() => expect(editor.probe.render?.html).toContain("Welcome, friend."));
+    expect(editor.probe.selection.kind).toBe("element");
+    expect(await editor.probe.inspectMarkdown(editor.path)).toMatchObject({
+      properties: [{ name: "children", value: "Welcome, friend." }],
+    });
   });
 });

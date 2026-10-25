@@ -21,6 +21,7 @@ import { DesignProperties } from "./design-properties";
 import { ChevronRight } from "./editor-icons";
 import { formatOrigin } from "./email-outline";
 import { friendlyName } from "./friendly";
+import { MarkdownControls } from "./markdown-controls";
 import { GroupLabel } from "./ui";
 import { cn, focusRing } from "./ui-classes";
 
@@ -818,6 +819,11 @@ export function SourceControls({ selection }: { readonly selection: EmailElement
     (state) =>
       `${state.doc?.rev}:${state.doc?.origin.authoredSource}:${state.doc?.channel === "email" ? state.doc.fixture : ""}`,
   );
+  // Text written in a Markdown issue is edited as text; the element's TSX props and classes
+  // do not exist there.
+  if (selection.origins[0]?.fileName.endsWith(".md") === true) {
+    return <MarkdownControls key={selection.instancePath} selection={selection} />;
+  }
   return <SourceControlsSession key={identity} selection={selection} />;
 }
 
