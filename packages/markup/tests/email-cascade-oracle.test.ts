@@ -32,7 +32,8 @@ const declarations = (style: string): Record<string, string> =>
           part
             .slice(colon + 1)
             .trim()
-            .replace(/\s+/g, " "),
+            .replace(/\s+/g, " ")
+            .replace(/ !important$/i, "!important"),
         ];
       }),
   );
@@ -281,7 +282,10 @@ const trees: Readonly<Record<string, EmailNode>> = {
 
 describe("cascade agrees with an independent inliner", () => {
   beforeAll(async () => {
-    await initWasm(readFileSync(require.resolve("@css-inline/css-inline-wasm/index_bg.wasm")));
+    // wasm-bindgen warns, and still accepts the bytes, unless they travel as
+    // `{ module_or_path }`. The published types only name the bytes form.
+    const wasm = readFileSync(require.resolve("@css-inline/css-inline-wasm/index_bg.wasm"));
+    await initWasm({ module_or_path: wasm } as Parameters<typeof initWasm>[0]);
   });
 
   for (const scenario of cases) {

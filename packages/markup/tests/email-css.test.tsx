@@ -206,7 +206,18 @@ describe("cascade", () => {
         ".card{padding-inline-start:3px!important;padding:2px}",
         <td className="card" style={{ paddingLeft: "5px" }} />,
       ).html,
-    ).toContain('style="padding:2px;padding-left:3px"');
+    ).toContain('style="padding:2px;padding-left:3px!important"');
+  });
+
+  it("keeps importance on every side of a two-value logical padding", () => {
+    expect(
+      styled(
+        ".card{padding:2px!important;padding-inline:3px 4px!important}",
+        <td className="card" />,
+      ).html,
+    ).toContain(
+      'style="padding:2px!important;padding-left:3px!important;padding-right:4px!important"',
+    );
   });
 
   it("uses inherited RTL, child direction overrides, and resolved custom values", () => {
