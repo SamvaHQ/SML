@@ -330,6 +330,8 @@ preview. Frontmatter is returned separately and is not injected into layout inpu
 nodes retain their own source files. `parseIssue` returns no usable nodes when it reports an error.
 
 `inspectMarkdownNode` from `@samva/markup/edit` resolves a rendered origin to editable prose and
-literal attributes. Feed its property to `literalReplacement`, then call `applySourceReplacements`
+literal attributes. Pass `{ tag: "a" }` as its fourth argument to distinguish a link from a
+paragraph sharing its source origin; without a tag it prefers the editable element. Feed its
+property to `literalReplacement`, then call `applySourceReplacements`
 with `{ markdown: { file: "issues/october.md" } }` to validate the rewritten issue. Offsets are
 UTF-16, end-exclusive, and stale spans are refused.

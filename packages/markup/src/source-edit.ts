@@ -258,18 +258,29 @@ export const inspectSourceElement = (
   return found;
 };
 
-/** Resolve a Markdown render origin to the exact authored prose or component span. */
+/**
+ * Resolve a Markdown render origin to authored prose or component attributes. A tag distinguishes
+ * nodes sharing an origin; without one, prefer an editable authored element over its wrapper.
+ */
 export const inspectMarkdownNode = (
   source: string,
   file: string,
   origin: JsxSourceLocation,
+  options: { readonly tag?: string | undefined } = {},
 ): SourceElement | null => {
   if (file !== origin.fileName) return null;
   const issue = parseIssue(source, file);
   if (issue.diagnostics.some((item) => item.severity === "error")) return null;
-  const found = issue.sourceNodes.find(
-    (item) => item.src[0] === origin.lineNumber && item.src[1] === origin.columnNumber,
+  const candidates = issue.sourceNodes.filter(
+    (item) =>
+      item.src[0] === origin.lineNumber &&
+      item.src[1] === origin.columnNumber &&
+      item.kind !== "text",
   );
+  const found =
+    options.tag === undefined
+      ? (candidates.find((item) => item.properties.length > 0) ?? candidates[0])
+      : candidates.find((item) => item.tag === options.tag);
   if (found === undefined) return null;
   return {
     start: found.start,
