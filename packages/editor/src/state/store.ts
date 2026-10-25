@@ -40,7 +40,7 @@ import {
   resolveSelection,
   withDocumentChange,
 } from "./derive";
-import { markdownEdit, markdownNodeIndex, markdownNodeOrigin } from "./markdown-edit";
+import { markdownEdit } from "./markdown-edit";
 import { createEditorSpine, type EditorSpine } from "./spine";
 import { correspondingPath } from "./target-map";
 import {
@@ -524,6 +524,7 @@ export const createEditorBundle = (
   let markdownTimer: ReturnType<typeof setTimeout> | undefined;
   let markdownGeneration = 0;
   let markdownSaving = false;
+  let cancelMarkdownWait: (() => void) | undefined;
 
   /**
    * An uneditable host, readonly document, active lifecycle operation, or a refresh still waiting
@@ -562,15 +563,13 @@ export const createEditorBundle = (
   };
 
   const store: EditorStore = createStore<EditorState>((set, get) => {
-    type MarkdownTarget = NonNullable<ReturnType<typeof markdownTarget>>;
-    // The project is shared with the lifecycle, so a Markdown save holds `lifecycleBusy`; typing
-    // that arrives while it does is ours to queue, not a reason to refuse.
-    const markdownTarget = (instancePath: string) => {
+    // Our lifecycle gate still accepts typing; pending edits retain identities, never positions.
+    const markdownTarget = (instancePath: string, selected = false) => {
       const state = get();
       const { doc, render, selection } = state;
       if (
         host.access !== "editable" ||
-        state.doc?.access.kind === "readonly" ||
+        doc?.access.kind === "readonly" ||
         state.previewRefreshing ||
         (state.lifecycleBusy && !markdownSaving) ||
         !state.editable ||
@@ -579,170 +578,136 @@ export const createEditorBundle = (
         state.conflict ||
         state.pendingAuthoredSource !== null ||
         doc?.channel !== "email" ||
+        doc.fixture === null ||
         render === null ||
-        selection.kind !== "element" ||
-        selection.instancePath !== instancePath ||
-        selection.revision !== render.revision ||
         render.revision !== doc.rev ||
-        selection.fixture !== doc.fixture ||
+        (selected &&
+          (selection.kind !== "element" ||
+            selection.instancePath !== instancePath ||
+            selection.revision !== render.revision ||
+            selection.fixture !== doc.fixture)) ||
         state.lifecycleCapability?.status !== "ready"
       )
         return null;
       const element = render.selections.find((entry) => entry.instancePath === instancePath);
       const origin = element?.origins.find((entry) => entry.fileName.endsWith(".md"));
-      if (element === undefined || origin === undefined) return null;
-      return {
-        doc,
-        render,
-        selection,
-        origin,
-        tag: element.tag,
-        api: state.lifecycleCapability.api,
-      };
-    };
-    const markdownCurrent = (target: MarkdownTarget) => {
-      const state = get();
-      return (
-        state.doc === target.doc &&
-        state.render === target.render &&
-        state.selection === target.selection
-      );
+      return element === undefined || origin === undefined
+        ? null
+        : {
+            doc,
+            render,
+            fixture: doc.fixture,
+            origin,
+            tag: element.tag,
+            api: state.lifecycleCapability.api,
+          };
     };
     const staleMarkdown = "This content changed. Select it again before editing.";
-    const originKey = (origin: MarkdownTarget["origin"], tag: string) =>
-      `${origin.fileName}:${origin.lineNumber}:${origin.columnNumber}:${tag}`;
-    // The latest text per element, taken against the revision the author was looking at. A
-    // pending edit belongs to that element and revision, not to whatever is selected when its
-    // save starts, so moving on to another paragraph never drops it.
     const pendingMarkdown = new Map<
       string,
       {
-        readonly origin: MarkdownTarget["origin"];
+        readonly file: string;
         readonly tag: string;
-        readonly api: MarkdownTarget["api"];
-        readonly baseRev: string;
+        readonly fixture: string;
+        readonly revision: string;
         readonly text: string;
-        readonly generation: number;
       }
     >();
+    const failMarkdown = (reason: string): void => {
+      pendingMarkdown.clear();
+      set({ sourceEditError: reason });
+    };
+    const waitForMarkdownRender = (revision: string, fixture: string): Promise<boolean> =>
+      new Promise((resolve) => {
+        const matches = () => {
+          const { doc, render } = get();
+          return doc?.rev === revision && doc.fixture === fixture && render?.revision === revision;
+        };
+        const finish = (ready: boolean) => {
+          clearTimeout(timer);
+          unsubscribe();
+          cancelMarkdownWait = undefined;
+          resolve(ready);
+        };
+        const timer = setTimeout(() => finish(false), 2000);
+        const unsubscribe = store.subscribe(() => {
+          if (matches()) finish(true);
+        });
+        cancelMarkdownWait = () => finish(false);
+        if (matches()) finish(true);
+      });
     const drainMarkdown = (): void => {
-      if (markdownSaving) return;
+      if (markdownSaving || markdownTimer !== undefined) return;
       const next = pendingMarkdown.entries().next();
       if (next.done === true) return;
-      const [key, item] = next.value;
-      pendingMarkdown.delete(key);
-      if (item.generation !== markdownGeneration) {
-        drainMarkdown();
-        return;
-      }
-      const state = get();
+      const [instancePath, item] = next.value;
+      pendingMarkdown.delete(instancePath);
+      const target = markdownTarget(instancePath);
       if (
-        host.access !== "editable" ||
-        !state.editable ||
-        !state.sourceEditable ||
-        state.hostBusy ||
-        state.conflict ||
-        state.pendingAuthoredSource !== null ||
-        state.previewRefreshing ||
-        state.doc === null ||
+        target === null ||
+        target.doc.rev !== item.revision ||
+        target.fixture !== item.fixture ||
+        target.tag !== item.tag ||
+        target.origin.fileName !== item.file ||
         !actions.beginLifecycle()
-      ) {
-        set({ sourceEditError: staleMarkdown });
-        drainMarkdown();
-        return;
-      }
+      )
+        return failMarkdown(staleMarkdown);
       markdownSaving = true;
+      const generation = markdownGeneration;
       void spine
         .flushSaves()
-        .then(() => item.api.inspect())
-        .then((project) => {
-          if (item.generation !== markdownGeneration) return;
-          const current = get();
+        .then(async () => {
+          if (generation !== markdownGeneration) return;
+          const project = await target.api.inspect();
+          if (generation !== markdownGeneration) return;
           if (
-            current.conflict ||
-            current.pendingAuthoredSource !== null ||
-            current.previewRefreshing ||
-            project.rev !== item.baseRev
-          ) {
-            set({ sourceEditError: staleMarkdown });
-            return;
-          }
-          const file = project.files.find((entry) => entry.path === item.origin.fileName);
-          if (file?.content == null || file.binary === true || file.status === "deleted") {
-            set({
-              sourceEditError: "This content is unavailable. Select it again before editing.",
-            });
-            return;
-          }
+            markdownTarget(instancePath) === null ||
+            get().render !== target.render ||
+            get().doc?.fixture !== item.fixture ||
+            project.rev !== item.revision
+          )
+            return failMarkdown(staleMarkdown);
+          const file = project.files.find((entry) => entry.path === item.file);
+          if (file?.content == null || file.binary === true || file.status === "deleted")
+            return failMarkdown("This content is unavailable. Select it again before editing.");
           const result = markdownEdit(
             file.content,
             file.path,
-            item.origin,
+            target.origin,
             { kind: "text", text: item.text },
             { tag: item.tag },
           );
-          if (!result.ok) {
-            set({ sourceEditError: result.reason });
-            return;
-          }
+          if (!result.ok) return failMarkdown(result.reason);
           if (result.edits.length === 0) return;
           const changed = applySourceReplacements(file.content, result.edits, {
             markdown: { file: file.path },
           });
-          if (!changed.ok) {
-            set({ sourceEditError: "This change cannot keep the text and formatting intact." });
-            return;
+          if (!changed.ok)
+            return failMarkdown("This change cannot keep the text and formatting intact.");
+          const written = await target.api.updateFile({
+            path: file.path,
+            baseRev: project.rev,
+            content: changed.source,
+          });
+          if (generation !== markdownGeneration) return;
+          const ready = await waitForMarkdownRender(written.rev, item.fixture);
+          if (generation !== markdownGeneration) return;
+          if (!ready) return failMarkdown("Couldn't save this change. Try again.");
+          // Only the exact acknowledged render advances edits taken against this write's base.
+          // Each subsequent save resolves its instance again and reads the fresh project file.
+          for (const [path, pending] of pendingMarkdown) {
+            if (pending.revision === project.rev)
+              pendingMarkdown.set(path, { ...pending, revision: written.rev });
           }
-          // Edits queued for other elements were taken against this revision. This write moves
-          // the project on, and a longer or shorter text moves the columns after it on its line,
-          // so each is found again by its place among the file's nodes and re-based on the
-          // revision this write produces.
-          const waiting = [...pendingMarkdown].flatMap(([queuedKey, queued]) =>
-            queued.baseRev === project.rev
-              ? [
-                  {
-                    queuedKey,
-                    queued,
-                    index:
-                      queued.origin.fileName === file.path
-                        ? markdownNodeIndex(file.content!, file.path, queued.origin, queued.tag)
-                        : null,
-                  },
-                ]
-              : [],
-          );
-          return item.api
-            .updateFile({ path: file.path, baseRev: project.rev, content: changed.source })
-            .then((written) => {
-              for (const { queuedKey, queued, index } of waiting) {
-                // Typing that arrived during the write may have replaced the entry already.
-                if (pendingMarkdown.get(queuedKey) !== queued) continue;
-                pendingMarkdown.delete(queuedKey);
-                const origin =
-                  index === null
-                    ? queued.origin
-                    : index < 0
-                      ? null
-                      : markdownNodeOrigin(changed.source, file.path, index);
-                if (origin === null) {
-                  set({ sourceEditError: staleMarkdown });
-                  continue;
-                }
-                pendingMarkdown.set(originKey(origin, queued.tag), {
-                  ...queued,
-                  origin,
-                  baseRev: written.rev,
-                });
-              }
-            });
         })
         .catch(() => {
-          if (item.generation === markdownGeneration)
-            set({ sourceEditError: "Couldn't save this change. Try again." });
+          if (generation === markdownGeneration)
+            failMarkdown("Couldn't save this change. Try again.");
         })
         .finally(() => {
+          if (generation !== markdownGeneration) return;
           markdownSaving = false;
-          if (item.generation === markdownGeneration) actions.endLifecycle();
+          actions.endLifecycle();
           drainMarkdown();
         });
     };
@@ -883,15 +848,15 @@ export const createEditorBundle = (
     const initialWorkTabs = readStoredWorkTabs();
     const actions: EditorActions = {
       inspectMarkdown: async (instancePath) => {
-        const target = markdownTarget(instancePath);
+        const target = markdownTarget(instancePath, true);
         if (target === null) return null;
         const generation = markdownGeneration;
         return target.api.inspect().then(
           (project) => {
             if (
               generation !== markdownGeneration ||
-              !markdownCurrent(target) ||
-              markdownTarget(instancePath) === null ||
+              get().render !== target.render ||
+              markdownTarget(instancePath, true) === null ||
               project.rev !== target.doc.rev
             )
               return null;
@@ -908,7 +873,7 @@ export const createEditorBundle = (
         );
       },
       editMarkdownText: (instancePath, text) => {
-        const target = markdownTarget(instancePath);
+        const target = markdownTarget(instancePath, true);
         if (target === null) {
           set({
             sourceEditError: "This content cannot be edited right now. Select it again to retry.",
@@ -918,13 +883,12 @@ export const createEditorBundle = (
         set({ sourceEditError: null });
         // The lifecycle has no coalesce key. Only the latest text in a typing burst is saved,
         // and a save that is already running is followed by the latest text typed meanwhile.
-        pendingMarkdown.set(originKey(target.origin, target.tag), {
-          origin: target.origin,
+        pendingMarkdown.set(instancePath, {
+          file: target.origin.fileName,
           tag: target.tag,
-          api: target.api,
-          baseRev: target.doc.rev,
+          fixture: target.fixture,
+          revision: target.doc.rev,
           text,
-          generation: markdownGeneration,
         });
         if (markdownTimer !== undefined) clearTimeout(markdownTimer);
         markdownTimer = setTimeout(() => {
@@ -1769,6 +1733,7 @@ export const createEditorBundle = (
       ...spine,
       dispose: () => {
         markdownGeneration += 1;
+        cancelMarkdownWait?.();
         if (markdownTimer !== undefined) clearTimeout(markdownTimer);
         markdownTimer = undefined;
         store.setState({ lifecycleBusy: false });

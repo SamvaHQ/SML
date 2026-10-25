@@ -59,34 +59,3 @@ export const markdownEdit = (
     return { ok: false, reason: refusal };
   return { ok: true, edits: edit.before === edit.after ? [] : [edit] };
 };
-
-/**
- * Where an element sits among the issue's source nodes, so it can be found again after an edit
- * elsewhere in the file moved its line or column. A text edit keeps the nodes' structure (the
- * edit refuses otherwise), so the index names the same element in the edited file.
- */
-export const markdownNodeIndex = (
-  source: string,
-  file: string,
-  origin: JsxSourceLocation,
-  tag: string,
-): number =>
-  parseIssue(source, file).sourceNodes.findIndex(
-    (node) =>
-      node.kind !== "text" &&
-      node.tag === tag &&
-      node.src[0] === origin.lineNumber &&
-      node.src[1] === origin.columnNumber,
-  );
-
-/** The origin of the source node at `index`, or null when the file has no such node. */
-export const markdownNodeOrigin = (
-  source: string,
-  file: string,
-  index: number,
-): JsxSourceLocation | null => {
-  const node = parseIssue(source, file).sourceNodes[index];
-  return node === undefined
-    ? null
-    : { fileName: file, lineNumber: node.src[0], columnNumber: node.src[1] };
-};

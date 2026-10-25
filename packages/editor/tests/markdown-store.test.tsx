@@ -15,8 +15,9 @@ import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react
 import { type ReactNode } from "react";
 
 import { MarkdownControls } from "../src/chrome/markdown-controls";
-import { useEditorStore } from "../src/state/context";
+import { useEditorStore, useEditorStoreApi } from "../src/state/context";
 import { EditorProvider } from "../src/state/provider";
+import type { EditorState } from "../src/state/store";
 import { emitChange, mockEditor } from "./mock-host";
 import { useEditorProbe, type EditorProbe } from "./store-probe";
 
@@ -60,6 +61,7 @@ const harness = async (
     };
   };
   let preview = await buildRender();
+  let version = 1;
   let revision = "rev_1";
   const state = (): ProjectLifecycleState => ({
     rev: revision,
@@ -71,14 +73,15 @@ const harness = async (
     commits: [],
   });
   const inspect = vi.fn(async () => state());
+  const updateFile = vi.fn<AsyncLifecycleApi["updateFile"]>(async (input) => {
+    fileWrites.push(input);
+    if (input.content !== null) project[input.path] = input.content;
+    revision = `rev_${++version}`;
+    return state();
+  });
   const api: AsyncLifecycleApi = {
     inspect,
-    updateFile: async (input) => {
-      fileWrites.push(input);
-      if (input.content !== null) project[input.path] = input.content;
-      revision = "rev_2";
-      return state();
-    },
+    updateFile,
     publish: unused,
     restore: unused,
     resolveConflict: unused,
@@ -97,7 +100,7 @@ const harness = async (
           (change) =>
             onChange(
               change.channel === "email"
-                ? { ...change, render: { ...preview, revision: change.rev } }
+                ? { ...change, rev: revision, render: { ...preview, revision } }
                 : change,
             ),
           onError,
@@ -130,8 +133,10 @@ const harness = async (
     },
   };
   let probe: EditorProbe;
+  let store!: ReturnType<typeof useEditorStoreApi>;
   function Probe() {
     probe = useEditorProbe();
+    store = useEditorStoreApi();
     return null;
   }
   const view = render(
@@ -152,12 +157,16 @@ const harness = async (
     path,
     fileWrites,
     inspect,
+    updateFile,
     state,
+    store,
     view,
     publish: async (nextBody?: string) => {
-      if (nextBody !== undefined) project[ISSUE] = metadata + nextBody;
+      if (nextBody !== undefined) {
+        project[ISSUE] = metadata + nextBody;
+        revision = `rev_${++version}`;
+      }
       preview = await buildRender();
-      revision = "rev_2";
       await emitChange(base, { origin: "external", authoredSource: layout });
     },
   };
@@ -262,24 +271,32 @@ describe("Markdown editing through the real editor store", () => {
     expect(editor.fileWrites).toEqual([]);
   });
 
-  it("saves the text typed while an earlier save is running", async () => {
+  it("saves text typed while updateFile is pending before the fresh render arrives", async () => {
     const editor = await harness();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const first = editor.inspect.getMockImplementation()!;
-    editor.inspect.mockImplementationOnce(async () => {
+    const write = editor.updateFile.getMockImplementation()!;
+    editor.updateFile.mockImplementationOnce(async (input) => {
       await gate;
-      return first();
+      return write(input);
     });
     act(() => editor.probe.editMarkdownText(editor.path, "One"));
-    await waitFor(() => expect(editor.inspect).toHaveBeenCalledTimes(1));
-    act(() => editor.probe.editMarkdownText(editor.path, "One two"));
+    await waitFor(() => expect(editor.updateFile).toHaveBeenCalledTimes(1));
+    expect(editor.probe.render?.revision).toBe("rev_1");
+    expect(editor.fileWrites).toEqual([]);
+    act(() => {
+      editor.probe.editMarkdownText(editor.path, "One t");
+      editor.probe.editMarkdownText(editor.path, "One two");
+    });
     expect(editor.probe.sourceEditError).toBeNull();
     await act(async () => release());
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(1));
+    await act(() => editor.publish());
     await waitFor(() => expect(editor.fileWrites).toHaveLength(2));
-    expect(editor.fileWrites.map((write) => write.content)).toEqual([
+    await act(() => editor.publish());
+    expect(editor.fileWrites.map((input) => input.content)).toEqual([
       metadata + "One",
       metadata + "One two",
     ]);
@@ -319,6 +336,30 @@ describe("Markdown editing through the real editor store", () => {
     expect(editor.fileWrites).toEqual([]);
   });
 
+  it.each([
+    ["a conflict", { conflict: true }],
+    ["unsaved source", { pendingAuthoredSource: layout }],
+    ["a preview refresh", { previewRefreshing: true }],
+    ["read-only source", { sourceEditable: false }],
+    ["an unavailable lifecycle", { lifecycleCapability: undefined }],
+  ] satisfies ReadonlyArray<readonly [string, Partial<EditorState>]>)(
+    "refuses typing and queued saves after %s takes over",
+    async (_, blocked) => {
+      const editor = await harness();
+      act(() => {
+        editor.probe.editMarkdownText(editor.path, "Queued");
+        editor.store.setState(blocked);
+      });
+      expect(await editor.probe.inspectMarkdown(editor.path)).toBeNull();
+      act(() => editor.probe.editMarkdownText(editor.path, "Later"));
+      expect(editor.probe.sourceEditError).not.toBeNull();
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      expect(editor.updateFile).not.toHaveBeenCalled();
+      expect(editor.inspect).not.toHaveBeenCalled();
+      expect(editor.probe.lifecycleBusy).toBe(false);
+    },
+  );
+
   it("edits the selected text from the inspector without naming the file", async () => {
     function SelectedControls() {
       const selection = useEditorStore((state) => state.selection);
@@ -342,7 +383,7 @@ describe("Markdown editing through the real editor store", () => {
     const editor = await harness();
     act(() => editor.probe.editMarkdownText(editor.path, "Welcome, friend."));
     await waitFor(() => expect(editor.fileWrites).toHaveLength(1));
-    await act(() => editor.publish("Welcome\\, friend\\."));
+    await act(() => editor.publish());
     await waitFor(() => expect(editor.probe.render?.html).toContain("Welcome, friend."));
     expect(editor.probe.selection.kind).toBe("element");
     expect(await editor.probe.inspectMarkdown(editor.path)).toMatchObject({
@@ -367,22 +408,159 @@ describe("Markdown editing through the real editor store", () => {
     await waitFor(() => expect(field.value).toBe("Hallo"));
   });
 
-  it("re-bases queued edits on elements that share a line with an earlier edit", async () => {
-    const editor = await harness("Start **one** and *two*");
+  it("resolves three pending elements from fresh source without overwriting shifted neighbors", async () => {
+    const editor = await harness("Start **one** and *two* and *three*");
     const find = (tag: string) =>
-      editor.probe.render!.selections.find(
-        (item) => item.tag === tag && item.origins[0]?.fileName === ISSUE,
-      )!.instancePath;
-    const strong = find("strong");
-    const emphasis = find("em");
+      editor.probe
+        .render!.selections.filter(
+          (item) => item.tag === tag && item.origins[0]?.fileName === ISSUE,
+        )
+        .map((item) => item.instancePath);
+    const strong = find("strong")[0]!;
+    const [second, third] = find("em");
+    expect(second).toBeDefined();
+    expect(third).toBeDefined();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const write = editor.updateFile.getMockImplementation()!;
+    editor.updateFile.mockImplementationOnce(async (input) => {
+      await gate;
+      return write(input);
+    });
     act(() => editor.probe.select(strong));
-    act(() => editor.probe.editMarkdownText(strong, "one more words"));
-    act(() => editor.probe.select(emphasis));
-    act(() => editor.probe.editMarkdownText(emphasis, "two again"));
-    await waitFor(() => expect(editor.fileWrites).toHaveLength(2), { timeout: 3000 });
-    expect(editor.fileWrites[1]?.content).toBe(
-      metadata + "Start **one more words** and *two again*",
+    act(() => editor.probe.editMarkdownText(strong, "one0123456789"));
+    await waitFor(() => expect(editor.updateFile).toHaveBeenCalledTimes(1));
+    act(() => editor.probe.select(second!));
+    act(() => editor.probe.editMarkdownText(second!, "two again"));
+    act(() => editor.probe.select(third!));
+    act(() => editor.probe.editMarkdownText(third!, "three again"));
+    expect(editor.updateFile).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(1));
+    expect(editor.probe.lifecycleBusy).toBe(true);
+    await act(() => editor.publish());
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(2));
+    await act(() => editor.publish());
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(3));
+    await act(() => editor.publish());
+    expect(editor.fileWrites.map((input) => input.baseRev)).toEqual(["rev_1", "rev_2", "rev_3"]);
+    expect(editor.fileWrites[2]?.content).toBe(
+      metadata + "Start **one0123456789** and *two again* and *three again*",
     );
     expect(editor.probe.sourceEditError).toBeNull();
+  });
+
+  it("preserves pending text when selection changes during a save", async () => {
+    const editor = await harness("First\n\nSecond");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const write = editor.updateFile.getMockImplementation()!;
+    editor.updateFile.mockImplementationOnce(async (input) => {
+      await gate;
+      return write(input);
+    });
+    act(() => editor.probe.editMarkdownText(editor.path, "First changed"));
+    await waitFor(() => expect(editor.updateFile).toHaveBeenCalledTimes(1));
+    act(() => editor.probe.editMarkdownText(editor.path, "First changed again"));
+    const other = editor.probe.render!.selections.find(
+      (item) =>
+        item.tag === "p" &&
+        item.origins[0]?.fileName === ISSUE &&
+        item.instancePath !== editor.path,
+    )!.instancePath;
+    act(() => editor.probe.select(other));
+    await act(async () => release());
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(1));
+    await act(() => editor.publish());
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(2));
+    expect(editor.fileWrites[1]?.content).toBe(metadata + "First changed again\n\nSecond");
+    await act(() => editor.publish());
+    expect(editor.probe.sourceEditError).toBeNull();
+  });
+
+  it("drops further pending edits after a save rejects and releases the gate", async () => {
+    const editor = await harness();
+    let reject!: (reason: Error) => void;
+    editor.updateFile.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    act(() => editor.probe.editMarkdownText(editor.path, "One"));
+    await waitFor(() => expect(editor.updateFile).toHaveBeenCalledTimes(1));
+    act(() => editor.probe.editMarkdownText(editor.path, "One two"));
+    await act(async () => reject(new Error("Private host failure in /issues/news.md")));
+    await waitFor(() => expect(editor.probe.lifecycleBusy).toBe(false));
+    expect(editor.probe.sourceEditError).toBe("Couldn't save this change. Try again.");
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(editor.fileWrites).toEqual([]);
+    expect(editor.updateFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops an element removed by a concurrent writer without writing", async () => {
+    const editor = await harness("First\n\nSecond");
+    const second = editor.probe.render!.selections.find(
+      (item) =>
+        item.tag === "p" &&
+        item.origins[0]?.fileName === ISSUE &&
+        item.instancePath !== editor.path,
+    )!.instancePath;
+    act(() => {
+      editor.probe.select(second);
+      editor.probe.editMarkdownText(second, "Second changed");
+    });
+    await act(() => editor.publish("First"));
+    await waitFor(() => expect(editor.probe.sourceEditError).toContain("Select it again"));
+    expect(editor.updateFile).not.toHaveBeenCalled();
+    expect(editor.fileWrites).toEqual([]);
+  });
+
+  it("refuses selection and Markdown edits from a stale page", async () => {
+    const editor = await harness();
+    const stale = editor.probe.render!;
+    await act(() => editor.publish("New content"));
+    act(() => {
+      editor.probe.select(null);
+      editor.store.setState({ pageRender: { ...stale, kind: "page" } });
+      editor.probe.selectFromPage(editor.path);
+    });
+    expect(editor.probe.selection.kind).toBe("document");
+    act(() => editor.probe.editMarkdownText(editor.path, "Old page text"));
+    expect(editor.probe.sourceEditError).not.toBeNull();
+    expect(editor.updateFile).not.toHaveBeenCalled();
+  });
+
+  it("drops pending edits if the host never returns the saved render", async () => {
+    const editor = await harness();
+    act(() => editor.probe.editMarkdownText(editor.path, "One"));
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(1));
+    act(() => editor.probe.editMarkdownText(editor.path, "One two"));
+    await waitFor(() => expect(editor.probe.lifecycleBusy).toBe(false), { timeout: 3000 });
+    expect(editor.probe.sourceEditError).toBe("Couldn't save this change. Try again.");
+    await act(() => editor.publish());
+    expect(editor.fileWrites).toHaveLength(1);
+    expect(editor.inspect).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels an in-flight read when the provider unmounts", async () => {
+    const editor = await harness();
+    let finish!: (state: ProjectLifecycleState) => void;
+    editor.inspect.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    act(() => editor.probe.editMarkdownText(editor.path, "Changed"));
+    await waitFor(() => expect(editor.inspect).toHaveBeenCalledTimes(1));
+    editor.view.unmount();
+    await act(async () => finish(editor.state()));
+    expect(editor.fileWrites).toEqual([]);
+    expect(editor.store.getState().lifecycleBusy).toBe(false);
   });
 });
