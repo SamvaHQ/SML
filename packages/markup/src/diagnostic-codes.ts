@@ -18,6 +18,34 @@ const codes = <const Table extends Record<string, DiagnosticCodeSpec>>(table: Ta
   table;
 
 export const DIAGNOSTIC_CODES = codes({
+  "issue-layout": {
+    summary: "A newsletter issue layout does not declare only an email channel.",
+    fix: "Use an email-only defineTemplate layout with one IssueContent slot.",
+  },
+  "issue-slot": {
+    summary: "An issue layout does not contain exactly one unconditional content slot.",
+    fix: "Import IssueContent from @samva/markup/email and place one <IssueContent /> outside loops and conditions.",
+  },
+  "markdown-syntax": {
+    summary: "An issue contains syntax outside SML Markdown.",
+    fix: "Write Markdown prose and supported SML component tags.",
+  },
+  "markdown-expression": {
+    summary: "An issue contains an expression or spread, which is never evaluated.",
+    fix: "Replace expressions with literal prose or quoted static component attributes.",
+  },
+  "markdown-html": {
+    summary: "An issue contains raw HTML rather than a supported SML component.",
+    fix: "Use Markdown syntax or a component from the closed SML component set.",
+  },
+  "markdown-frontmatter": {
+    summary: "Issue frontmatter is missing or does not match the typed contract.",
+    fix: "Provide title, slug and topic strings; use only the documented preheader, seo and gate fields.",
+  },
+  "markdown-prop": {
+    summary: "A Markdown component has an unknown, missing or invalid literal prop.",
+    fix: "Use the component's documented props with quoted static values or bare boolean flags.",
+  },
   // Definition
   "no-template": {
     summary: "The entry does not default-export a template.",

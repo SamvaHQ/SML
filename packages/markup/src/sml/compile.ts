@@ -3,6 +3,7 @@ import { EmailCompileError } from "../email/diagnostics";
 import { samvaBrandPlugin } from "../email/samva-brand-plugin";
 import { transformProject, type TransformOptions } from "../email/transform";
 import { Findings } from "./diagnostics";
+import { issueClasses, type IssueContentInput } from "./issue-content";
 import { completed, lowerProject, type CompileResult } from "./lower-project";
 import { loadProject } from "./project";
 
@@ -11,6 +12,8 @@ import { loadProject } from "./project";
 // run, so a template means the same thing everywhere it is read.
 
 export interface CompileTemplateOptions extends TransformOptions {
+  /** Parsed issue content for exactly one static IssueContent slot in an email layout. */
+  readonly issueContent?: IssueContentInput | undefined;
   /** The project's files by path. Binary files are addressed as assets. */
   readonly files: Readonly<Record<string, string | Uint8Array>>;
   /** The entry: a `.tsx` file that default-exports `defineTemplate({ ... })`. */
@@ -36,7 +39,21 @@ export const compileTemplate = async (options: CompileTemplateOptions): Promise<
   let transformed: Awaited<ReturnType<typeof transformProject>>;
   // oxlint-disable-next-line samva/no-try-catch-or-throw -- The project transform refuses a theme or brand it cannot resolve with a typed error; its findings become this compile's.
   try {
-    transformed = await transformProject(options.files, options);
+    transformed = await transformProject(
+      options.files,
+      options.issueContent === undefined || options.tailwind === false
+        ? options
+        : {
+            ...options,
+            tailwind: {
+              ...options.tailwind,
+              safelist: [
+                ...(options.tailwind?.safelist ?? []),
+                ...issueClasses(options.issueContent.nodes),
+              ],
+            },
+          },
+    );
   } catch (error) {
     if (!(error instanceof EmailCompileError)) throw error; // oxlint-disable-line samva/no-try-catch-or-throw -- Not a statement about the project.
     findings.items.push(...error.diagnostics);

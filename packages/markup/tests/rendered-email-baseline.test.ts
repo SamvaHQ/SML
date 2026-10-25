@@ -36,7 +36,11 @@ describe("rendered email baseline", () => {
     expect(manifest.components.toSorted()).toEqual(
       [
         ...Object.entries(emailComponents)
-          .filter(([name, value]) => /^[A-Z]/.test(name) && typeof value === "function")
+          // IssueContent is a compile-time directive; it has no standalone rendered output.
+          .filter(
+            ([name, value]) =>
+              name !== "IssueContent" && /^[A-Z]/.test(name) && typeof value === "function",
+          )
           .map(([name]) => name),
         ...Object.keys(brandComponents({ slug: "bare", css: "" })),
       ].sort(),

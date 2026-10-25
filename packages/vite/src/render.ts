@@ -65,13 +65,13 @@ type Located =
 
 /** Compile just enough of the project to find and build the named template. */
 const locate = async (input: RenderTemplateInput): Promise<Located> => {
-  const byPath = input.template.endsWith(".tsx");
+  const byPath = /\.(tsx|md)$/.test(input.template);
   const project = await loadProject(
     input,
     byPath ? [input.template.replace(/^\.\//, "")] : undefined,
   );
   const { catalog } = project;
-  const entry = catalog.templates.find((candidate) =>
+  const entry = [...catalog.templates, ...catalog.issues].find((candidate) =>
     byPath
       ? candidate.entryPath === input.template.replace(/^\.\//, "")
       : candidate.id === input.template,
@@ -84,8 +84,10 @@ const locate = async (input: RenderTemplateInput): Promise<Located> => {
       ? []
       : catalog.diagnostics.filter(
           (item) =>
-            item.code === "duplicate-template-id" &&
-            item.message.startsWith(`Template id ${JSON.stringify(entry.id)} `),
+            (item.code === "duplicate-template-id" &&
+              item.message.startsWith(`Template id ${JSON.stringify(entry.id)} `)) ||
+            (item.code === "duplicate-issue-slug" &&
+              item.message.startsWith(`Issue slug ${JSON.stringify(entry.id)} `)),
         );
   if (entry !== undefined && ambiguous.length === 0)
     return { ok: true, entry, diagnostics: [...brand, ...entry.diagnostics] };

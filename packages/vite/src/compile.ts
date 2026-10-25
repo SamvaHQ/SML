@@ -2,6 +2,7 @@ import type { AssetEntry, BrandPlugin } from "@samva/markup/brand";
 import { checkCompatibility } from "@samva/markup/compatibility";
 import { compileTemplate } from "@samva/markup/compiler";
 import type { EmailDiagnostic } from "@samva/markup/diagnostics";
+import { compileIssue, type IssueFrontmatter } from "@samva/markup/markdown";
 import type { CompiledTemplate, RenderedEmail, RenderedWhatsApp } from "@samva/markup/render";
 import { render } from "@samva/markup/render";
 
@@ -44,6 +45,11 @@ export interface CompiledEntry {
   readonly brandPlugin?: BrandPlugin | undefined;
 }
 
+/** A path-discovered newsletter issue, compiled inside its TSX layout. */
+export interface CompiledIssue extends CompiledEntry {
+  readonly frontmatter: IssueFrontmatter;
+}
+
 /** An entry that is a template but did not compile. */
 export interface FailedEntry {
   readonly entryPath: string;
@@ -53,6 +59,8 @@ export interface FailedEntry {
 export interface CompiledProject {
   /** Sorted by id. */
   readonly templates: readonly CompiledEntry[];
+  /** Path-discovered issues; they are not registered template entries. */
+  readonly issues: readonly CompiledIssue[];
   /** Entries that declare a template and did not compile, sorted by path. */
   readonly failures: readonly FailedEntry[];
   /** Candidate entries that declare no template: ordinary modules, partials and components. */
@@ -67,6 +75,8 @@ export interface CompileProjectInput {
   readonly files: ProjectFiles;
   /** Candidate entries, project-relative. */
   readonly entries: readonly string[];
+  readonly issues?: readonly string[] | undefined;
+  readonly issueLayout?: string | undefined;
   /**
    * Where imported assets are served from. Empty is deliberately invalid for
    * assets: no invented serving origin. A project that imports none needs none.
@@ -136,6 +146,7 @@ export const compileProject = async (input: CompileProjectInput): Promise<Compil
   const failures: FailedEntry[] = [];
   const helpers: string[] = [];
   const diagnostics: EmailDiagnostic[] = [];
+  const issues: CompiledIssue[] = [];
   const assets = new Map<string, AssetEntry>();
   const declaredBy = new Map<string, string>();
   for (const result of results) {
@@ -163,9 +174,56 @@ export const compileProject = async (input: CompileProjectInput): Promise<Compil
     for (const asset of entry.assets) assets.set(asset.digest, asset);
     templates.push(entry);
   }
+  const slugs = new Map<string, string>();
+  const issueResults = await Promise.all(
+    (input.issues ?? []).toSorted().map(async (entryPath) => {
+      const compiled = await compileIssue({
+        files: input.files,
+        entry: entryPath,
+        layout: input.issueLayout,
+        assetBase: input.assetBase,
+        brandPlugin: input.brandPlugin,
+        ...(input.brand === undefined ? {} : { brand: input.brand }),
+        tailwind:
+          input.theme === undefined ? {} : { css: input.theme.css, cssPath: input.theme.path },
+      });
+      return { entryPath, compiled };
+    }),
+  );
+  for (const { entryPath, compiled } of issueResults) {
+    if (compiled.template === undefined || compiled.frontmatter === undefined) {
+      failures.push({ entryPath, diagnostics: compiled.diagnostics });
+      continue;
+    }
+    const previous = slugs.get(compiled.frontmatter.slug);
+    if (previous !== undefined) {
+      diagnostics.push(
+        finding(
+          "duplicate-issue-slug",
+          "error",
+          `Issue slug ${JSON.stringify(compiled.frontmatter.slug)} is declared by both ${previous} and ${entryPath}.`,
+        ),
+      );
+      continue;
+    }
+    slugs.set(compiled.frontmatter.slug, entryPath);
+    for (const asset of compiled.assets) assets.set(asset.digest, asset);
+    issues.push({
+      id: compiled.frontmatter.slug,
+      entryPath,
+      compiled: compiled.template,
+      fixtures: compiled.fixtures,
+      frontmatter: compiled.frontmatter,
+      assets: compiled.assets,
+      diagnostics: compiled.diagnostics,
+      channels: channelsOf(compiled.template),
+      brandPlugin: input.brandPlugin,
+    });
+  }
   return {
     templates: templates.sort((left, right) => (left.id < right.id ? -1 : 1)),
-    failures,
+    issues,
+    failures: failures.toSorted((a, b) => a.entryPath.localeCompare(b.entryPath)),
     helpers,
     diagnostics,
     assets: [...assets.values()].sort((left, right) => (left.fileName < right.fileName ? -1 : 1)),

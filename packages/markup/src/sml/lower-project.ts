@@ -26,6 +26,7 @@ import { isValueNode, type Binding } from "./bindings";
 import { channelBodies, channelLowering } from "./channels";
 import { checkBindings, checkStructure, type CheckFinding } from "./check";
 import { Findings } from "./diagnostics";
+import type { IssueContentInput } from "./issue-content";
 import { Lowerer, type Ctx } from "./lower";
 import type { Project, ProjectModule } from "./project";
 import { applyStyles } from "./styles";
@@ -201,6 +202,7 @@ export interface ResolvedInputs {
 }
 
 export interface LowerOptions {
+  readonly issueContent?: IssueContentInput | undefined;
   readonly entry: string;
   readonly schema?: Readonly<Record<string, unknown>> | undefined;
   readonly brand?: EmailBrand | undefined;
@@ -428,6 +430,7 @@ export const lowerProject = (
   const staticPart = {
     project,
     findings,
+    issueContent: options.issueContent,
     staticContext,
     assetUrl: urlFor,
     brand: options.brand,
@@ -535,6 +538,14 @@ export const lowerProject = (
       const opened = openFunction(bodyNode);
       if (opened !== undefined) {
         const nodes = lowerer.content({ ...opened.ctx, semantic: true }, opened.body);
+        if (options.issueContent !== undefined && lowerer.issueSlots !== 1)
+          findings.add(
+            opened.ctx.module.parsed,
+            opened.body,
+            "issue-slot",
+            "An issue layout must contain exactly one unconditional IssueContent slot.",
+            "Place one <IssueContent /> inside the email body, outside loops and conditions.",
+          );
         const roots = lowerEmailNodes(nodes, staticPart.brandPlugin);
         if (nodes.length === 1 && roots.length === 1) {
           body = nodes[0];

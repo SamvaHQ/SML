@@ -21,6 +21,7 @@ import { child, children, keyName, text, unwrap, type Node } from "./ast";
 import { bindingValue, joinPath, type Binding, type Env } from "./bindings";
 import { runBuiltinComponent, type ChannelLowering } from "./components";
 import type { Findings } from "./diagnostics";
+import { issueNodes, type IssueContentInput } from "./issue-content";
 import type { Project, ProjectModule } from "./project";
 import { didYouMean } from "./suggest";
 import { readStatic, type StaticContext } from "./values";
@@ -30,6 +31,7 @@ import { readStatic, type StaticContext } from "./values";
 // anything else is a diagnostic that names the fix.
 
 export interface LowerOptions {
+  readonly issueContent?: IssueContentInput | undefined;
   readonly project: Project;
   readonly findings: Findings;
   readonly staticContext: StaticContext;
@@ -47,6 +49,7 @@ export interface Ctx {
   /** Loop variable names in scope, so an inner loop does not shadow a name a binding still holds. */
   readonly loops: readonly string[];
   readonly depth: number;
+  readonly conditional?: boolean | undefined;
   /** Email bodies retain authored nodes; plain-channel checking keeps its existing element IR. */
   readonly semantic?: boolean | undefined;
   /** Inside a chunked `<Columns each>`: the width a `Column` that states none takes. */
@@ -147,6 +150,7 @@ const statementKind = (type: string): string => {
 export class Lowerer {
   readonly sources: string[] = [];
   private uniqueId = 0;
+  issueSlots = 0;
 
   private readonly reservedAttributes: ReadonlySet<string>;
 
@@ -850,7 +854,7 @@ export class Lowerer {
         const right = child(node, "right");
         if (operator === "&&" && left !== undefined && right !== undefined) {
           const test = this.predicate(ctx, left);
-          const then = this.content(ctx, right);
+          const then = this.content({ ...ctx, conditional: true }, right);
           if (test === undefined) return [];
           return [{ if: test, then, src: this.src(ctx.module, node) }];
         }
@@ -862,8 +866,8 @@ export class Lowerer {
         const alternate = child(node, "alternate");
         if (test === undefined || consequent === undefined || alternate === undefined) return [];
         const predicate = this.predicate(ctx, test);
-        const then = this.content(ctx, consequent);
-        const otherwise = this.content(ctx, alternate);
+        const then = this.content({ ...ctx, conditional: true }, consequent);
+        const otherwise = this.content({ ...ctx, conditional: true }, alternate);
         if (predicate === undefined) return [];
         const branch: CompiledIf = {
           if: predicate,
@@ -1344,6 +1348,59 @@ export class Lowerer {
     const imported = ctx.module.imports.get(head);
     const local = ctx.module.declarations.get(head);
     const attributes = children(opening, "attributes");
+    if (
+      imported?.kind === "markup" &&
+      imported.specifier === "@samva/markup/email" &&
+      imported.imported === "IssueContent"
+    ) {
+      this.issueSlots++;
+      const issue = this.options.issueContent;
+      if (
+        issue === undefined ||
+        ctx.semantic !== true ||
+        ctx.conditional === true ||
+        ctx.loops.length > 0 ||
+        attributes.length > 0 ||
+        children(node, "children").some(
+          (item) => item.type !== "JSXText" || (text(item, "value") ?? "").trim() !== "",
+        )
+      ) {
+        this.error(
+          ctx,
+          node,
+          "issue-slot",
+          "IssueContent needs parsed issue content and takes no props or children; its layout position must be unconditional.",
+          "Place one <IssueContent /> outside loops and conditions in the email layout.",
+        );
+        return [];
+      }
+      let index = this.sources.indexOf(issue.file);
+      if (index < 0) {
+        index = this.sources.length;
+        this.sources.push(issue.file);
+      }
+      const needsBrand = (nodes: readonly CompiledNode[]): boolean =>
+        nodes.some(
+          (item) =>
+            typeof item === "object" &&
+            item !== null &&
+            "type" in item &&
+            ((item.type === "component" &&
+              (item.name === "BrandLogo" || item.name === "BrandFooter")) ||
+              needsBrand(item.children ?? [])),
+        );
+      if (this.options.brand === undefined && needsBrand(issue.nodes)) {
+        this.error(
+          ctx,
+          node,
+          "brand-unavailable",
+          "This issue uses brand components but no brand was resolved.",
+          "Supply the host-resolved brand when compiling the issue.",
+        );
+        return [];
+      }
+      return issueNodes(issue.nodes, index + 1, this.options.brand);
+    }
     if (imported?.kind === "markup" || imported?.kind === "brand") {
       return runBuiltinComponent({
         lowerer: this,
@@ -1514,6 +1571,7 @@ export class Lowerer {
       env: new Map(),
       stack: [...ctx.stack, id],
       loops: ctx.loops,
+      conditional: ctx.conditional,
       depth: ctx.depth + 1,
       semantic: ctx.semantic,
     };

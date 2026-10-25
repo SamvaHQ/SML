@@ -2,6 +2,7 @@ import { parse } from "@babel/parser";
 
 import { buildLineMap } from "./diagnostic-model";
 import { isObject } from "./internal/guards";
+import { parseIssue } from "./markdown/index";
 import { checkTemplate, introducedErrors } from "./sml/profile";
 import type { JsxSourceLocation } from "./source-locations";
 
@@ -22,7 +23,13 @@ export interface SourceProperty {
   readonly literalType: "string" | "number" | "boolean";
   readonly start: number;
   readonly end: number;
-  readonly syntax: "attribute" | "child" | "value";
+  readonly syntax:
+    | "attribute"
+    | "child"
+    | "value"
+    | "markdown"
+    | "markdown-attribute"
+    | "markdown-boolean";
 }
 export interface SourceElement {
   readonly start: number;
@@ -251,6 +258,44 @@ export const inspectSourceElement = (
   return found;
 };
 
+/** Resolve a Markdown render origin to the exact authored prose or component span. */
+export const inspectMarkdownNode = (
+  source: string,
+  file: string,
+  origin: JsxSourceLocation,
+): SourceElement | null => {
+  if (file !== origin.fileName) return null;
+  const issue = parseIssue(source, file);
+  if (issue.diagnostics.some((item) => item.severity === "error")) return null;
+  const found = issue.sourceNodes.find(
+    (item) => item.src[0] === origin.lineNumber && item.src[1] === origin.columnNumber,
+  );
+  if (found === undefined) return null;
+  return {
+    start: found.start,
+    end: found.end,
+    contentStart: found.contentStart,
+    contentEnd: found.contentEnd,
+    tag: found.tag,
+    attributeInsertion: found.contentStart ?? found.end,
+    hasSpread: false,
+    structural: false,
+    previous: null,
+    next: null,
+    properties: found.properties.map((field) => ({
+      ...field,
+      value: String(field.value),
+      kind: "literal",
+      syntax:
+        field.syntax === "quoted"
+          ? "markdown-attribute"
+          : field.syntax === "boolean"
+            ? "markdown-boolean"
+            : "markdown",
+    })),
+  };
+};
+
 const PLAIN_JSX_TEXT = /^[^\s{}<>&](?:[^{}<>&\r\n\u2028\u2029]*[^\s{}<>&])?$/;
 
 /** Literal controls cannot overwrite a binding or computed expression. */
@@ -263,6 +308,29 @@ export const literalReplacement = (
   if (field.literalType === "number" && (value.trim() === "" || !Number.isFinite(Number(value))))
     return null;
   if (field.literalType === "boolean" && value !== "true" && value !== "false") return null;
+  if (
+    field.syntax === "markdown" ||
+    field.syntax === "markdown-attribute" ||
+    field.syntax === "markdown-boolean"
+  ) {
+    const encoded = value
+      .replaceAll("&", "&amp;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("<", "&lt;")
+      .replaceAll("{", "&#123;")
+      .replaceAll("}", "&#125;");
+    return {
+      start: field.start,
+      end: field.end,
+      before: source.slice(field.start, field.end),
+      after:
+        field.syntax === "markdown"
+          ? value.replace(/[!-/:-@[-`{-~]/g, "\\$&")
+          : field.syntax === "markdown-boolean"
+            ? `${field.name}="${encoded}"`
+            : `"${encoded}"`,
+    };
+  }
   const literal =
     field.literalType === "string"
       ? JSON.stringify(value)
@@ -311,6 +379,8 @@ export interface ProfileGuard {
   readonly files?: Readonly<Record<string, string>> | undefined;
 }
 export interface ApplyOptions {
+  /** Validate edits as an issue, including its closed grammar and frontmatter. */
+  readonly markdown?: { readonly file: string } | undefined;
   readonly profile?: ProfileGuard | undefined;
 }
 
@@ -350,6 +420,14 @@ export const applySourceReplacements = (
     }
     result = result.slice(0, edit.start) + edit.after + result.slice(edit.end);
     boundary = edit.start;
+  }
+  if (options.markdown !== undefined) {
+    const finding = parseIssue(result, options.markdown.file).diagnostics.find(
+      (item) => item.severity === "error",
+    );
+    return finding === undefined
+      ? { ok: true, source: result }
+      : { ok: false, reason: `This change is not valid SML Markdown: ${finding.message}` };
   }
   if (parsed(result) === null)
     return { ok: false, reason: "This change is not valid TSX. Review it in Source." };

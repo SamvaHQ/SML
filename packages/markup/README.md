@@ -269,3 +269,66 @@ Portable validation uses `@cfworker/json-schema` without runtime code generation
 2020-12 meta-schema is checked at every supported schema position, and the explicit profile rejects
 keywords outside its contract before interpretation. The AJV dependency supplies static meta-schema
 JSON; its code generator is not invoked in a loaded template.
+
+## Markdown newsletter issues
+
+`@samva/markup/markdown` parses newsletter prose into the same semantic document as TSX. Files
+carry YAML frontmatter and CommonMark prose, with static tags from SML's email component set:
+
+```md
+---
+title: October product news
+slug: october-product-news
+topic: product
+preheader: What shipped this month
+seo:
+  description: October updates from the team
+  image: https://example.com/october.png
+gate:
+  leadIn: 2
+---
+
+# What shipped
+
+Read the **latest updates**.
+
+<Button href="https://example.com/updates">See every update</Button>
+```
+
+`title`, `slug`, and `topic` are required nonempty strings. The slug is lowercase kebab-case.
+`preheader` is optional text; `seo` accepts optional `title`, `description`, and an absolute HTTPS
+`image`; `gate.leadIn` counts leading top-level content blocks before a host-owned subscription
+wall. SML preserves this metadata; the host owns SEO tags, gating, and publication. Unknown fields,
+invalid YAML, raw HTML, unknown components, expressions, spreads, and nonliteral props are errors.
+Numeric and boolean props use quoted values (`height="24"`, `stack="false"`); bare boolean flags
+mean true. Fenced code is literal content, including any HTML or braces inside it.
+
+A layout is an ordinary email-only `defineTemplate` entry containing one static `<IssueContent />`
+imported from `@samva/markup/email`. The directive takes no props or children and must sit outside
+conditions and loops. It disappears during compilation before styles are applied.
+
+```ts
+import { compileIssue, parseIssue } from "@samva/markup/markdown";
+import { render } from "@samva/markup/render";
+
+const parsed = parseIssue(files["issues/october.md"], "issues/october.md");
+const compiled = await compileIssue({
+  files,
+  entry: "issues/october.md",
+  layout: "layout.tsx",
+  assetBase: "https://assets.example.com",
+});
+if (compiled.template) {
+  const page = render(compiled.template, compiled.fixtures.default, { target: "web" });
+}
+```
+
+`compileIssue` takes its schema, fixtures, theme and body shell from the layout; the issue slug
+becomes the compiled identity, its title becomes the subject, and its preheader becomes the inbox
+preview. Frontmatter is returned separately and is not injected into layout inputs. Layout and issue
+nodes retain their own source files. `parseIssue` returns no usable nodes when it reports an error.
+
+`inspectMarkdownNode` from `@samva/markup/edit` resolves a rendered origin to editable prose and
+literal attributes. Feed its property to `literalReplacement`, then call `applySourceReplacements`
+with `{ markdown: { file: "issues/october.md" } }` to validate the rewritten issue. Offsets are
+UTF-16, end-exclusive, and stale spans are refused.
