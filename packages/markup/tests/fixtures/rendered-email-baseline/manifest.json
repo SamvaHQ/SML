@@ -1,0 +1,170 @@
+{
+  "head": "2b40779294e8b7986e6f0a851788d423d4d31927",
+  "components": [
+    "Email",
+    "Section",
+    "Columns",
+    "Column",
+    "Button",
+    "Spacer",
+    "Divider",
+    "Image",
+    "Link",
+    "BrandLogo",
+    "BrandFooter"
+  ],
+  "starterEntries": ["templates/welcome.tsx"],
+  "projects": [
+    {
+      "name": "primitive-defaults",
+      "diagnostics": [
+        {
+          "code": "email-external-asset",
+          "severity": "warning"
+        }
+      ],
+      "fixtures": [
+        {
+          "name": "basic",
+          "preheader": false
+        }
+      ]
+    },
+    {
+      "name": "primitive-styles",
+      "diagnostics": [
+        {
+          "code": "email-external-asset",
+          "severity": "warning"
+        }
+      ],
+      "fixtures": [
+        {
+          "name": "basic",
+          "preheader": true
+        }
+      ]
+    },
+    {
+      "name": "outlook-buttons",
+      "diagnostics": [
+        {
+          "code": "button-outlook-fallback",
+          "severity": "warning"
+        },
+        {
+          "code": "button-outlook-fallback",
+          "severity": "warning"
+        }
+      ],
+      "fixtures": [
+        {
+          "name": "basic",
+          "preheader": true
+        }
+      ]
+    },
+    {
+      "name": "column-options",
+      "diagnostics": [],
+      "fixtures": [
+        {
+          "name": "empty",
+          "preheader": true
+        },
+        {
+          "name": "one",
+          "preheader": true
+        },
+        {
+          "name": "odd",
+          "preheader": true
+        },
+        {
+          "name": "even",
+          "preheader": true
+        }
+      ]
+    },
+    {
+      "name": "brand-full",
+      "diagnostics": [
+        {
+          "code": "email-external-asset",
+          "severity": "warning"
+        },
+        {
+          "code": "email-external-asset",
+          "severity": "warning"
+        },
+        {
+          "code": "email-external-asset",
+          "severity": "warning"
+        },
+        {
+          "code": "email-external-asset",
+          "severity": "warning"
+        }
+      ],
+      "fixtures": [
+        {
+          "name": "basic",
+          "preheader": true
+        }
+      ]
+    },
+    {
+      "name": "brand-light",
+      "diagnostics": [
+        {
+          "code": "email-external-asset",
+          "severity": "warning"
+        },
+        {
+          "code": "email-external-asset",
+          "severity": "warning"
+        }
+      ],
+      "fixtures": [
+        {
+          "name": "basic",
+          "preheader": true
+        }
+      ]
+    },
+    {
+      "name": "brand-bare",
+      "diagnostics": [],
+      "fixtures": [
+        {
+          "name": "basic",
+          "preheader": true
+        }
+      ]
+    },
+    {
+      "name": "parity",
+      "diagnostics": [],
+      "fixtures": [
+        {
+          "name": "basic",
+          "preheader": true
+        }
+      ]
+    },
+    {
+      "name": "starter-welcome",
+      "diagnostics": [],
+      "fixtures": [
+        {
+          "name": "default",
+          "preheader": true
+        },
+        {
+          "name": "team",
+          "preheader": true
+        }
+      ]
+    }
+  ]
+}
