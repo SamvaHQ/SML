@@ -12,6 +12,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { DESKTOP_WIDTH, MOBILE_WIDTH } from "../canvas/device";
 import { EmailFrame } from "../canvas/email-frame";
+import { PageFrame } from "../canvas/page-frame";
 import { SelectionOverlay } from "../canvas/selection-overlay";
 import {
   isZoomWheel,
@@ -52,6 +53,8 @@ export interface CanvasState extends Record<string, unknown> {
   readonly zoom: string;
   /** The width the email is shown at. */
   readonly device: string;
+  /** What the preview shows: the `email` or the `web` page. */
+  readonly target: string;
 }
 
 export function CanvasPane({
@@ -78,6 +81,9 @@ export function CanvasPane({
     beforeEdits,
     pins,
     sourceEditable,
+    previewTarget,
+    pageRender,
+    pageError,
   } = useEditorStore(
     useShallow((state) => ({
       doc: state.doc,
@@ -91,10 +97,13 @@ export function CanvasPane({
       beforeEdits: state.designCompare ? (state.designDraft?.baseRender ?? null) : null,
       pins: state.pins,
       sourceEditable: state.sourceEditable,
+      previewTarget: state.pageAvailable ? state.previewTarget : "email",
+      pageRender: state.pageRender,
+      pageError: state.pageError,
     })),
   );
   const store = useEditorStoreApi();
-  const { select, selectDocument, setHovered, setCanvasZoom } = useEditorStore(
+  const { select, selectDocument, selectFromPage, setHovered, setCanvasZoom } = useEditorStore(
     (state) => state.actions,
   );
   // Validity is derived in the selector: a candidate that left the render reads
@@ -253,8 +262,29 @@ export function CanvasPane({
     [outline, pointing, select, store],
   );
 
+  const onPageSelect = useCallback(
+    (pagePath: string | null) => {
+      if (pagePath === null) select(null);
+      else selectFromPage(pagePath);
+    },
+    [select, selectFromPage],
+  );
+  const onWeb = previewTarget === "web";
+  const pageFrame =
+    pageRender !== null && pageError === null && render !== null ? (
+      <PageFrame
+        page={pageRender}
+        selectedEmailPath={selection.kind === "element" ? selection.instancePath : null}
+        emailSelections={render.selections}
+        width={deviceWidth}
+        epoch={previewEpoch}
+        onSelect={onPageSelect}
+        onZoomGesture={active ? onZoomGesture : undefined}
+      />
+    ) : null;
+
   // Compare shows the preview from before the staged edits, untouched by selection or pins.
-  const frame =
+  const emailFrame =
     beforeEdits !== null ? (
       <EmailFrame html={beforeEdits.html} width={deviceWidth} epoch={previewEpoch} />
     ) : render === null ? null : (
@@ -279,6 +309,8 @@ export function CanvasPane({
         }
       />
     );
+
+  const frame = onWeb ? pageFrame : emailFrame;
 
   const children = (
     <>
@@ -340,10 +372,14 @@ export function CanvasPane({
                 // target); only the bare backdrop drops to document scope.
                 onClick={(event) => event.stopPropagation()}
               >
-                <EnvelopeCard />
+                {!onWeb && <EnvelopeCard />}
                 {frame === null ? (
-                  <UnbuiltCanvas />
-                ) : pointing ? (
+                  onWeb ? (
+                    <UnbuiltPage />
+                  ) : (
+                    <UnbuiltCanvas />
+                  )
+                ) : pointing || onWeb ? (
                   frame
                 ) : (
                   <NodeContextMenu
@@ -420,10 +456,29 @@ export function CanvasPane({
     "editor-canvas",
     { ...props },
     {
-      state: { zoom: canvasZoom === "fit" ? "fit" : String(canvasZoom), device: previewDevice },
+      state: {
+        zoom: canvasZoom === "fit" ? "fit" : String(canvasZoom),
+        device: previewDevice,
+        target: previewTarget,
+      },
       className: "flex min-h-0 min-w-0 flex-1 flex-col",
       props: { children },
     },
+  );
+}
+
+/** The web page has not come back yet, or the host could not draw it; the email is unaffected. */
+function UnbuiltPage() {
+  return (
+    <div
+      data-testid="canvas.page-unbuilt"
+      className="border-border bg-surface-inset text-foreground rounded-xl border border-dashed p-6 text-[12.5px]"
+    >
+      <p className="font-medium">No preview yet</p>
+      <p className="text-muted-foreground mt-1">
+        The web page isn't ready. Switch to Email to keep working.
+      </p>
+    </div>
   );
 }
 

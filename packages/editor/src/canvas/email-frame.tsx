@@ -144,6 +144,9 @@ export interface EmailFrameProps {
   readonly onZoomGesture?: ((gesture: ZoomGesture) => void) | undefined;
   /** Mount the document again when this changes, as a refresh does. */
   readonly epoch?: number | undefined;
+  /** The frame's accessible name; the web page is shown in the same frame with its own. */
+  readonly title?: string | undefined;
+  readonly testId?: string | undefined;
 }
 
 /**
@@ -161,6 +164,8 @@ const FrameDocument = ({
   onHover,
   onContextMenu,
   onZoomGesture,
+  title = "Email canvas",
+  testId = "canvas.frame",
 }: {
   readonly document_: string;
   readonly mount: PreparedPreviewDocument["mount"] | undefined;
@@ -171,6 +176,8 @@ const FrameDocument = ({
   readonly onHover?: ((instancePath: string | null) => void) | undefined;
   readonly onContextMenu?: EmailFrameProps["onContextMenu"];
   readonly onZoomGesture?: EmailFrameProps["onZoomGesture"];
+  readonly title?: string | undefined;
+  readonly testId?: string | undefined;
 }): ReactNode => {
   const ref = useRef<HTMLIFrameElement>(null);
   const [body, setBody] = useState<HTMLElement | null>(null);
@@ -321,8 +328,8 @@ const FrameDocument = ({
   return (
     <iframe
       ref={ref}
-      data-testid="canvas.frame"
-      title="Email canvas"
+      data-testid={testId}
+      title={title}
       sandbox="allow-same-origin"
       style={{
         width,

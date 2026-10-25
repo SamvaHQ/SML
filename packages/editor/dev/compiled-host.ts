@@ -20,6 +20,7 @@ import {
   NIMBUS_THEME_CSS,
   NIMBUS_THEME_FILE,
 } from "./nimbus-template";
+import { renderPage } from "./page-render";
 
 // A host that does what a real one does: it holds the authored TSX, compiles it with the static
 // compiler in the browser, renders the viewed fixture from the IR, and answers each save with the
@@ -222,6 +223,18 @@ export const createCompiledHost = async (): Promise<CompiledHostControls> => {
         publish("self");
         return { rev: rev() };
       },
+    },
+    render: async (_entry, requested, target) => {
+      const template = compiled.template;
+      if (target === "email" || template === undefined || broken !== false) {
+        return fixture === null ? null : render(compiled, requested, `rev_${previewCounter}`);
+      }
+      // oxlint-disable-next-line samva/no-try-catch-or-throw -- Plain library boundary: the renderer signals a refused render by throwing; the page then shows no preview.
+      try {
+        return renderPage(template, compiled.fixtures[requested], `rev_${previewCounter}`);
+      } catch {
+        return null;
+      }
     },
     fixtures: {
       status: "ready",
