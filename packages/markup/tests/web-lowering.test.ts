@@ -26,7 +26,7 @@ const projects = [
 // Web body and head-hint goldens; email's independently captured fixture files stay immutable.
 const WEB_DIGESTS: Readonly<Record<string, string>> = {
   "primitive-defaults/basic": "e7dc2a642286ee506f1e2ac01440781fec9f3c4b4a9d614eb735783348474ccb",
-  "primitive-styles/basic": "87f2813e15d8dbfdb6a5d865e80c6ceb5e1554ddd91ad22b2821faa90bd23925",
+  "primitive-styles/basic": "51c2e7878e24848b8c95e5408aa03e5fc6f3eada8e055a8e72a47a34543aa0e3",
   "outlook-buttons/basic": "fd3e84be476fe74019640fcc9f41530bcf0cd0a95e6117268f5f7c2cbe21f4d6",
   "column-options/empty": "15170e24c049d72e666265e7d537507636b8d535b02a38e9a3b2995f8032998f",
   "column-options/one": "0a6b6b9c97e277a3dbd73e90eaa15cfa6f70e87d9b632ef5239910d3e488c1fe",
@@ -89,6 +89,123 @@ describe("web target lowerings", () => {
     expect(page.headHints.styles).toContain("display:grid");
     expect(page.headHints.styles).toContain("@media (max-width:599px)");
     expect(page.headHints.styles).toContain("height:16px");
+  });
+
+  it("renders scalar children props with JSX children taking precedence", async () => {
+    const source = `import { defineTemplate } from "@samva/markup"; import { Email, Link, Section } from "@samva/markup/email"; import { jsonSchema } from "@samva/markup/input-schema";
+export default defineTemplate({ id: "prop-children", schema: jsonSchema({ type: "object", required: ["label"], properties: { label: { type: "string" } } }), fixtures: { basic: { label: "Bound <&>" } }, email: { subject: () => "Children", body: (input) => <Email><Link href="https://example.test" children="Read & more" /><Section children={input.label} /><Link href="https://example.test" children="Ignored">JSX {input.label}</Link></Email> } });`;
+    const compiled = await compileTemplate({
+      files: { "entry.tsx": source },
+      entry: "entry.tsx",
+      assetBase: "https://assets.example.test",
+    });
+    expect(compiled.diagnostics.filter(({ severity }) => severity === "error")).toEqual([]);
+    const page = render(compiled.template!, compiled.fixtures.basic, { target: "web" });
+    expect(page.html).toContain(
+      '<a href="https://example.test" class="sml-web-link sml-link">Read &amp; more</a>',
+    );
+    expect(page.html).toContain('<section class="sml-web-section">Bound &lt;&amp;&gt;</section>');
+    expect(page.html).toContain(">JSX Bound &lt;&amp;&gt;</a>");
+    expect(page.html).not.toContain("Ignored");
+  });
+
+  it.each([
+    { content: 0, expected: "0" },
+    { content: false, expected: "" },
+    { content: null, expected: "" },
+    { content: "Bound <&>", expected: "Bound &lt;&amp;&gt;" },
+  ])("retains scalar child semantics for $content", ({ content, expected }) => {
+    const body = {
+      type: "component",
+      name: "Link",
+      props: { href: "https://example.test", children: content },
+    };
+    for (const children of [content, { bind: "label" }]) {
+      const page = render(
+        artifact({ ...body, props: { ...body.props, children } }),
+        { label: content },
+        { target: "web" },
+      );
+      expect(page.html).toBe(
+        `<a href="https://example.test" class="sml-web-link sml-link">${expected}</a>`,
+      );
+    }
+    const overridden = render(artifact({ ...body, children: [false] }), {}, { target: "web" });
+    expect(overridden.html).toBe(
+      '<a href="https://example.test" class="sml-web-link sml-link"></a>',
+    );
+  });
+
+  it.each([
+    { width: "180", expected: "180px" },
+    { width: "180.5", expected: "180.5px" },
+    { width: "180px", expected: "180px" },
+    { width: "35%", expected: "35%" },
+    { width: 180, expected: "180px" },
+    { width: 0, expected: "0" },
+  ])("normalizes layout width $width", ({ width, expected }) => {
+    for (const name of ["Section", "Columns", "Column"]) {
+      const body = { type: "component", name, props: { width } };
+      for (const bound of [false, true]) {
+        const page = render(
+          artifact(bound ? { ...body, props: { width: { bind: "width" } } } : body),
+          { width },
+          { target: "web" },
+        );
+        expect(page.headHints.styles).toContain(
+          `{${name === "Column" ? "width" : "max-width"}:${expected}}`,
+        );
+      }
+    }
+    for (const track of [width, { bind: "width" }]) {
+      const page = render(
+        artifact({
+          type: "component",
+          name: "Columns",
+          children: [{ type: "component", name: "Column", props: { width: track } }],
+        }),
+        { width },
+        { target: "web" },
+      );
+      expect(page.headHints.styles).toContain(
+        `{--sml-web-columns:${width === 0 ? "0px" : expected}}`,
+      );
+      expect(page.html).toContain('<div class="sml-web-column"></div>');
+    }
+  });
+
+  it("keeps flexible tracks for absent widths and checks resolved tracks for unsafe CSS", () => {
+    const body = {
+      type: "component",
+      name: "Columns",
+      children: [
+        { type: "component", name: "Column", props: { width: { bind: "width" } } },
+        { type: "component", name: "Column" },
+      ],
+    };
+    for (const input of [{}, { width: null }]) {
+      const page = render(artifact(body), input, { target: "web" });
+      expect(page.headHints.styles).toContain("{--sml-web-columns:minmax(0,1fr) minmax(0,1fr)}");
+    }
+    for (const width of ["180px;display:none", "url(javascript:bad)", false, { value: 180 }])
+      expect(() => render(artifact(body), { width }, { target: "web" })).toThrow(RenderError);
+  });
+
+  it("resolves direct Column tracks from bindings in each loop scope", async () => {
+    const source = `import { defineTemplate } from "@samva/markup"; import { Email, Columns, Column } from "@samva/markup/email"; import { jsonSchema } from "@samva/markup/input-schema";
+export default defineTemplate({ id: "bound-widths", schema: jsonSchema({ type: "object", required: ["widths"], properties: { widths: { type: "array", items: { type: "string" } } } }), fixtures: { basic: { widths: ["180", "35%", "240px"] } }, email: { subject: () => "Widths", body: (input) => <Email>{input.widths.map((width) => <Columns width={width}><Column width={width}>Sized</Column><Column>Flexible</Column></Columns>)}</Email> } });`;
+    const compiled = await compileTemplate({
+      files: { "entry.tsx": source },
+      entry: "entry.tsx",
+      assetBase: "https://assets.example.test",
+    });
+    expect(compiled.diagnostics.filter(({ severity }) => severity === "error")).toEqual([]);
+    const page = render(compiled.template!, compiled.fixtures.basic, { target: "web" });
+    for (const width of ["180px", "35%", "240px"])
+      expect(page.headHints.styles).toContain(
+        `max-width:${width};--sml-web-columns:${width} minmax(0,1fr)`,
+      );
+    expect(page.html.match(/class="sml-web-column"/g)).toHaveLength(6);
   });
 
   it("preserves chunked Columns children once, including partials, empty lists and row indices", async () => {
@@ -359,11 +476,31 @@ describe("untrusted web render boundary", () => {
     element({ style: [["color;display", "red"]] }),
     { type: "component", name: "Email", props: { style: { bind: "color" } } },
     { type: "component", name: "Email", props: { dir: "sideways" } },
+    {
+      type: "component",
+      name: "Link",
+      props: { href: "https://example.test", children: { object: { label: "Bad" } } },
+    },
+    {
+      type: "component",
+      name: "Link",
+      props: { href: "https://example.test", children: { bind: "object" } },
+    },
+    {
+      type: "component",
+      name: "Columns",
+      children: [{ type: "component", name: "Column", props: { width: { bind: "object" } } }],
+    },
   ])("rejects unsafe body IR with RenderError: %j", (body) => {
     expect(() =>
       render(
         artifact(body),
-        { text: "<&>", url: "javascript:alert(1)", color: "red;display:none" },
+        {
+          text: "<&>",
+          url: "javascript:alert(1)",
+          color: "red;display:none",
+          object: { label: "Bad" },
+        },
         { target: "web" },
       ),
     ).toThrow(RenderError);

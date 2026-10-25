@@ -184,9 +184,12 @@ export const lowerWebNodes = (
   readonly nodes: readonly CompiledNode[];
   readonly headHints: ReadonlyMap<CompiledElement, WebHeadValues>;
   readonly stylesheets: ReadonlyMap<CompiledNode, readonly WebCssRule[]>;
+  readonly gridTracks: ReadonlyMap<CompiledValue, readonly (CompiledValue | undefined)[]>;
 } => {
   const headHints = new Map<CompiledElement, WebHeadValues>();
   const stylesheets = new Map<CompiledNode, readonly WebCssRule[]>();
+  // Track dimensions must resolve individually in the renderer's current loop scope.
+  const gridTracks = new Map<CompiledValue, readonly (CompiledValue | undefined)[]>();
   let stylesheet = 0;
   const titleNodes = (list: readonly CompiledNode[]): CompiledNode[] =>
     list.flatMap((node): CompiledNode[] => {
@@ -340,6 +343,10 @@ export const lowerWebNodes = (
           kid.name === "Column",
       );
     let kids = walk(node.children ?? [], fixedTracks);
+    if ((node.children?.length ?? 0) === 0) {
+      const content = get("children");
+      if (content !== undefined) kids = [content];
+    }
     const child = (
       el: string,
       children: readonly CompiledNode[],
@@ -373,31 +380,34 @@ export const lowerWebNodes = (
         alignment(get("align"));
         if (typeof p.per === "number") set("--sml-web-columns", `repeat(${p.per},minmax(0,1fr))`);
         else if (fixedTracks) {
-          const tracks = node.children!.map((kid) => {
+          const widths = node.children!.map((kid) => {
             if (
               typeof kid !== "object" ||
               kid === null ||
               !("type" in kid) ||
               kid.type !== "component"
             )
-              return "minmax(0,1fr)";
-            const width = kid.props?.width;
-            return typeof width === "number"
-              ? `${width}px`
-              : typeof width === "string"
-                ? width
-                : "minmax(0,1fr)";
+              return undefined;
+            return value(kid.props?.width);
           });
-          set("--sml-web-columns", tracks.join(" "));
+          const tracks: CompiledValue = {
+            concat: widths.flatMap((width, index) => [
+              ...(index === 0 ? [] : [" "]),
+              width ?? "minmax(0,1fr)",
+            ]),
+          };
+          gridTracks.set(tracks, widths);
+          set("--sml-web-columns", tracks);
         }
         // `each`/`per` are already normalized into child loops and chunk wrappers by the compiler.
         // Repeating props.each here would multiply the authored children a second time.
         break;
-      case "Column":
+      case "Column": {
         tag = "div";
+        const width = get("width");
         // The parent already used these props to size its grid tracks. Applying a percentage
         // again to the item would shrink the content within its own track a second time.
-        if (!sizedTracks) style("width");
+        if (!sizedTracks) set("width", width);
         set("textAlign", get("align"));
         if (get("valign") !== undefined)
           set(
@@ -410,6 +420,7 @@ export const lowerWebNodes = (
             ),
           );
         break;
+      }
       case "Button":
         tag = "a";
         own += " sml-button";
@@ -556,5 +567,5 @@ export const lowerWebNodes = (
       });
     return [output];
   };
-  return { nodes: walk(nodes), headHints, stylesheets };
+  return { nodes: walk(nodes), headHints, stylesheets, gridTracks };
 };

@@ -154,6 +154,9 @@ const declarationValue = (property: string, value: string | number): string =>
     ? `${value}px`
     : String(value);
 
+const webWidth = (value: string | number): string =>
+  typeof value === "number" || /^\d+(?:\.\d+)?$/.test(value) ? `${value}px` : value;
+
 // ── Concrete tree ─────────────────────────────────────────────────────────────
 
 interface CText {
@@ -199,6 +202,7 @@ interface Ctx {
     readonly styles: Map<string, string>;
     readonly hints: ReadonlyMap<CompiledElement, WebHeadValues>;
     readonly stylesheets: ReadonlyMap<CompiledNode, readonly WebCssRule[]>;
+    readonly gridTracks: ReadonlyMap<CompiledValue, readonly (CompiledValue | undefined)[]>;
     readonly authoredCss: string[];
     title?: string;
     lang?: string;
@@ -433,7 +437,23 @@ const declarations = (
       continue;
     }
     const [property, raw] = entry;
-    const value = evalValue(ctx, scope, raw, depth + 1);
+    const tracks = ctx.web?.gridTracks.get(raw);
+    const value =
+      tracks === undefined
+        ? evalValue(ctx, scope, raw, depth + 1)
+        : tracks
+            .map((track) => {
+              const width =
+                track === undefined ? undefined : evalValue(ctx, scope, track, depth + 1);
+              if (width === undefined || width === null) return "minmax(0,1fr)";
+              if (
+                typeof width !== "string" &&
+                !(typeof width === "number" && Number.isFinite(width))
+              )
+                return invalid("A Column width must be a string or finite number.");
+              return webWidth(width);
+            })
+            .join(" ");
     if (value === undefined || value === null) continue;
     if (typeof property !== "string" || !CSS_PROPERTY.test(property)) {
       report(
@@ -447,7 +467,12 @@ const declarations = (
       report(ctx, "invalid-style-value", `Style ${property} must be a string or finite number.`);
       continue;
     }
-    const text = declarationValue(property, value);
+    const text =
+      ctx.web !== undefined &&
+      ["width", "max-width"].includes(kebab(property)) &&
+      typeof value === "string"
+        ? webWidth(value)
+        : declarationValue(property, value);
     if (CSS_UNSAFE.test(text) || CONTROL_CHARACTERS.test(text)) {
       report(
         ctx,
@@ -1423,6 +1448,7 @@ const renderWeb = (
       styles: new Map(),
       hints: lowered.headHints,
       stylesheets: lowered.stylesheets,
+      gridTracks: lowered.gridTracks,
       authoredCss: [],
       hinted: false,
     };
