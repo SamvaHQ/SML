@@ -1,6 +1,6 @@
 {
   "contract": 1,
-  "compiledTemplateVersion": 1,
+  "compiledTemplateVersion": 2,
   "template": {
     "extension": ".tsx",
     "directories": ["templates", "emails"],

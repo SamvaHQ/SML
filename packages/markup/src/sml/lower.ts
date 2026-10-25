@@ -2,7 +2,6 @@ import type {
   CompiledArithmetic,
   CompiledComparison,
   CompiledEach,
-  CompiledElement,
   CompiledFormatter,
   CompiledIf,
   CompiledNode,
@@ -11,12 +10,13 @@ import type {
   CompiledStyle,
   CompiledValue,
 } from "../compiled-template";
-// oxlint-disable samva/no-hand-rolled-object-guard -- IR nodes and Babel nodes are this package's own typed data, discriminated structurally; nothing here validates external input.
 import type { DiagnosticCode } from "../diagnostic-codes";
 import { reservedBrandAttributes, type BrandPlugin } from "../email/brand-plugin";
 import { EMAIL_ELEMENTS, emailElement } from "../email/elements";
 import { checkAttribute } from "../email/html";
 import { FORMATTER_NAMES } from "../fmt";
+// oxlint-disable samva/no-hand-rolled-object-guard -- IR nodes and Babel nodes are this package's own typed data, discriminated structurally; nothing here validates external input.
+import type { SemanticIntrinsic } from "../ir/nodes";
 import { child, children, keyName, text, unwrap, type Node } from "./ast";
 import { bindingValue, joinPath, type Binding, type Env } from "./bindings";
 import { runBuiltinComponent, type ChannelLowering } from "./components";
@@ -47,6 +47,8 @@ export interface Ctx {
   /** Loop variable names in scope, so an inner loop does not shadow a name a binding still holds. */
   readonly loops: readonly string[];
   readonly depth: number;
+  /** Email bodies retain authored nodes; plain-channel checking keeps its existing element IR. */
+  readonly semantic?: boolean | undefined;
   /** Inside a chunked `<Columns each>`: the width a `Column` that states none takes. */
   readonly columnWidth?: CompiledValue | undefined;
   /** Inside a `<Columns>` that stacks on a narrow viewport: its `Column`s carry the stacking class. */
@@ -1194,8 +1196,15 @@ export class Lowerer {
       attrs[name] = value;
     }
     const kids = spec.content === "void" ? [] : this.jsxChildren(ctx, node);
-    const element: CompiledElement = {
-      el: tag,
+    const element = {
+      ...(ctx.semantic === true
+        ? ({
+            type: ["inline", "link", "image", "break"].includes(spec.layout)
+              ? ("inline" as const)
+              : ("block" as const),
+            tag,
+          } satisfies Pick<SemanticIntrinsic, "type" | "tag">)
+        : { el: tag }),
       ...(Object.keys(attrs).length === 0 ? {} : { attrs }),
       ...(style === undefined ? {} : { style }),
       ...(kids.length === 0 ? {} : { children: kids }),
@@ -1506,6 +1515,7 @@ export class Lowerer {
       stack: [...ctx.stack, id],
       loops: ctx.loops,
       depth: ctx.depth + 1,
+      semantic: ctx.semantic,
     };
     const env = new Map<string, Binding>();
     const param = children(fn, "params")[0];

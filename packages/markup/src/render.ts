@@ -46,3 +46,14 @@ export {
   type EmailTag,
 } from "./email/elements";
 export { smsSegmentInfo, type SmsEncoding, type SmsSegmentInfo } from "./sms-segments";
+
+export type {
+  SemanticComponentName,
+  SemanticComponent,
+  SemanticProp,
+  SemanticBlock,
+  SemanticInline,
+  SemanticIntrinsic,
+  EmailPresentation,
+  EmailPresentationOverride,
+} from "./ir/nodes";

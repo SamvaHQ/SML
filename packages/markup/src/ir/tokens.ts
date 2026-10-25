@@ -10,11 +10,11 @@ import type {
 import type { EmailNode } from "../email/jsx-runtime";
 import { isObject } from "../internal/guards";
 import { BRAND_FOOTER_MARKER } from "../internal/unsubscribe-link";
-import { isStaticScalar } from "./bindings";
+import { isStaticScalar } from "./nodes";
 
 // The email primitives are ordinary functions from props to a tree, and they know things (the
 // table markup every client accepts, the classic-Outlook fallbacks) that must not be written
-// twice. The compiler runs the real primitives at compile time, handing them a token where a
+// twice. Target lowering runs the real primitives, handing them a token where a
 // prop or a child is read at render time, and turns the tree they return back into IR, putting
 // each token's value or nodes back where it stands. A primitive that only passes a prop through
 // is exact; one that computes from a prop (a button sizing its box from its label) is told so and

@@ -25,7 +25,7 @@ const tpl = (
   email: Partial<CompiledEmail> = {},
   extra: Partial<CompiledTemplate> = {},
 ): CompiledTemplate => ({
-  sml: 1,
+  sml: 2,
   template: "t",
   schema: {},
   email: { subject: "S", body, ...email },
@@ -439,7 +439,7 @@ describe("subject, preheader and document assembly", () => {
   it.each(["email", "sms", "whatsapp"] as const)(
     "refuses a template compiled as another version on the %s channel",
     (channel) => {
-      const future = { ...tpl(el("p")), sml: 2 } as unknown as CompiledTemplate;
+      const future = { ...tpl(el("p")), sml: 3 } as unknown as CompiledTemplate;
       expect(codes(() => render(future, {}, { channel }))).toEqual(["unsupported-version"]);
     },
   );
@@ -470,7 +470,7 @@ describe("subject, preheader and document assembly", () => {
 
   it("requires the channel", () => {
     expect(
-      codes(() => render({ sml: 1, template: "t", schema: {} }, {}, { channel: "email" })),
+      codes(() => render({ sml: 2, template: "t", schema: {} }, {}, { channel: "email" })),
     ).toEqual(["missing-channel"]);
     expect(codes(() => render(tpl(el("p")), {}, { channel: "sms" }).text)).toEqual([
       "missing-channel",
@@ -561,7 +561,7 @@ describe("format nodes and options", () => {
 
 describe("the sms channel render", () => {
   const sms = (body: CompiledNode[], input: unknown = {}) =>
-    render({ sml: 1, template: "t", schema: {}, sms: { body } }, input, { channel: "sms" }).text;
+    render({ sml: 2, template: "t", schema: {}, sms: { body } }, input, { channel: "sms" }).text;
 
   it("renders values, conditionals, loops and formats as plain text", () => {
     expect(

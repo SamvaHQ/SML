@@ -14,9 +14,9 @@ import type { Stylesheet } from "../email/css";
 import type { TemplateDiagnostic } from "../email/diagnostics";
 import { serializeStyle } from "../email/html";
 import { EmailNode } from "../email/jsx-runtime";
+import { Tokens, rawParts } from "../ir/tokens";
 import type { JsxSourceLocation } from "../source-locations";
 import { isValueNode } from "./bindings";
-import { Tokens, rawParts } from "./tokens";
 
 // Tailwind and the project's stylesheets are resolved against the lowered tree, once, at compile
 // time. The cascade the email pipeline already runs works on a tree of elements, so the IR is

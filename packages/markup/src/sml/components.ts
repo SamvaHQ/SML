@@ -16,11 +16,12 @@ import { equalColumnWidth } from "../email/components";
 import { collectEmailDiagnostics, type EmailChild, type EmailNode } from "../email/jsx-runtime";
 import { PRIMITIVE_CLASSES } from "../email/primitive-css";
 import { isObject } from "../internal/guards";
+import type { SemanticComponent, SemanticComponentName, SemanticProp } from "../ir/nodes";
+import { emailNodeToIr, propFor, Tokens } from "../ir/tokens";
 import { child, children, text, unwrap, type Node } from "./ast";
 import { bindingValue, isValueNode, type Binding } from "./bindings";
 import type { Ctx, Lowerer } from "./lower";
 import type { ImportBinding } from "./project";
-import { emailNodeToIr, propFor, Tokens } from "./tokens";
 
 /** Everything a component lowering needs about one tag in the source. */
 export interface ComponentCall {
@@ -317,7 +318,7 @@ export const runBuiltinComponent = (call: ComponentCall): CompiledNode[] => {
   if (
     exported === "Columns" &&
     declared.has("gap") &&
-    kids.some((kid) => !isValueNode(kid) && !("el" in kid))
+    kids.some((kid) => !isValueNode(kid) && !("el" in kid) && !("type" in kid))
   ) {
     lowerer.error(
       ctx,
@@ -376,11 +377,42 @@ export const runBuiltinComponent = (call: ComponentCall): CompiledNode[] => {
     for (const diagnostic of collectEmailDiagnostics(output as EmailNode))
       lowerer.findings.items.push({ ...diagnostic, origins: [location] });
   if (output !== null && !isNode) return [];
+  if (ctx.semantic !== true)
+    return wrap([
+      ...emailNodeToIr(output as EmailNode | null, tokens, lowerer.src(ctx.module, node)),
+    ]);
+  const semanticProp = (bound: Binding): SemanticProp | undefined => {
+    if (bound.k === "object") {
+      const object: Record<string, SemanticProp> = {};
+      for (const [name, field] of bound.fields) {
+        const value = semanticProp(field);
+        if (value !== undefined) object[name] = value;
+      }
+      return { object };
+    }
+    return bindingValue(bound);
+  };
+  const authored: Record<string, SemanticProp> = {};
+  for (const [name, bound] of declared) {
+    const value = semanticProp(bound);
+    if (value !== undefined) authored[name] = value;
+  }
+  const brand =
+    isBrand && call.brand !== undefined
+      ? {
+          slug: call.brand.slug,
+          ...(call.brand.assets === undefined ? {} : { assets: call.brand.assets }),
+          ...(call.brand.footer === undefined ? {} : { footer: call.brand.footer }),
+        }
+      : undefined;
   return wrap([
-    ...emailNodeToIr(
-      output as Parameters<typeof emailNodeToIr>[0],
-      tokens,
-      lowerer.src(ctx.module, node),
-    ),
+    {
+      type: "component",
+      name: exported as SemanticComponentName,
+      ...(Object.keys(authored).length === 0 ? {} : { props: authored }),
+      ...(kids.length === 0 ? {} : { children: kids }),
+      ...(brand === undefined ? {} : { brand }),
+      src: lowerer.src(ctx.module, node),
+    } satisfies SemanticComponent,
   ]);
 };

@@ -31,16 +31,4 @@ export const bindingValue = (binding: Binding): CompiledValue | undefined => {
   }
 };
 
-export const isStaticScalar = (value: CompiledValue): value is string | number | boolean | null =>
-  value === null ||
-  typeof value === "string" ||
-  typeof value === "number" ||
-  typeof value === "boolean";
-
-/** True when a node in child position is a value (rendered as text) rather than structure. */
-export const isValueNode = (node: CompiledNode): node is CompiledValue => {
-  if (typeof node !== "object" || node === null) return true;
-  if ("el" in node || "each" in node || "raw" in node || "preheader" in node) return false;
-  if ("if" in node && Array.isArray((node as { then?: unknown }).then)) return false;
-  return true;
-};
+export { isStaticScalar, isValueNode } from "../ir/nodes";

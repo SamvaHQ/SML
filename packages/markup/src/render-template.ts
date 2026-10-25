@@ -31,6 +31,9 @@ import { emailElement, EMAIL_GLOBAL_ATTRIBUTES, type EmailAttributeSpec } from "
 import type { EmailElementSpec, EmailLayout } from "./email/elements";
 import { samvaBrandPlugin } from "./email/samva-brand-plugin";
 import { callFormatter, createFmt, type Fmt } from "./fmt";
+import { applyEmailPresentation } from "./ir/email-presentation";
+import { validateEmailIr } from "./ir/validate";
+import { lowerEmailNodes } from "./lower/email";
 import { smsSegmentInfo } from "./sms-segments";
 
 // Rendering a compiled template is a pure function of the template and the input. Untrusted data
@@ -1179,7 +1182,7 @@ const settle = (ctx: Ctx): void => {
  * Render the email channel against one validated input. `positions` also returns where each
  * element landed in the HTML, which compatibility findings and editor selections map back to source.
  */
-export const renderEmail = (
+const renderEmailBody = (
   template: CompiledTemplate,
   input: unknown,
   options: RenderSettings & { readonly positions?: boolean } = {},
@@ -1201,7 +1204,21 @@ export const renderEmail = (
 
   let tree: readonly CNode[] = [];
   const nodes: CNode[] = [];
-  evalNode(ctx, empty, email.body, 0, nodes);
+  validateEmailIr(email.body, email.presentation, (message, code) =>
+    fail(code ?? "invalid-value", message),
+  );
+  const expanded = lowerEmailNodes(
+    [email.body],
+    email.presentation?.brandPlugin ?? ctx.brandPlugin,
+    (diagnostic) => {
+      if (diagnostic.severity === "error") report(ctx, diagnostic.code, diagnostic.message);
+    },
+  );
+  const lowered =
+    email.presentation === undefined
+      ? expanded
+      : applyEmailPresentation(expanded, email.presentation);
+  for (const node of lowered) evalNode(ctx, empty, node, 0, nodes);
   tree = nodes;
   if (preheader !== undefined && !ctx.markerUsed) {
     const block = preheaderBlock(ctx, preheader);
@@ -1228,6 +1245,20 @@ export const renderEmail = (
   const serialized = tree.map(serialize).join("");
   const html = serialized.startsWith("<html") ? `${EMAIL_DOCTYPE}${serialized}` : serialized;
   return { subject, preheader, html, text };
+};
+
+/** Render malformed artifacts through the same typed boundary as unsafe bound values. */
+export const renderEmail = (
+  template: CompiledTemplate,
+  input: unknown,
+  options: RenderSettings & { readonly positions?: boolean } = {},
+): PositionedEmail => {
+  try {
+    return renderEmailBody(template, input, options);
+  } catch (error) {
+    if (RenderError.is(error)) throw error;
+    return fail("invalid-ir", "Malformed compiled email.");
+  }
 };
 
 const plainText = (ctx: Ctx, nodes: readonly CompiledNode[]): string => {

@@ -14,3 +14,9 @@ export {
   type EmailClientTarget,
 } from "./email/compatibility";
 export { checkCompatibility } from "./sml/compatibility";
+export {
+  COMPONENT_DEGRADATIONS,
+  componentDegradation,
+  type EmailDegradation,
+  type SemanticComponentName,
+} from "./ir/degradations";

@@ -2,10 +2,11 @@
 // editor and agents read, and what every send renders. It is JSON, versioned, and carries no code.
 // Rendering it is a pure function of the template and the input (see `./render-template`).
 
+import type { EmailPresentation, SemanticComponent, SemanticIntrinsic } from "./ir/nodes";
 import type { SmsSegmentInfo } from "./sms-segments";
 
 /** The version this package writes. A publication pins the version it was built with. */
-export const COMPILED_TEMPLATE_VERSION = 1;
+export const COMPILED_TEMPLATE_VERSION = 2;
 
 /**
  * Where a node came from: `[line, column]` in the entry file, or `[line, column, file]` with an
@@ -132,19 +133,23 @@ export interface CompiledPreheader {
   readonly preheader: true;
 }
 
-/** A node in an email body. A bare value in child position is rendered as escaped text. */
+/** A semantic body node or an email primitive produced by target lowering. Bare values are escaped text. */
 export type CompiledNode =
   | CompiledValue
   | CompiledElement
   | CompiledIf
   | CompiledEach
   | CompiledRaw
-  | CompiledPreheader;
+  | CompiledPreheader
+  | SemanticComponent
+  | SemanticIntrinsic;
 
 export interface CompiledEmail {
   readonly subject: CompiledValue;
   readonly preheader?: CompiledValue;
   readonly body: CompiledNode;
+  /** Resolved email presentation, indexed by deterministic lowering order; contains no body. */
+  readonly presentation?: EmailPresentation;
 }
 
 /** A plain-text channel body: text pieces, conditionals and loops. */

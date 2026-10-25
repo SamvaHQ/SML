@@ -17,6 +17,8 @@ import type { TemplateDiagnostic } from "../email/diagnostics";
 import { samvaBrandPlugin } from "../email/samva-brand-plugin";
 import { mergeStylesheets } from "../email/stylesheets";
 import { inputSchema, jsonSchema } from "../input-schema";
+import { emailPresentationOverrides } from "../ir/email-presentation";
+import { lowerEmailNodes } from "../lower/email";
 import { TEMPLATE_ID_PATTERN, TEMPLATE_NAME_PATTERN } from "../template";
 import { child, children, text, unwrap, type Node } from "./ast";
 import { isValueNode, type Binding } from "./bindings";
@@ -518,6 +520,7 @@ export const lowerProject = (
       );
     const preheader = value("preheader");
     let body: CompiledNode | undefined;
+    let expanded: CompiledNode | undefined;
     const bodyNode = parts.get("body");
     if (bodyNode === undefined && object.type === "ObjectExpression")
       findings.add(
@@ -530,21 +533,24 @@ export const lowerProject = (
     else if (bodyNode !== undefined) {
       const opened = openFunction(bodyNode);
       if (opened !== undefined) {
-        const nodes = lowerer.content(opened.ctx, opened.body);
-        if (nodes.length === 1) body = nodes[0];
-        else if (!findings.blocking)
+        const nodes = lowerer.content({ ...opened.ctx, semantic: true }, opened.body);
+        const roots = lowerEmailNodes(nodes, staticPart.brandPlugin);
+        if (nodes.length === 1 && roots.length === 1) {
+          body = nodes[0];
+          expanded = roots[0];
+        } else if (!findings.blocking)
           findings.add(
             opened.ctx.module.parsed,
             opened.body,
             "multiple-roots",
-            nodes.length === 0
+            roots.length === 0
               ? "The email body renders nothing."
               : "The email body renders more than one root.",
             "Wrap the body in a single element such as <Email>.",
           );
       }
     }
-    if (subject !== undefined && body !== undefined) {
+    if (subject !== undefined && body !== undefined && expanded !== undefined) {
       // Styles: Tailwind first, then the project's stylesheets in import order.
       const sheets: Stylesheet[] = [];
       if (inputs.tailwindSheet !== undefined) sheets.push(inputs.tailwindSheet);
@@ -561,7 +567,7 @@ export const lowerProject = (
           columnNumber: source[1],
         };
       };
-      const styled = applyStyles(body, mergeStylesheets(sheets), {
+      const styled = applyStyles(expanded, mergeStylesheets(sheets), {
         locate,
         report: (diagnostic) => {
           findings.items.push(diagnostic);
@@ -638,7 +644,17 @@ export const lowerProject = (
             [subject, ...(preheader === undefined ? [] : [preheader])],
           ),
         );
-      emailIr = { subject, ...(preheader === undefined ? {} : { preheader }), body: root };
+      emailIr = {
+        subject,
+        ...(preheader === undefined ? {} : { preheader }),
+        body,
+        presentation: {
+          nodes: emailPresentationOverrides(expanded, styled.root),
+          headCss: styled.headCss,
+          fontFaceCss: styled.fontFaceCss,
+          brandPlugin: staticPart.brandPlugin,
+        },
+      };
     }
   }
   const channelIr = channelBodies({
