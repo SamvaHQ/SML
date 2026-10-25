@@ -613,9 +613,12 @@ export const createEditorBundle = (
         readonly text: string;
       }
     >();
+    // One element's edit that cannot be applied says why and leaves the others pending; only a
+    // failure of the write itself, which every pending edit shares, clears them all.
+    const refuseMarkdown = (reason: string): void => set({ sourceEditError: reason });
     const failMarkdown = (reason: string): void => {
       pendingMarkdown.clear();
-      set({ sourceEditError: reason });
+      refuseMarkdown(reason);
     };
     const waitForMarkdownRender = (revision: string, fixture: string): Promise<boolean> =>
       new Promise((resolve) => {
@@ -648,10 +651,12 @@ export const createEditorBundle = (
         target.doc.rev !== item.revision ||
         target.fixture !== item.fixture ||
         target.tag !== item.tag ||
-        target.origin.fileName !== item.file ||
-        !actions.beginLifecycle()
-      )
-        return failMarkdown(staleMarkdown);
+        target.origin.fileName !== item.file
+      ) {
+        refuseMarkdown(staleMarkdown);
+        return drainMarkdown();
+      }
+      if (!actions.beginLifecycle()) return failMarkdown(staleMarkdown);
       markdownSaving = true;
       const generation = markdownGeneration;
       void spine
@@ -666,10 +671,10 @@ export const createEditorBundle = (
             get().doc?.fixture !== item.fixture ||
             project.rev !== item.revision
           )
-            return failMarkdown(staleMarkdown);
+            return refuseMarkdown(staleMarkdown);
           const file = project.files.find((entry) => entry.path === item.file);
           if (file?.content == null || file.binary === true || file.status === "deleted")
-            return failMarkdown("This content is unavailable. Select it again before editing.");
+            return refuseMarkdown("This content is unavailable. Select it again before editing.");
           const result = markdownEdit(
             file.content,
             file.path,
@@ -677,13 +682,13 @@ export const createEditorBundle = (
             { kind: "text", text: item.text },
             { tag: item.tag },
           );
-          if (!result.ok) return failMarkdown(result.reason);
+          if (!result.ok) return refuseMarkdown(result.reason);
           if (result.edits.length === 0) return;
           const changed = applySourceReplacements(file.content, result.edits, {
             markdown: { file: file.path },
           });
           if (!changed.ok)
-            return failMarkdown("This change cannot keep the text and formatting intact.");
+            return refuseMarkdown("This change cannot keep the text and formatting intact.");
           const written = await target.api.updateFile({
             path: file.path,
             baseRev: project.rev,

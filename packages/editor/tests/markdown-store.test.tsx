@@ -563,4 +563,19 @@ describe("Markdown editing through the real editor store", () => {
     expect(editor.fileWrites).toEqual([]);
     expect(editor.store.getState().lifecycleBusy).toBe(false);
   });
+
+  it("keeps another element's pending edit when one is refused", async () => {
+    const editor = await harness("First\n\nSecond");
+    const paragraphs = editor.probe.render!.selections.filter(
+      (item) => item.tag === "p" && item.origins[0]?.fileName === ISSUE,
+    );
+    const [first, second] = [paragraphs[0]!.instancePath, paragraphs[1]!.instancePath];
+    act(() => editor.probe.select(first));
+    act(() => editor.probe.editMarkdownText(first, ""));
+    act(() => editor.probe.select(second));
+    act(() => editor.probe.editMarkdownText(second, "Second changed"));
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(1), { timeout: 3000 });
+    expect(editor.fileWrites[0]?.content).toBe(metadata + "First\n\nSecond changed");
+    expect(editor.probe.sourceEditError).not.toBeNull();
+  });
 });
