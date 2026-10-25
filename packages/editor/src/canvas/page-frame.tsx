@@ -17,14 +17,18 @@ export interface PageFrameProps {
   /** A click on the page, as the page's own instance path (null outside any element). */
   readonly onSelect: (pagePath: string | null) => void;
   readonly onZoomGesture?: EmailFrameProps["onZoomGesture"];
+  /** Whether the text of the page element at this path can be edited in place. */
+  readonly canEditText?: EmailFrameProps["canEditText"];
+  /** Text typed into the page element at this path, reported when the author finishes. */
+  readonly onEditText?: EmailFrameProps["onEditText"];
 }
 
 /**
  * The web page the same authoring renders as, in the email frame's sandbox and with its click
  * contract: a click resolves `data-samva-instance` to a page path, and the selection stays in
  * email paths, drawn on the page element that corresponds to it. A selection with no page
- * counterpart draws nothing and is kept. Prose editing in the page would attach here, beside
- * `onSelect`.
+ * counterpart draws nothing and is kept. A double-click edits an element's text in place when
+ * the owner offers it.
  */
 export const PageFrame = ({
   page,
@@ -34,6 +38,8 @@ export const PageFrame = ({
   epoch,
   onSelect,
   onZoomGesture,
+  canEditText,
+  onEditText,
 }: PageFrameProps): ReactNode => {
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   const selectedPath = useMemo(
@@ -55,6 +61,8 @@ export const PageFrame = ({
       onSelect={onSelect}
       onHover={setHoveredPath}
       onZoomGesture={onZoomGesture}
+      canEditText={canEditText}
+      onEditText={onEditText}
       overlay={
         <SelectionOverlay
           renderRevision={page.revision}

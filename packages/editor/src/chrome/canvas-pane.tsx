@@ -23,6 +23,7 @@ import {
   type ZoomGesture,
 } from "../canvas/zoom";
 import { useEditorStore, useEditorStoreApi } from "../state/context";
+import { correspondingPath } from "../state/target-map";
 import { CheckActions } from "./check-actions";
 import { CheckDetails } from "./check-details";
 import { useContributions } from "./contributions";
@@ -269,6 +270,30 @@ export function CanvasPane({
     },
     [select, selectFromPage],
   );
+  // Prose is edited on the page, where the text reads as the reader sees it. Only text written in
+  // Markdown can be changed this way, and only where the host lets the project be saved.
+  const canEditPageText = useCallback(
+    (pagePath: string) => {
+      const { pageRender: page, render: email, editable, lifecycleCapability } = store.getState();
+      if (page === null || email === null || !editable || lifecycleCapability?.status !== "ready")
+        return false;
+      const emailPath = correspondingPath(page.selections, email.selections, pagePath);
+      const entry = email.selections.find((item) => item.instancePath === emailPath);
+      return entry?.origins.some((origin) => origin.fileName.endsWith(".md")) === true;
+    },
+    [store],
+  );
+  const onEditPageText = useCallback(
+    (pagePath: string, text: string) => {
+      const { pageRender: page, render: email } = store.getState();
+      if (page === null || email === null) return;
+      const emailPath = correspondingPath(page.selections, email.selections, pagePath);
+      if (emailPath === null) return;
+      selectFromPage(pagePath);
+      store.getState().actions.editMarkdownText(emailPath, text);
+    },
+    [selectFromPage, store],
+  );
   const onWeb = previewTarget === "web";
   const pageFrame =
     pageRender !== null && pageError === null && render !== null ? (
@@ -280,6 +305,8 @@ export function CanvasPane({
         epoch={previewEpoch}
         onSelect={onPageSelect}
         onZoomGesture={active ? onZoomGesture : undefined}
+        canEditText={canEditPageText}
+        onEditText={onEditPageText}
       />
     ) : null;
 
