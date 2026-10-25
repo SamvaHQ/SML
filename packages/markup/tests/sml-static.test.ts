@@ -115,7 +115,7 @@ const errors = (diagnostics: readonly TemplateDiagnostic[]) =>
 const renderFixture = async (sources: Sources, fixture = "default") => {
   const compiled = await compile(sources);
   expect(errors(compiled.diagnostics)).toEqual([]);
-  return render(compiled.template!, compiled.fixtures[fixture], { channel: "email" });
+  return render(compiled.template!, compiled.fixtures[fixture], { target: "email" });
 };
 
 const codes = async (sources: Sources) =>
@@ -187,11 +187,11 @@ describe("the static profile accepts", () => {
       )`,
     });
     expect(errors(compiled.diagnostics)).toEqual([]);
-    const vip = render(compiled.template!, compiled.fixtures.default, { channel: "email" });
+    const vip = render(compiled.template!, compiled.fixtures.default, { target: "email" });
     const plain = render(
       compiled.template!,
       { ...(compiled.fixtures.default as object), vip: false },
-      { channel: "email" },
+      { target: "email" },
     );
     expect(vip.html).toContain('class="font-bold" style="font-weight:700"');
     expect(plain.html).toContain('class="font-normal" style="font-weight:400"');
@@ -588,14 +588,14 @@ describe("chunked columns", () => {
   it("makes one Columns table per chunk and keeps the last partial row's cell width", async () => {
     const compiled = await compile({ body: grid("each={input.items} per={2}") });
     expect(errors(compiled.diagnostics)).toEqual([]);
-    const html = render(compiled.template!, withItems(3), { channel: "email" }).html;
+    const html = render(compiled.template!, withItems(3), { target: "email" }).html;
     expect(html.match(/<td class="sml-stack cell"/g)).toHaveLength(3);
     expect(html.match(/width="50%"/g)).toHaveLength(3);
     // Index restarts in each row.
     expect(html).toContain("T0 0");
     expect(html).toContain("T1 1");
     expect(html).toContain("T2 0");
-    expect(render(compiled.template!, withItems(0), { channel: "email" }).html).not.toContain(
+    expect(render(compiled.template!, withItems(0), { target: "email" }).html).not.toContain(
       'class="cell',
     );
   });
@@ -612,7 +612,7 @@ describe("chunked columns", () => {
       [7, 14],
     ] as const)
       expect(
-        render(compiled.template!, withItems(count), { channel: "email" }).html.match(
+        render(compiled.template!, withItems(count), { target: "email" }).html.match(
           new RegExp(`class="sml-stack cell" valign="top" width="${width}%"`, "g"),
         ),
       ).toHaveLength(count);

@@ -134,7 +134,7 @@ export const PARITY_DIGESTS = {
  * on one side.
  */
 export const PARITY_COMPILE_DIGEST =
-  "5bfe16d3dda84b41b098b50ff7147c531f91d5653fbad7b2c3b49430b11bcc1d";
+  "f3eb54b26f68c497088cd7238810da092982e71350ad09917052267431fd351a";
 
 const hex = (buffer: ArrayBuffer): string =>
   Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, "0")).join("");

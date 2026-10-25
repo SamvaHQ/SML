@@ -67,7 +67,7 @@ describe("previewEmail", () => {
   it("delivers the same document as render, plus an instance path on every element", async () => {
     const { template, fixtures } = await compile();
     const input = fixtures.vip;
-    const plain = render(template!, input, { channel: "email" });
+    const plain = render(template!, input, { target: "email" });
     const preview = previewEmail(template!, input);
     expect(preview.subject).toBe(plain.subject);
     expect(preview.text).toBe(plain.text);

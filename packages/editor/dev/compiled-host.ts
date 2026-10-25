@@ -102,7 +102,7 @@ const render = (compiled: Compiled, fixture: string, revision: string): EmailRen
   // oxlint-disable-next-line samva/no-try-catch-or-throw -- Plain library boundary: the renderer signals a refused render by throwing; the document then shows no preview.
   try {
     const preview = previewEmail(template, input);
-    const delivered = renderMessage(template, input, { channel: "email" });
+    const delivered = renderMessage(template, input, { target: "email" });
     return {
       revision,
       subject: preview.subject,

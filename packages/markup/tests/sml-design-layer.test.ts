@@ -39,7 +39,7 @@ const build = async (body: string, theme?: string) => {
     compiled,
     failures,
     render: (fixture: "vip" | "plain" = "vip") =>
-      renderTemplate(compiled.template!, compiled.fixtures[fixture], { channel: "email" }).html,
+      renderTemplate(compiled.template!, compiled.fixtures[fixture], { target: "email" }).html,
   };
 };
 

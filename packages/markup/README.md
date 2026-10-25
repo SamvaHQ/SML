@@ -107,10 +107,10 @@ export default defineTemplate({
 
 A template is read, not run. `@samva/markup/compiler` parses the file and the project files it
 imports without evaluating them, checks every binding against the schema, resolves Tailwind and CSS
-against the markup, and produces the compiled template: JSON, versioned (`"sml": 1`), carrying the
-markup, the bindings, the conditions, the loops and the formatters. `@samva/markup/render`
-renders that template against an input. It is a pure function with no dependencies, so nothing executes
-at send time.
+against the markup, and produces a semantic document: JSON, versioned (`"sml": 2`), carrying
+components, block and inline content, bindings, conditions, loops, formatters, and source positions.
+`@samva/markup/render` lowers that document to the requested target against an input. Rendering is
+pure, with no authored code or external I/O at send time.
 
 ```ts
 import { render } from "@samva/markup/render";
@@ -125,11 +125,27 @@ const compiled = await compileTemplate({
 if (compiled.template === undefined) throw new Error(compiled.diagnostics.map(String).join("\n"));
 
 const { subject, preheader, html, text } = render(compiled.template, compiled.fixtures.default, {
-  channel: "email",
+  target: "email",
   locale: "en-US",
   timeZone: "UTC",
 });
 ```
+
+Every email template also has a web target. It returns the page body and hints for the host's page
+shell; the host owns the document head, canonical URL, indexing, and access control.
+
+```ts
+const page = render(compiled.template, compiled.fixtures.default, { target: "web" });
+// page.html is semantic HTML; page.headHints carries the styles and document hints.
+```
+
+Email lowering preserves email layout, Outlook fallbacks, subject, preheader, and plain text.
+Web lowering uses semantic elements and supplies styles separately from the HTML body. Both read
+the same authored components and source positions. `COMPONENT_DEGRADATIONS` from
+`@samva/markup/compatibility` declares what each component loses in email.
+`templateEmailDegradations(compiled.template)` locates those declarations in the authored source;
+`checkCompatibility` reports content degradations alongside client HTML findings. A `same`
+declaration records that content is preserved and adds no finding.
 
 ### The static profile
 

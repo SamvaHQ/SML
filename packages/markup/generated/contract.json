@@ -1551,6 +1551,11 @@
       "fix": "Write the number literally, for example height={44}."
     },
     {
+      "code": "email-component-degradation",
+      "summary": "A component loses content or behavior when lowered to email.",
+      "fix": "Compare the email and web previews; provide an email-safe equivalent for content readers need."
+    },
+    {
       "code": "email-contrast",
       "summary": "Text, or a filled button against its surroundings, falls below the contrast ratio in light or dark mode (below 1.5:1 a button is indistinguishable from its surface; WCAG 1.4.11 asks 3:1).",
       "fix": "Pair background and text tokens (bg-primary with text-primary-foreground), give the theme's dark-mode @theme a value for the token, or choose colors that reach the required ratio.",

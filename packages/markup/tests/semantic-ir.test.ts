@@ -133,11 +133,11 @@ describe("semantic compiled document", () => {
     const template = compiled.template!;
     const before = JSON.stringify(template);
     const input = Object.freeze({ ...(compiled.fixtures.basic as object) });
-    const first = render(template, input, { channel: "email" });
+    const first = render(template, input, { target: "email" });
     expect(await parityDigests(first)).toEqual(PARITY_DIGESTS);
-    expect(render(template, input, { channel: "email" })).toEqual(first);
+    expect(render(template, input, { target: "email" })).toEqual(first);
     expect(JSON.stringify(template)).toBe(before);
-    expect(render(JSON.parse(before), input, { channel: "email" })).toEqual(first);
+    expect(render(JSON.parse(before), input, { target: "email" })).toEqual(first);
   });
 });
 
@@ -167,7 +167,7 @@ describe("semantic email render boundary", () => {
     { type: "block", tag: "p", style: [["color", { bind: "color" }]] },
   ])("rejects malformed or unsafe semantic IR with RenderError: %j", (body) => {
     expect(() =>
-      render(artifact(body), { color: "red;display:none" }, { channel: "email" }),
+      render(artifact(body), { color: "red;display:none" }, { target: "email" }),
     ).toThrow(RenderError);
   });
 
@@ -178,7 +178,7 @@ describe("semantic email render boundary", () => {
       children: [],
     };
     cyclic.children.push(cyclic);
-    expect(() => render(artifact(cyclic), {}, { channel: "email" })).toThrow(RenderError);
+    expect(() => render(artifact(cyclic), {}, { target: "email" })).toThrow(RenderError);
     expect(() =>
       render(
         artifact({
@@ -187,7 +187,7 @@ describe("semantic email render boundary", () => {
           children: [{ each: { bind: "items" }, as: "item", children: [{ bind: "$item" }] }],
         }),
         { items: Array(10_001).fill("x") },
-        { channel: "email" },
+        { target: "email" },
       ),
     ).toThrow(RenderError);
   });
@@ -201,7 +201,7 @@ describe("semantic email render boundary", () => {
         children: [{ bind: "label" }],
       }),
       { url: 'https://example.test/?a="&b=2', label: "<&>" },
-      { channel: "email" },
+      { target: "email" },
     );
     expect(rendered.html).toContain("&lt;&amp;&gt;");
     expect(rendered.html).toContain('href="https://example.test/?a=&quot;&amp;b=2"');
@@ -214,7 +214,7 @@ describe("semantic email render boundary", () => {
       render(
         { sml: 2, template: "plain", schema: {}, sms: { body: [body] } },
         {},
-        { channel: "sms" },
+        { target: "sms" },
       ),
     ).toThrow(RenderError);
     expect(() =>
@@ -226,7 +226,7 @@ describe("semantic email render boundary", () => {
           whatsapp: { category: "UTILITY", language: "en", body: [body] },
         },
         {},
-        { channel: "whatsapp" },
+        { target: "whatsapp" },
       ),
     ).toThrow(RenderError);
   });

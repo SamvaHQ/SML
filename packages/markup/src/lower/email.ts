@@ -1,5 +1,5 @@
 /* oxlint-disable samva/no-hand-rolled-object-guard, samva/no-unsafe-type-assertion -- Target lowering discriminates JSON IR; renderEmail validates and bounds it before entering here. */
-import type { CompiledNode, CompiledValue } from "../compiled-template";
+import type { CompiledNode } from "../compiled-template";
 import { brandComponents } from "../email/brand";
 import type { BrandPlugin } from "../email/brand-plugin";
 import {
@@ -12,7 +12,6 @@ import {
   Link,
   Section,
   Spacer,
-  equalColumnWidth,
 } from "../email/components";
 import {
   collectEmailDiagnostics,
@@ -22,10 +21,8 @@ import {
 } from "../email/jsx-runtime";
 import { PRIMITIVE_CLASSES } from "../email/primitive-css";
 import { samvaBrandPlugin } from "../email/samva-brand-plugin";
-import { isValueNode, type SemanticComponent, type SemanticProp } from "../ir/nodes";
+import { isValueNode, type SemanticProp } from "../ir/nodes";
 import { emailNodeToIr, propFor, Tokens } from "../ir/tokens";
-
-const COMPONENTS = { Email, Section, Columns, Column, Button, Spacer, Divider, Image, Link };
 
 const prop = (tokens: Tokens, value: SemanticProp): unknown => {
   if (typeof value === "object" && value !== null && "object" in value)
@@ -49,25 +46,6 @@ const childrenProp = (tokens: Tokens, nodes: readonly CompiledNode[]): EmailChil
   );
 };
 
-interface ColumnContext {
-  readonly width?: CompiledValue | undefined;
-  readonly stack?: boolean | undefined;
-}
-
-const columnWidth = (component: SemanticComponent): CompiledValue | undefined => {
-  const list = component.props?.each;
-  if (list === undefined) return undefined;
-  const per = component.props?.per;
-  if (typeof per === "number") return equalColumnWidth(per);
-  const count: CompiledValue = { length: list as CompiledValue };
-  return {
-    concat: [
-      { op: "/", args: [{ op: "-", args: [100, { op: "%", args: [100, count] }] }, count] },
-      "%",
-    ],
-  };
-};
-
 /**
  * Expand one semantic document through the existing email primitives. Input expressions remain
  * expressions: expansion does not evaluate input, call the compiler or resolve any stylesheet.
@@ -78,7 +56,10 @@ export const lowerEmailNodes = (
   brandPlugin: BrandPlugin = samvaBrandPlugin,
   report?: (diagnostic: EmailFinding) => void,
 ): CompiledNode[] => {
-  const walk = (list: readonly CompiledNode[], context: ColumnContext): CompiledNode[] =>
+  // The published compiler/edit entries can enter the renderer through the JSX preview cycle.
+  // Read the component bindings only when lowering starts, after module initialization.
+  const components = { Email, Section, Columns, Column, Button, Spacer, Divider, Image, Link };
+  const walk = (list: readonly CompiledNode[]): CompiledNode[] =>
     list.flatMap((node): CompiledNode[] => {
       if (isValueNode(node)) return [node];
       if ("type" in node) {
@@ -89,18 +70,11 @@ export const lowerEmailNodes = (
             {
               el: tag,
               ...rest,
-              ...(children === undefined ? {} : { children: walk(children, context) }),
+              ...(children === undefined ? {} : { children: walk(children) }),
             },
           ];
         }
-        const childContext: ColumnContext =
-          node.name === "Columns"
-            ? {
-                width: columnWidth(node),
-                stack: node.props?.stack === undefined || node.props.stack === true,
-              }
-            : {};
-        const kids = walk(node.children ?? [], childContext);
+        const kids = walk(node.children ?? []);
         const tokens = new Tokens();
         const props: Record<string, unknown> = {};
         for (const [name, value] of Object.entries(node.props ?? {})) {
@@ -114,9 +88,9 @@ export const lowerEmailNodes = (
           props[name] = prop(tokens, value);
         }
         if (node.name === "Column") {
-          if (props.width === undefined && context.width !== undefined)
-            props.width = propFor(tokens, context.width);
-          if (context.stack === true)
+          if (props.width === undefined && node.emailColumn?.width !== undefined)
+            props.width = propFor(tokens, node.emailColumn.width);
+          if (node.emailColumn?.stack === true)
             props.className =
               typeof props.className === "string" && props.className !== ""
                 ? `${PRIMITIVE_CLASSES.stack} ${props.className}`
@@ -140,7 +114,7 @@ export const lowerEmailNodes = (
         const fn =
           node.name === "BrandLogo" || node.name === "BrandFooter"
             ? brandComponents({ ...node.brand!, css: "" }, brandPlugin)[node.name]
-            : COMPONENTS[node.name];
+            : components[node.name];
         const output = (fn as (props: Record<string, unknown>) => EmailNode | null)(props);
         if (output !== null)
           for (const diagnostic of collectEmailDiagnostics(output)) report?.(diagnostic);
@@ -150,19 +124,19 @@ export const lowerEmailNodes = (
         return [
           {
             ...node,
-            ...(node.children === undefined ? {} : { children: walk(node.children, context) }),
+            ...(node.children === undefined ? {} : { children: walk(node.children) }),
           },
         ];
-      if ("each" in node) return [{ ...node, children: walk(node.children, context) }];
+      if ("each" in node) return [{ ...node, children: walk(node.children) }];
       if ("if" in node)
         return [
           {
             ...node,
-            then: walk(node.then, context),
-            ...(node.else === undefined ? {} : { else: walk(node.else, context) }),
+            then: walk(node.then),
+            ...(node.else === undefined ? {} : { else: walk(node.else) }),
           },
         ];
       return [node];
     });
-  return walk(nodes, {});
+  return walk(nodes);
 };

@@ -33,7 +33,7 @@ const tpl = (
 });
 
 const html = (body: CompiledNode, input: unknown = {}, options = {}): string =>
-  render(tpl(body), input, { channel: "email", ...options }).html;
+  render(tpl(body), input, { target: "email", ...options }).html;
 
 const el = (
   tag: string,
@@ -332,13 +332,13 @@ describe("render basics", () => {
     const out = render(
       tpl(el("div", {}, node, "!")),
       { c: '"><script>', t: "<i>&" },
-      { channel: "email" },
+      { target: "email" },
     );
     expect(out.html).toBe(
       '<div><v:rect fillcolor="&quot;&gt;&lt;script&gt;"><b>&lt;i&gt;&amp;</b>!</div>',
     );
     expect(out.text).toBe("<i>&!");
-    expect(render(tpl(el("div", {}, { raw: ["<!--x-->"] })), {}, { channel: "email" }).text).toBe(
+    expect(render(tpl(el("div", {}, { raw: ["<!--x-->"] })), {}, { target: "email" }).text).toBe(
       "",
     );
   });
@@ -349,7 +349,7 @@ describe("subject, preheader and document assembly", () => {
     const out = render(
       tpl(el("p"), { subject: { concat: ["Order ", bind("id")] } }),
       { id: 12 },
-      { channel: "email" },
+      { target: "email" },
     );
     expect(out.subject).toBe("Order 12");
     expect(out.preheader).toBeUndefined();
@@ -362,7 +362,7 @@ describe("subject, preheader and document assembly", () => {
       el("head", {}, el("title", {}, "T")),
       el("body", {}, el("p", {}, "x")),
     );
-    const out = render(tpl(document), {}, { channel: "email" });
+    const out = render(tpl(document), {}, { target: "email" });
     expect(out.html.startsWith("<!DOCTYPE html PUBLIC")).toBe(true);
     expect(out.html).toContain("<html><head><title>T</title></head><body><p>x</p></body></html>");
     expect(html(el("p"))).toBe("<p></p>");
@@ -381,7 +381,7 @@ describe("subject, preheader and document assembly", () => {
 
   it("inserts the preheader first in the body, matching the JSX pipeline", () => {
     for (const preheader of ["Preview <text> & more", "", "x".repeat(250)]) {
-      const mine = render(tpl(shell(), { preheader }), {}, { channel: "email" });
+      const mine = render(tpl(shell(), { preheader }), {}, { target: "email" });
       const old = renderEmailContent(undefined, () => ({
         subject: "S",
         preheader,
@@ -397,14 +397,14 @@ describe("subject, preheader and document assembly", () => {
     const body = el("body", {}, el("p", {}, "A"), { preheader: true }, el("p", {}, "B"), {
       preheader: true,
     });
-    const out = render(tpl(body, { preheader: "Hi" }), {}, { channel: "email" });
+    const out = render(tpl(body, { preheader: "Hi" }), {}, { target: "email" });
     expect(out.html.match(/data-samva-preheader=/g)?.length).toBe(1);
     expect(out.html.indexOf("<p>A</p>")).toBeLessThan(out.html.indexOf("data-samva-preheader="));
     expect(out.html.indexOf("data-samva-preheader=")).toBeLessThan(out.html.indexOf("<p>B</p>"));
   });
 
   it("puts the preheader first overall when there is no body", () => {
-    const out = render(tpl(el("p", {}, "x"), { preheader: "Hi" }), {}, { channel: "email" });
+    const out = render(tpl(el("p", {}, "x"), { preheader: "Hi" }), {}, { target: "email" });
     const old = renderEmailContent(undefined, () => ({
       subject: "S",
       preheader: "Hi",
@@ -416,19 +416,19 @@ describe("subject, preheader and document assembly", () => {
 
   it("renders nothing for a marker without a preheader value, and for an unbound one", () => {
     expect(
-      render(tpl(el("body", {}, { preheader: true }, "x")), {}, { channel: "email" }).html,
+      render(tpl(el("body", {}, { preheader: true }, "x")), {}, { target: "email" }).html,
     ).toBe("<body>x</body>");
     const out = render(
       tpl(el("body", {}, { preheader: true }, "x"), { preheader: bind("p") }),
       {},
-      { channel: "email" },
+      { target: "email" },
     );
     expect(out.html).toBe("<body>x</body>");
     expect(out.preheader).toBeUndefined();
   });
 
   it("emits the exact hidden block", () => {
-    const out = render(tpl(el("body"), { preheader: "Hi" }), {}, { channel: "email" });
+    const out = render(tpl(el("body"), { preheader: "Hi" }), {}, { target: "email" });
     expect(out.html).toBe(
       '<body><div data-samva-preheader="Hi" style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0">Hi<div data-samva-preheader-padding="">' +
         " ‌​‍‎‏﻿".repeat(29) +
@@ -440,7 +440,7 @@ describe("subject, preheader and document assembly", () => {
     "refuses a template compiled as another version on the %s channel",
     (channel) => {
       const future = { ...tpl(el("p")), sml: 3 } as unknown as CompiledTemplate;
-      expect(codes(() => render(future, {}, { channel }))).toEqual(["unsupported-version"]);
+      expect(codes(() => render(future, {}, { target: channel }))).toEqual(["unsupported-version"]);
     },
   );
 
@@ -449,12 +449,12 @@ describe("subject, preheader and document assembly", () => {
     ["carriage return", "a\rb"],
     ["nul", "a\u0000b"],
   ])("rejects a subject with a %s", (_name, subject) => {
-    expect(codes(() => render(tpl(el("p"), { subject }), {}, { channel: "email" }))).toContain(
+    expect(codes(() => render(tpl(el("p"), { subject }), {}, { target: "email" }))).toContain(
       "invalid-subject",
     );
     expect(
       codes(() =>
-        render(tpl(el("p"), { subject: bind("s") }), { s: subject }, { channel: "email" }),
+        render(tpl(el("p"), { subject: bind("s") }), { s: subject }, { target: "email" }),
       ),
     ).toContain("invalid-subject");
     expect(
@@ -462,7 +462,7 @@ describe("subject, preheader and document assembly", () => {
         render(
           tpl(el("p"), { subject: { concat: ["x", bind("s")] } }),
           { s: subject },
-          { channel: "email" },
+          { target: "email" },
         ),
       ),
     ).toContain("invalid-subject");
@@ -470,9 +470,9 @@ describe("subject, preheader and document assembly", () => {
 
   it("requires the channel", () => {
     expect(
-      codes(() => render({ sml: 2, template: "t", schema: {} }, {}, { channel: "email" })),
+      codes(() => render({ sml: 2, template: "t", schema: {} }, {}, { target: "email" })),
     ).toEqual(["missing-channel"]);
-    expect(codes(() => render(tpl(el("p")), {}, { channel: "sms" }).text)).toEqual([
+    expect(codes(() => render(tpl(el("p")), {}, { target: "sms" }).text)).toEqual([
       "missing-channel",
     ]);
   });
@@ -490,7 +490,7 @@ describe("format nodes and options", () => {
     ir: Partial<CompiledTemplate>,
     options = {},
     input: unknown = {},
-  ) => render(tpl(el("p", {}, value), {}, ir), input, { channel: "email", ...options }).html;
+  ) => render(tpl(el("p", {}, value), {}, ir), input, { target: "email", ...options }).html;
 
   it("formats through the fmt module", () => {
     expect(text(money(bind("a")), {}, {}, { a: 1234.5 })).toBe(
@@ -549,8 +549,8 @@ describe("format nodes and options", () => {
       { preheader: "P" },
     );
     const before = JSON.stringify(input);
-    const first = render(ir, input, { channel: "email" });
-    const second = render(ir, input, { channel: "email" });
+    const first = render(ir, input, { target: "email" });
+    const second = render(ir, input, { target: "email" });
     expect(second).toEqual(first);
     expect(JSON.stringify(input)).toBe(before);
     expect(JSON.stringify(ir)).toBe(JSON.stringify(deepFreeze(JSON.parse(JSON.stringify(ir)))));
@@ -561,7 +561,7 @@ describe("format nodes and options", () => {
 
 describe("the sms channel render", () => {
   const sms = (body: CompiledNode[], input: unknown = {}) =>
-    render({ sml: 2, template: "t", schema: {}, sms: { body } }, input, { channel: "sms" }).text;
+    render({ sml: 2, template: "t", schema: {}, sms: { body } }, input, { target: "sms" }).text;
 
   it("renders values, conditionals, loops and formats as plain text", () => {
     expect(
@@ -775,14 +775,14 @@ describe("differential parity with the JSX pipeline", () => {
   it.each(battery)("%s", (_name, spec) => {
     const node = toJsx(spec);
     if (typeof node === "string") throw new Error("root must be an element");
-    const mine = render(tpl(toIr(spec)), {}, { channel: "email" });
+    const mine = render(tpl(toIr(spec)), {}, { target: "email" });
     expect(mine.html).toBe(serializeEmailHtml(node as never).html);
     expect(mine.text).toBe(deriveEmailText(node as never));
   });
 
   it("matches bound content escaped the same way as the literal", () => {
     const literal = 'Ada <script>alert(1)</script> & "q"';
-    const bound = render(tpl(el("p", {}, bind("v"))), { v: literal }, { channel: "email" });
+    const bound = render(tpl(el("p", {}, bind("v"))), { v: literal }, { target: "email" });
     const node = jsx("p", { children: literal });
     expect(bound.html).toBe(serializeEmailHtml(node).html);
     expect(bound.text).toBe(deriveEmailText(node));
@@ -822,7 +822,7 @@ describe("differential parity with the JSX pipeline", () => {
         ],
       }),
     }));
-    const mine = render(ir, {}, { channel: "email" });
+    const mine = render(ir, {}, { target: "email" });
     expect(mine.html).toBe(old.html);
     expect(mine.text).toBe(old.text);
   });
@@ -862,7 +862,7 @@ describe("adversarial: attribute and text breakout", () => {
 
   it("passes bidirectional and unicode text through unchanged", () => {
     const value = "‮evil‬ ⁦x⁩ ‏ mixed עברית 🎉";
-    const out = render(tpl(el("p", {}, bind("v"))), { v: value }, { channel: "email" });
+    const out = render(tpl(el("p", {}, bind("v"))), { v: value }, { target: "email" });
     expect(out.html).toBe(`<p>${value}</p>`);
   });
 
@@ -1238,7 +1238,7 @@ describe("adversarial: bindings and values", () => {
       "invalid-value",
     ]);
     expect(
-      codes(() => render(tpl(el("p"), { subject: bind("o") }), { o: {} }, { channel: "email" })),
+      codes(() => render(tpl(el("p"), { subject: bind("o") }), { o: {} }, { target: "email" })),
     ).toEqual(["invalid-value"]);
   });
 
@@ -1296,10 +1296,10 @@ describe("adversarial: resource limits", () => {
     el("p", {}, { each: bind("xs"), as: "x", children: ["."] });
 
   it("caps total iterations per render", () => {
-    const ok = render(tpl(loop(0)), { xs: new Array(10_000).fill(1) }, { channel: "email" });
+    const ok = render(tpl(loop(0)), { xs: new Array(10_000).fill(1) }, { target: "email" });
     expect(ok.html.length).toBe("<p></p>".length + 10_000);
     expect(
-      codes(() => render(tpl(loop(0)), { xs: new Array(10_001).fill(1) }, { channel: "email" })),
+      codes(() => render(tpl(loop(0)), { xs: new Array(10_001).fill(1) }, { target: "email" })),
     ).toEqual(["render-limit"]);
   });
 
@@ -1314,9 +1314,9 @@ describe("adversarial: resource limits", () => {
       },
     );
     expect(
-      codes(() => render(tpl(nested), { xs: new Array(101).fill(1) }, { channel: "email" })),
+      codes(() => render(tpl(nested), { xs: new Array(101).fill(1) }, { target: "email" })),
     ).toEqual(["render-limit"]);
-    expect(render(tpl(nested), { xs: new Array(9).fill(1) }, { channel: "email" }).html).toContain(
+    expect(render(tpl(nested), { xs: new Array(9).fill(1) }, { target: "email" }).html).toContain(
       ".",
     );
   });

@@ -81,8 +81,8 @@ const build = async (channel: MarkupChannel, source: string, revision: string) =
     template === undefined || fixture === null
       ? null
       : channel === "sms"
-        ? { revision, text: render(template, input, { channel: "sms" }).text }
-        : { revision, ...render(template, input, { channel: "whatsapp" }) };
+        ? { revision, text: render(template, input, { target: "sms" }).text }
+        : { revision, ...render(template, input, { target: "whatsapp" }) };
   return {
     channel,
     preview: { status: "current" as const },

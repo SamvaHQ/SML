@@ -24,6 +24,11 @@ export interface SemanticComponent {
   readonly children?: readonly CompiledNode[];
   /** Resolved brand data, without its stylesheet, for brand components only. */
   readonly brand?: Omit<EmailBrand, "css">;
+  /** Resolved at the authoring call site: partials intentionally clear inherited cell layout. */
+  readonly emailColumn?: {
+    readonly width?: CompiledValue;
+    readonly stack: boolean;
+  };
   readonly src?: CompiledSource;
 }
 
@@ -61,6 +66,23 @@ export interface EmailPresentation {
   readonly headCss: string;
   readonly fontFaceCss: string;
   readonly brandPlugin: BrandPlugin;
+}
+
+/** Parsed CSS structure: the renderer validates each context before writing shell-owned CSS. */
+export interface WebCssRule {
+  readonly selector?: string;
+  readonly at?: string;
+  readonly style?: readonly (readonly [property: string, value: CompiledValue])[];
+  readonly children?: readonly WebCssRule[];
+}
+
+export interface WebPresentation {
+  readonly rules: readonly WebCssRule[];
+  readonly componentLayer?: number;
+  /** A generated class must outrank normal project selectors to retain authored style priority. */
+  readonly inlineSpecificity?: number;
+  /** Authored style elements in document traversal order, independent of project stylesheets. */
+  readonly stylesheets?: readonly (readonly WebCssRule[])[];
 }
 
 export const isStaticScalar = (value: CompiledValue): value is string | number | boolean | null =>

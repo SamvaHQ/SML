@@ -18,6 +18,7 @@ import { samvaBrandPlugin } from "../email/samva-brand-plugin";
 import { mergeStylesheets } from "../email/stylesheets";
 import { inputSchema, jsonSchema } from "../input-schema";
 import { emailPresentationOverrides } from "../ir/email-presentation";
+import { webPresentation } from "../ir/web-presentation";
 import { lowerEmailNodes } from "../lower/email";
 import { TEMPLATE_ID_PATTERN, TEMPLATE_NAME_PATTERN } from "../template";
 import { child, children, text, unwrap, type Node } from "./ast";
@@ -648,6 +649,7 @@ export const lowerProject = (
         subject,
         ...(preheader === undefined ? {} : { preheader }),
         body,
+        web: webPresentation(sheets, inputs.tailwindSheet, body),
         presentation: {
           nodes: emailPresentationOverrides(expanded, styled.root),
           headCss: styled.headCss,

@@ -412,6 +412,14 @@ export const runBuiltinComponent = (call: ComponentCall): CompiledNode[] => {
       ...(Object.keys(authored).length === 0 ? {} : { props: authored }),
       ...(kids.length === 0 ? {} : { children: kids }),
       ...(brand === undefined ? {} : { brand }),
+      ...(exported === "Column"
+        ? {
+            emailColumn: {
+              ...(ctx.columnWidth === undefined ? {} : { width: ctx.columnWidth }),
+              stack: ctx.columnStack === true,
+            },
+          }
+        : {}),
       src: lowerer.src(ctx.module, node),
     } satisfies SemanticComponent,
   ]);

@@ -131,10 +131,10 @@ describe("the sms channel", () => {
   it("lowers bindings, conditionals, formatters and maps to plain text", async () => {
     const compiled = await ok(SMS);
     expect(compiled.template?.sms?.category).toBe("transactional");
-    expect(render(compiled.template!, compiled.fixtures.default, { channel: "sms" }).text).toBe(
+    expect(render(compiled.template!, compiled.fixtures.default, { target: "sms" }).text).toBe(
       "Hi Ada, order A-1 ships. Priority. Track: https://track.example/A-1 Total $84.00. [Shirt] [Hat]",
     );
-    expect(render(compiled.template!, compiled.fixtures.bare, { channel: "sms" }).text).toBe(
+    expect(render(compiled.template!, compiled.fixtures.bare, { target: "sms" }).text).toBe(
       "Hi Bo, order B-2 ships. Total $5.00.",
     );
   });
@@ -179,7 +179,7 @@ describe("the whatsapp channel", () => {
     const compiled = await ok(WHATSAPP);
     const ir = compiled.template!.whatsapp!;
     expect(ir.buttons?.[0]).toHaveProperty("if");
-    expect(render(compiled.template!, compiled.fixtures.default, { channel: "whatsapp" })).toEqual({
+    expect(render(compiled.template!, compiled.fixtures.default, { target: "whatsapp" })).toEqual({
       language: "en_US",
       category: "utility",
       header: { type: "text", text: "Order A-1" },
@@ -193,7 +193,7 @@ describe("the whatsapp channel", () => {
       ],
     });
     expect(
-      render(compiled.template!, compiled.fixtures.bare, { channel: "whatsapp" }).buttons.map(
+      render(compiled.template!, compiled.fixtures.bare, { target: "whatsapp" }).buttons.map(
         (b) => b.type,
       ),
     ).toEqual(["quick-reply", "phone", "copy-code"]);
@@ -209,7 +209,7 @@ describe("the whatsapp channel", () => {
         </WhatsApp.Buttons>
       </WhatsApp>
     ),`);
-    const rendered = render(compiled.template!, compiled.fixtures.bare, { channel: "whatsapp" });
+    const rendered = render(compiled.template!, compiled.fixtures.bare, { target: "whatsapp" });
     expect(rendered.header).toEqual({ type: "image", text: "https://cdn.example/a.png" });
     expect(rendered.buttons).toEqual([{ type: "quick-reply", text: "Join" }]);
   });
@@ -286,7 +286,7 @@ describe("the whatsapp channel", () => {
         { type: "flow", text: "Take survey", flow: "order-survey", action: "navigate" },
       ]);
       expect(
-        render(compiled.template!, compiled.fixtures.default, { channel: "whatsapp" }).buttons,
+        render(compiled.template!, compiled.fixtures.default, { target: "whatsapp" }).buttons,
       ).toEqual([{ type: "flow", text: "Take survey", flow: "order-survey", action: "navigate" }]);
     });
 
@@ -490,9 +490,9 @@ describe("one template, three channels", () => {
     expect(ir.email).toBeDefined();
     expect(ir.sms).toBeDefined();
     expect(ir.whatsapp).toBeDefined();
-    expect(render(ir, compiled.fixtures.default, { channel: "email" }).subject).toBe("Order A-1");
-    expect(render(ir, compiled.fixtures.default, { channel: "sms" }).text).toContain("Hi Ada");
-    expect(render(ir, compiled.fixtures.default, { channel: "whatsapp" }).body).toContain("Hi Ada");
+    expect(render(ir, compiled.fixtures.default, { target: "email" }).subject).toBe("Order A-1");
+    expect(render(ir, compiled.fixtures.default, { target: "sms" }).text).toContain("Hi Ada");
+    expect(render(ir, compiled.fixtures.default, { target: "whatsapp" }).body).toContain("Hi Ada");
   });
 
   it("renders each channel to its own message shape", async () => {
@@ -505,16 +505,16 @@ describe("one template, three channels", () => {
     const compiledTemplate = compiled.template!;
     const input = compiled.fixtures.default;
 
-    const email = render(compiledTemplate, input, { channel: "email" });
+    const email = render(compiledTemplate, input, { target: "email" });
     expect(Object.keys(email).sort()).toEqual(["html", "preheader", "subject", "text"]);
     expect(email.html).toContain("Hi Ada");
 
-    const sms = render(compiledTemplate, input, { channel: "sms" });
+    const sms = render(compiledTemplate, input, { target: "sms" });
     expect(Object.keys(sms).sort()).toEqual(["segments", "text"]);
     expect(sms.segments).toEqual(smsSegmentInfo(sms.text));
     expect(sms.segments).toMatchObject({ encoding: "gsm7", segmentCount: 1 });
 
-    const whatsapp = render(compiledTemplate, input, { channel: "whatsapp" });
+    const whatsapp = render(compiledTemplate, input, { target: "whatsapp" });
     expect(whatsapp).toMatchObject({
       language: "en_US",
       body: "Hi Ada, your order A-1 has shipped.",
@@ -525,7 +525,7 @@ describe("one template, three channels", () => {
   it("names the channel the template does not declare", async () => {
     const compiled = await ok(SMS);
     expect(() =>
-      render(compiled.template!, compiled.fixtures.default, { channel: "email" }),
+      render(compiled.template!, compiled.fixtures.default, { target: "email" }),
     ).toThrow(RenderError);
   });
 });

@@ -12,7 +12,9 @@ export const validateEmailIr = (
     typeof value === "object" && value !== null && !Array.isArray(value);
   let visited = 0;
   const bound = (value: unknown, depth: number): void => {
-    if (depth > 64 || ++visited > 100_000)
+    // JSON arrays/objects add envelope depth independently of semantic nodes or expressions.
+    // The renderer enforces its own 64-level limit after lowering and evaluating the body.
+    if (depth > 512 || ++visited > 100_000)
       reject("The compiled email exceeds its depth or size limit.", "render-limit");
     if (typeof value === "string" && /[]/.test(value))
       reject("Compiled strings cannot contain internal token delimiters.");
@@ -52,6 +54,13 @@ export const validateEmailIr = (
           reject("Unknown semantic component.");
         if (value.props !== undefined && !record(value.props))
           reject("Component props must be an object.");
+        if (
+          value.emailColumn !== undefined &&
+          (value.name !== "Column" ||
+            !record(value.emailColumn) ||
+            typeof value.emailColumn.stack !== "boolean")
+        )
+          reject("Column email layout requires its compile-resolved stacking flag.");
         if (
           (value.name === "BrandLogo" || value.name === "BrandFooter") &&
           (!record(value.brand) || typeof value.brand.slug !== "string")

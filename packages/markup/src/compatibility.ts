@@ -13,7 +13,11 @@ export {
   type CompatibilityProvenance,
   type EmailClientTarget,
 } from "./email/compatibility";
-export { checkCompatibility } from "./sml/compatibility";
+export {
+  checkCompatibility,
+  templateEmailDegradations,
+  type ComponentEmailDegradation,
+} from "./sml/compatibility";
 export {
   COMPONENT_DEGRADATIONS,
   componentDegradation,

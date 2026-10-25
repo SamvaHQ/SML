@@ -86,7 +86,7 @@ describe("rendered email baseline", () => {
           if (compiled.template === undefined) return;
 
           const rendered = render(compiled.template, compiled.fixtures[fixture.name], {
-            channel: "email",
+            target: "email",
             locale: "en-US",
             timeZone: "UTC",
           });
