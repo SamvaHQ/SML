@@ -59,6 +59,8 @@ interface Options {
   readonly pageKeeps?: (selection: EmailElementSelection) => boolean;
   readonly chart?: boolean;
   readonly pageFails?: boolean;
+  /** Called on every web render the host is asked for. */
+  readonly onPageRequest?: () => void;
 }
 
 /**
@@ -87,6 +89,7 @@ const hostWithPage = async (options: Options = {}) => {
       ? {}
       : {
           render: async (_entry: string, _fixture: string, _target: "email" | "web") => {
+            options.onPageRequest?.();
             if (options.pageFails === true || email === null) return null;
             const page: PageRender = {
               kind: "page",
@@ -248,6 +251,29 @@ describe("web frame", () => {
 
     const link = pageDocument(view).querySelector("a[href]");
     if (link !== null) expect(fireEvent.click(link)).toBe(false);
+  });
+});
+
+describe("a web page that failed to render", () => {
+  it("asks the host again when the preview is refreshed", async () => {
+    const requests = vi.fn();
+    const view = await mount({ onPageRequest: requests });
+    await toWeb(view);
+    expect(requests).toHaveBeenCalledTimes(1);
+    storeOf().getState().actions.refreshPreview();
+    await waitFor(() => expect(requests).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("a text edit that could not be saved", () => {
+  it("says so above the web page", async () => {
+    const view = await mount();
+    await toWeb(view);
+    expect(view.queryByTestId("canvas.page-save-error")).toBeNull();
+    storeOf().setState({ sourceEditError: "Couldn't save this change. Try again." });
+    expect((await view.findByTestId("canvas.page-save-error")).textContent).toContain(
+      "Couldn't save this change",
+    );
   });
 });
 

@@ -274,13 +274,20 @@ export function CanvasPane({
   // Markdown can be changed this way, and only where the host lets the project be saved.
   const canEditPageText = useCallback(
     (pagePath: string) => {
-      const { pageRender: page, render: email, editable, lifecycleCapability } = store.getState();
+      const {
+        pageRender: page,
+        render: email,
+        editable,
+        sourceEditable: sourceWritable,
+        lifecycleCapability,
+      } = store.getState();
       // A page that is behind the email on screen would map its text onto the wrong origin.
       if (
         page === null ||
         email === null ||
         page.revision !== email.revision ||
         !editable ||
+        !sourceWritable ||
         lifecycleCapability?.status !== "ready"
       )
         return false;
@@ -301,6 +308,9 @@ export function CanvasPane({
     },
     [selectFromPage, store],
   );
+  // A text edit made on the page that could not be saved says so where the author is looking:
+  // the page keeps the typed text, so without this Enter would read as saved.
+  const pageSaveError = useEditorStore((state) => state.sourceEditError);
   const onWeb = previewTarget === "web";
   const pageFrame =
     pageRender !== null && pageError === null && render !== null ? (
@@ -407,6 +417,15 @@ export function CanvasPane({
                 onClick={(event) => event.stopPropagation()}
               >
                 {!onWeb && <EnvelopeCard />}
+                {onWeb && pageSaveError !== null && (
+                  <p
+                    role="alert"
+                    data-testid="canvas.page-save-error"
+                    className="bg-destructive/10 text-destructive mb-2 rounded-md px-3 py-2 text-xs"
+                  >
+                    {pageSaveError}
+                  </p>
+                )}
                 {frame === null ? (
                   onWeb ? (
                     <UnbuiltPage />

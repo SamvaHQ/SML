@@ -40,7 +40,7 @@ import {
   resolveSelection,
   withDocumentChange,
 } from "./derive";
-import { markdownEdit } from "./markdown-edit";
+import { markdownEdit, markdownNodeIndex, markdownNodeOrigin } from "./markdown-edit";
 import { createEditorSpine, type EditorSpine } from "./spine";
 import { correspondingPath } from "./target-map";
 import {
@@ -574,6 +574,7 @@ export const createEditorBundle = (
         state.previewRefreshing ||
         (state.lifecycleBusy && !markdownSaving) ||
         !state.editable ||
+        !state.sourceEditable ||
         state.hostBusy ||
         state.conflict ||
         state.pendingAuthoredSource !== null ||
@@ -624,9 +625,6 @@ export const createEditorBundle = (
         readonly generation: number;
       }
     >();
-    // The project revision our own last write produced; a queued edit is still current when the
-    // project has moved no further than that.
-    let ownRevision: string | null = null;
     const drainMarkdown = (): void => {
       if (markdownSaving) return;
       const next = pendingMarkdown.entries().next();
@@ -641,6 +639,7 @@ export const createEditorBundle = (
       if (
         host.access !== "editable" ||
         !state.editable ||
+        !state.sourceEditable ||
         state.hostBusy ||
         state.conflict ||
         state.pendingAuthoredSource !== null ||
@@ -663,7 +662,7 @@ export const createEditorBundle = (
             current.conflict ||
             current.pendingAuthoredSource !== null ||
             current.previewRefreshing ||
-            (project.rev !== item.baseRev && project.rev !== ownRevision)
+            project.rev !== item.baseRev
           ) {
             set({ sourceEditError: staleMarkdown });
             return;
@@ -694,10 +693,47 @@ export const createEditorBundle = (
             set({ sourceEditError: "This change cannot keep the text and formatting intact." });
             return;
           }
+          // Edits queued for other elements were taken against this revision. This write moves
+          // the project on, and a longer or shorter text moves the columns after it on its line,
+          // so each is found again by its place among the file's nodes and re-based on the
+          // revision this write produces.
+          const waiting = [...pendingMarkdown].flatMap(([queuedKey, queued]) =>
+            queued.baseRev === project.rev
+              ? [
+                  {
+                    queuedKey,
+                    queued,
+                    index:
+                      queued.origin.fileName === file.path
+                        ? markdownNodeIndex(file.content!, file.path, queued.origin, queued.tag)
+                        : null,
+                  },
+                ]
+              : [],
+          );
           return item.api
             .updateFile({ path: file.path, baseRev: project.rev, content: changed.source })
             .then((written) => {
-              ownRevision = written.rev;
+              for (const { queuedKey, queued, index } of waiting) {
+                // Typing that arrived during the write may have replaced the entry already.
+                if (pendingMarkdown.get(queuedKey) !== queued) continue;
+                pendingMarkdown.delete(queuedKey);
+                const origin =
+                  index === null
+                    ? queued.origin
+                    : index < 0
+                      ? null
+                      : markdownNodeOrigin(changed.source, file.path, index);
+                if (origin === null) {
+                  set({ sourceEditError: staleMarkdown });
+                  continue;
+                }
+                pendingMarkdown.set(originKey(origin, queued.tag), {
+                  ...queued,
+                  origin,
+                  baseRev: written.rev,
+                });
+              }
             });
         })
         .catch(() => {
@@ -1694,6 +1730,7 @@ export const createEditorBundle = (
     if (
       previous !== null &&
       previous.previewTarget === "web" &&
+      previous.previewEpoch === state.previewEpoch &&
       previous.render?.revision === revision &&
       previous.doc?.fixture === fixture
     ) {

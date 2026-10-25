@@ -36,7 +36,7 @@ const unused = (): never => {
 
 const harness = async (
   body = "Hello",
-  mode: "editable" | "readonly" | "no-lifecycle" = "editable",
+  mode: "editable" | "readonly" | "no-lifecycle" | "source-readonly" = "editable",
   extra: ReactNode = null,
 ) => {
   const base = await mockEditor();
@@ -87,6 +87,8 @@ const harness = async (
   const editable = {
     ...base.host,
     ...(mode === "no-lifecycle" ? {} : { lifecycle: { status: "ready" as const, api } }),
+    // A host can let the metadata change while it keeps the project's files read-only.
+    ...(mode === "source-readonly" ? { sourceAccess: "readonly" as const } : {}),
     document: {
       open: async (
         ...[onChange, onError, onComplete]: Parameters<typeof base.host.document.open>
@@ -209,7 +211,7 @@ describe("Markdown editing through the real editor store", () => {
     expect(editor.probe.lifecycleBusy).toBe(false);
   });
 
-  it.each(["readonly", "no-lifecycle"] as const)(
+  it.each(["readonly", "no-lifecycle", "source-readonly"] as const)(
     "does not write through a %s host",
     async (mode) => {
       const editor = await harness("Hello", mode);
@@ -363,5 +365,24 @@ describe("Markdown editing through the real editor store", () => {
     expect(field.value).toBe("Hello");
     await act(() => editor.publish("Hallo"));
     await waitFor(() => expect(field.value).toBe("Hallo"));
+  });
+
+  it("re-bases queued edits on elements that share a line with an earlier edit", async () => {
+    const editor = await harness("Start **one** and *two*");
+    const find = (tag: string) =>
+      editor.probe.render!.selections.find(
+        (item) => item.tag === tag && item.origins[0]?.fileName === ISSUE,
+      )!.instancePath;
+    const strong = find("strong");
+    const emphasis = find("em");
+    act(() => editor.probe.select(strong));
+    act(() => editor.probe.editMarkdownText(strong, "one more words"));
+    act(() => editor.probe.select(emphasis));
+    act(() => editor.probe.editMarkdownText(emphasis, "two again"));
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(2), { timeout: 3000 });
+    expect(editor.fileWrites[1]?.content).toBe(
+      metadata + "Start **one more words** and *two again*",
+    );
+    expect(editor.probe.sourceEditError).toBeNull();
   });
 });
