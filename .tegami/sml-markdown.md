@@ -8,7 +8,8 @@ packages:
 
 Parse `issues/*.md` with typed YAML frontmatter and static SML component tags through
 `@samva/markup/markdown`. Unknown components, raw HTML, expressions, and invalid metadata return
-located diagnostics. Prose and component attributes retain exact editable source spans.
+located diagnostics. Prose and component attributes retain exact editable source spans. Prose
+edits preserve ordinary punctuation and protect only syntax-sensitive delimiters and whitespace.
 
 Compile each issue into an email-only TSX layout containing one `<IssueContent />` from
 `@samva/markup/email`, then render the shared document to email or web. Vite discovers issues

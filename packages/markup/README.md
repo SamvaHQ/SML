@@ -334,4 +334,6 @@ literal attributes. Pass `{ tag: "a" }` as its fourth argument to distinguish a 
 paragraph sharing its source origin; without a tag it prefers the editable element. Feed its
 property to `literalReplacement`, then call `applySourceReplacements`
 with `{ markdown: { file: "issues/october.md" } }` to validate the rewritten issue. Offsets are
-UTF-16, end-exclusive, and stale spans are refused.
+UTF-16, end-exclusive, and stale spans are refused. Prose edits retain ordinary punctuation;
+syntax delimiters are escaped only where they could change the authored structure, and literal
+line breaks or edge whitespace are encoded as character references.

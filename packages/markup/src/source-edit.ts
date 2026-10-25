@@ -309,6 +309,41 @@ export const inspectMarkdownNode = (
 
 const PLAIN_JSX_TEXT = /^[^\s{}<>&](?:[^{}<>&\r\n\u2028\u2029]*[^\s{}<>&])?$/;
 
+/** Keep prose readable while protecting inline syntax and the surrounding block's delimiters. */
+const escapeMarkdownProse = (source: string, field: SourceProperty, value: string): string => {
+  let escaped = value
+    .replace(/[\\`*_[\]<{]/g, "\\$&")
+    .replace(/&(?=(?:[a-z][a-z\d]{1,31}|#\d{1,7}|#x[\da-f]{1,6});)/gi, "\\&")
+    // Literal line breaks and edge whitespace must not create blocks, indentation or hard breaks.
+    .replace(/[\r\n\t]|^ +| +$/g, (whitespace) =>
+      [...whitespace].map((character) => `&#${character.charCodeAt(0)};`).join(""),
+    );
+  // The parsed owner retains list-continuation indentation that a physical line cannot explain.
+  const block = parseIssue(source, "source.md").sourceNodes.find(
+    (authored) =>
+      authored.kind === "block" &&
+      authored.properties.some(
+        (candidate) =>
+          candidate.name === "children" &&
+          candidate.start === field.start &&
+          candidate.end === field.end,
+      ),
+  );
+  const prefix = block === undefined ? undefined : source.slice(block.start, field.start);
+  if (prefix !== undefined && /^ {0,3}$/.test(prefix)) {
+    escaped = escaped
+      .replace(/^(?:#{1,6}(?=[ \t]|$)|>|[-+](?=[ \t]|$)|(?:-+|=+)(?=[ \t]*$)|~{3,})/, "\\$&")
+      .replace(/^(\d{1,9})([.)])(?=[ \t]|$)/, "$1\\$2");
+  }
+  const lineEnd = source.slice(field.end).search(/[\r\n]/);
+  const suffix = source.slice(field.end, lineEnd < 0 ? source.length : field.end + lineEnd);
+  if (prefix !== undefined && /^ {0,3}#{1,6}[ \t]+$/.test(prefix) && /^[ \t]*$/.test(suffix)) {
+    // A trailing hash run otherwise becomes an ATX heading's closing marker and loses text.
+    escaped = escaped.replace(/(^|[ \t])(#+)$/, "$1\\$2");
+  }
+  return escaped;
+};
+
 /** Literal controls cannot overwrite a binding or computed expression. */
 export const literalReplacement = (
   source: string,
@@ -331,13 +366,16 @@ export const literalReplacement = (
       .replaceAll("{", "&#123;")
       .replaceAll("}", "&#125;")
       .replace(/[\r\n\t]/g, (character) => `&#${character.charCodeAt(0)};`);
-    const markdown = value
-      .replace(/[!-/:-@[-`{-~]/g, "\\$&")
-      .replace(
-        field.name === "href" || field.name === "src" ? /\s/g : /[\r\n\t]|^ +| +$/g,
-        (whitespace) =>
-          [...whitespace].map((character) => `&#${character.charCodeAt(0)};`).join(""),
-      );
+    const markdown =
+      field.name === "children"
+        ? escapeMarkdownProse(source, field, value)
+        : value
+            .replace(/[!-/:-@[-`{-~]/g, "\\$&")
+            .replace(
+              field.name === "href" || field.name === "src" ? /\s/g : /[\r\n\t]|^ +| +$/g,
+              (whitespace) =>
+                [...whitespace].map((character) => `&#${character.charCodeAt(0)};`).join(""),
+            );
     return {
       start: field.start,
       end: field.end,
