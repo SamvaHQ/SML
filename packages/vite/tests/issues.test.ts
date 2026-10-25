@@ -21,6 +21,80 @@ const issue = (slug: string, prose: string) =>
   `---\ntitle: ${slug} news\nslug: ${slug}\ntopic: product\n---\n# ${slug}\n\n${prose}\n`;
 
 describe("Markdown issue projects", () => {
+  it("keeps an ordinary root layout entry when the project has no issues or selected issue layout", async () => {
+    const ordinary = layout.replace("<IssueContent />", "<p>Ordinary template</p>");
+    const root = await tempProject({ "layout.tsx": ordinary });
+    const project = await loadProject({ root, dir: "." });
+    expect(project.catalog.templates.map((entry) => entry.entryPath)).toEqual(["layout.tsx"]);
+    expect(project.catalog.failures).toEqual([]);
+  });
+  it.each([
+    { directory: "templates", explicitDir: false, path: "relative" },
+    { directory: "emails", explicitDir: false, path: "relative" },
+    { directory: "templates", explicitDir: true, path: "relative" },
+    { directory: "emails", explicitDir: true, path: "relative" },
+    { directory: "templates", explicitDir: false, path: "normalized" },
+    { directory: "emails", explicitDir: true, path: "absolute" },
+  ])(
+    "keeps the selected $directory layout separate (explicit dir: $explicitDir, $path path)",
+    async ({ directory, explicitDir, path }) => {
+      const ordinary = layout
+        .replace('id: "newsletter-layout"', 'id: "ordinary"')
+        .replace("<IssueContent />", "<p>Ordinary template</p>");
+      const otherDirectory = directory === "templates" ? "emails" : "templates";
+      const root = await tempProject({
+        [`${directory}/layout.tsx`]: layout,
+        [`${directory}/ordinary.tsx`]: ordinary,
+        [`${otherDirectory}/layout.tsx`]: ordinary.replace('id: "ordinary"', 'id: "other"'),
+        "issues/first.md": issue("first", "First story"),
+      });
+      const issueLayout =
+        path === "absolute"
+          ? join(root, directory, "layout.tsx")
+          : path === "normalized"
+            ? `./${directory}/nested/../layout.tsx`
+            : `${directory}/layout.tsx`;
+      const options = { root, issueLayout, ...(explicitDir ? { dir: directory } : {}) };
+      const templatePaths = [
+        `${directory}/ordinary.tsx`,
+        ...(explicitDir ? [] : [`${otherDirectory}/layout.tsx`]),
+      ].sort();
+      const project = await loadProject(options);
+      expect(project.diagnostics).toEqual([]);
+      expect(project.catalog.failures).toEqual([]);
+      expect(project.catalog.templates.map((entry) => entry.entryPath).sort()).toEqual(
+        templatePaths,
+      );
+      expect(project.catalog.issues.map((entry) => entry.entryPath)).toEqual(["issues/first.md"]);
+
+      const selected = await loadProject(options, [`${directory}/layout.tsx`, "issues/first.md"]);
+      expect(selected.catalog.templates).toEqual([]);
+      expect(selected.catalog.failures).toEqual([]);
+      expect(selected.catalog.issues.map((entry) => entry.entryPath)).toEqual(["issues/first.md"]);
+
+      const build = await buildTemplates(options);
+      expect(build.ok).toBe(true);
+      expect(build.files.map((entry) => entry.id)).toEqual(
+        [...templatePaths, "issues/first.md"].sort(),
+      );
+
+      const renderedIssue = await renderTemplate({
+        ...options,
+        template: "first",
+        fixture: "default",
+      });
+      expect(renderedIssue.ok).toBe(true);
+      if (renderedIssue.ok) expect(renderedIssue.html).toContain("First story");
+      const renderedTemplate = await renderTemplate({
+        ...options,
+        template: `${directory}/ordinary.tsx`,
+        fixture: "default",
+      });
+      expect(renderedTemplate.ok).toBe(true);
+      if (renderedTemplate.ok) expect(renderedTemplate.html).toContain("Ordinary template");
+    },
+  );
+
   it("discovers issues by path separately from registered templates, using a configured layout", async () => {
     const root = await tempProject({
       "shell/newsletter.tsx": layout,

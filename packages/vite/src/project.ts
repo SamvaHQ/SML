@@ -18,6 +18,7 @@ import {
 import {
   discoverEntries,
   discoverIssues,
+  projectPath,
   readProjectFiles,
   SAMVA_DIR,
   templateDirectories,
@@ -100,8 +101,12 @@ export const loadProject = async (
     discoverIssues(root),
     readProjectFiles(root),
   ]);
-  const entries =
-    only === undefined ? discovered : discovered.filter((path) => only.includes(path));
+  const issueLayout = projectPath(root, resolve(root, options.issueLayout ?? "layout.tsx"));
+  const hasIssueLayout = options.issueLayout !== undefined || issuePaths.length > 0;
+  const entries = discovered.filter(
+    (path) =>
+      (!hasIssueLayout || path !== issueLayout) && (only === undefined || only.includes(path)),
+  );
   const themeFile = resolveThemePath(root, options.theme);
   const themeCss = await readProjectThemeCss(themeFile);
   const themePath =
@@ -113,7 +118,7 @@ export const loadProject = async (
     files,
     entries,
     issues: only === undefined ? issuePaths : issuePaths.filter((path) => only.includes(path)),
-    issueLayout: options.issueLayout,
+    issueLayout,
     assetBase: options.assetBase ?? "",
     brandPlugin: options.brandPlugin,
     ...(themeCss === undefined || themePath === undefined
