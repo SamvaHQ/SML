@@ -3,6 +3,8 @@ import type {
   DocumentChange,
   EditorDocument,
   EmailRender,
+  PageRender,
+  RenderTarget,
   FromDefault,
   RevisionToken,
 } from "@samva/editor/host";
@@ -14,6 +16,7 @@ import type {
   AsyncVersionsApi,
   EditorEvent,
 } from "@samva/editor/host";
+import { isPageRender } from "@samva/editor/host";
 import { applySourceReplacements, type SourceReplacement } from "@samva/markup/edit";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
@@ -33,6 +36,7 @@ import {
   withDocumentChange,
 } from "./derive";
 import { createEditorSpine, type EditorSpine } from "./spine";
+import { correspondingPath } from "./target-map";
 import {
   DOCUMENT_SELECTION,
   ENVELOPE_SELECTION,
@@ -226,6 +230,17 @@ export interface EditorActions {
   readonly replaceAuthoredSource: (source: string) => void;
   /** Show another declared fixture. A re-render at the same revision, not a document edit. */
   readonly viewFixture: (fixture: string) => void;
+  /**
+   * Preview the email or the web page. A web page needs the host's `render`; without it the
+   * target stays on email. The selection is kept: it resolves to the same authored element in
+   * either render.
+   */
+  readonly setPreviewTarget: (target: RenderTarget) => void;
+  /**
+   * Select the element a click in the web page landed on. Resolves the page's path to the email
+   * path the selection is kept in, and clears the selection when the email has no such element.
+   */
+  readonly selectFromPage: (pagePath: string) => void;
   /** Discard local edits and re-open the document from the host's current state. */
   readonly reload: () => void;
   /**
@@ -366,6 +381,14 @@ export interface EditorState {
   readonly telemetry: ((event: EditorEvent) => void) | undefined;
   readonly assetsCapability: Capability<AsyncAssetApi> | undefined;
   readonly fixtureCapability: Capability<AsyncFixtureApi> | undefined;
+  /** Whether the host renders the web page, so the toggle between targets is offered. */
+  readonly pageAvailable: boolean;
+  /** The surface the canvas previews. */
+  readonly previewTarget: RenderTarget;
+  /** The web page for the current revision and fixture; null until the host has rendered it. */
+  readonly pageRender: PageRender | null;
+  /** The last web page render failed; null when clear. */
+  readonly pageError: string | null;
   /** A fixture re-render is in flight. */
   readonly fixtureBusy: boolean;
   /** The last fixture switch failed; null when clear. */
@@ -800,6 +823,19 @@ export const createEditorBundle = (
               fixtureError: `Couldn't render the ${fixture} fixture.`,
             }),
         );
+      },
+
+      setPreviewTarget: (target) => {
+        if (target === "web" && host.render === undefined) return;
+        if (get().previewTarget === target) return;
+        set({ previewTarget: target });
+      },
+
+      selectFromPage: (pagePath) => {
+        const { pageRender, render } = get();
+        if (pageRender === null || render === null) return;
+        const emailPath = correspondingPath(pageRender.selections, render.selections, pagePath);
+        actions.select(emailPath);
       },
 
       reload: () => {
@@ -1320,6 +1356,10 @@ export const createEditorBundle = (
       telemetry: host.telemetry,
       assetsCapability: host.assets,
       fixtureCapability: host.fixtures,
+      pageAvailable: host.render !== undefined,
+      previewTarget: "email",
+      pageRender: null,
+      pageError: null,
       fixtureBusy: false,
       fixtureError: null,
       diagnosticAssistance: null,
@@ -1428,6 +1468,45 @@ export const createEditorBundle = (
   store.subscribe((state, previous) => {
     if (state.pins !== previous.pins) pinsListener?.(state.pins);
   });
+
+  // The web page is the host's render of the same revision and fixture the email shows, so it is
+  // requested whenever those change while the page is the previewed target.
+  let pageRequest = 0;
+  const syncPage = (state: EditorState, previous: EditorState | null) => {
+    const render = host.render;
+    const { doc } = state;
+    if (render === undefined || state.previewTarget !== "web" || doc === null) return;
+    const revision = state.render?.revision ?? null;
+    const fixture = doc.fixture;
+    if (
+      previous !== null &&
+      previous.previewTarget === "web" &&
+      previous.render?.revision === revision &&
+      previous.doc?.fixture === fixture
+    ) {
+      return;
+    }
+    if (fixture === null || revision === null) {
+      store.setState({ pageRender: null, pageError: null });
+      return;
+    }
+    pageRequest += 1;
+    const request = pageRequest;
+    void render(doc.origin.file, fixture, "web").then(
+      (page) => {
+        if (request !== pageRequest) return;
+        store.setState({
+          pageRender: page !== null && isPageRender(page) ? page : null,
+          pageError: page === null ? "Couldn't render the web page." : null,
+        });
+      },
+      () => {
+        if (request !== pageRequest) return;
+        store.setState({ pageRender: null, pageError: "Couldn't render the web page." });
+      },
+    );
+  };
+  store.subscribe((state, previous) => syncPage(state, previous));
 
   return {
     host,

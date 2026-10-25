@@ -71,6 +71,8 @@ export type FixtureName = string;
  * selection taken here can be told apart from one taken against a later build.
  */
 export interface EmailRender {
+  /** Absent on a render from a host that predates web targets; read it through {@link isPageRender}. */
+  readonly kind?: "email" | undefined;
   readonly revision: RevisionToken;
   readonly subject: string;
   readonly preheader?: string;
@@ -86,6 +88,27 @@ export interface EmailRender {
   /** Every rendered element in document order, with the source span that produced it. */
   readonly selections: ReadonlyArray<EmailElementSelection>;
 }
+
+/** A surface the editor previews: the delivered email, or the web page the same content renders as. */
+export type RenderTarget = "email" | "web";
+
+/**
+ * One render of the web page for an issue or email, with the same selection contract as
+ * {@link EmailRender}: `html` carries `data-samva-instance` on each element and each selection's
+ * origin is the authored span (TSX or Markdown) that produced it. It has no subject, preheader or
+ * sent size, which exist only for email.
+ */
+export interface PageRender {
+  readonly kind: "page";
+  readonly revision: RevisionToken;
+  /** A complete document the preview frame mounts, including the styles the page needs. */
+  readonly html: string;
+  readonly selections: ReadonlyArray<EmailElementSelection>;
+}
+
+/** Narrow a render the host produced to the web page. */
+export const isPageRender = (render: EmailRender | PageRender): render is PageRender =>
+  render.kind === "page";
 
 /** Whether the preview represents the open source revision or the last build that rendered. */
 export type EmailPreviewState =
@@ -443,6 +466,19 @@ interface AsyncEditorHostCapabilities {
   readonly lifecycle?: Capability<AsyncLifecycleApi> | undefined;
   readonly versions?: Capability<AsyncVersionsApi> | undefined;
   readonly telemetry?: ((event: EditorEvent) => void) | undefined;
+  /**
+   * Render the open document for one target. A host that renders the web page offers it; the
+   * editor then shows the Email | Web toggle. Null when the entry did not build or the fixture
+   * did not render. The email render the document already carries stays the source of truth for
+   * `target: "email"`.
+   */
+  readonly render?:
+    | ((
+        entry: string,
+        fixture: FixtureName,
+        target: RenderTarget,
+      ) => Promise<EmailRender | PageRender | null>)
+    | undefined;
 }
 
 export interface AsyncEditableEditorHost extends AsyncEditorHostCapabilities {
