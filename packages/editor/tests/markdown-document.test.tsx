@@ -8,6 +8,7 @@ import {
   DocumentConflict,
   DocumentUnavailable,
   type AsyncEditableEditorHost,
+  type AsyncFixtureApi,
   type DocumentChange,
   type DocumentUpdate,
   type EditableEmailDocument,
@@ -94,6 +95,10 @@ const harness = async (body = "Hello\n\nNeighbor", shell = false) => {
     else receive?.(change);
     return { rev };
   });
+  const fixtureView = vi.fn<AsyncFixtureApi["view"]>(async (name) => {
+    fixture = name;
+    receive?.({ rev, origin: "self", authoredSource: source, ...(await content()) });
+  });
   const host: AsyncEditableEditorHost = {
     contractVersion,
     access: "editable",
@@ -112,12 +117,7 @@ const harness = async (body = "Hello\n\nNeighbor", shell = false) => {
     writer: { save },
     fixtures: {
       status: "ready",
-      api: {
-        view: async (name) => {
-          fixture = name;
-          receive?.({ rev, origin: "self", authoredSource: source, ...(await content()) });
-        },
-      },
+      api: { view: fixtureView },
     },
   };
   let probe!: EditorProbe;
@@ -146,6 +146,7 @@ const harness = async (body = "Hello\n\nNeighbor", shell = false) => {
       return source;
     },
     save,
+    fixtureView,
     path,
     view,
     paragraphs,
@@ -303,6 +304,36 @@ describe("Markdown as the open source document", () => {
     await new Promise((resolve) => setTimeout(resolve, 350));
     expect(editor.writes()).toHaveLength(1);
     expect(editor.source).toBe(HEADER + "First\n\nNeighbor");
+  });
+
+  it("keeps queued typing when a fixture switch fails before the save starts", async () => {
+    const editor = await harness();
+    editor.fixtureView.mockRejectedValueOnce(new Error("Preview unavailable"));
+    act(() => editor.probe.editMarkdownText(editor.path, "Keep this text"));
+    act(() => editor.probe.viewFixture("other"));
+    await waitFor(() => expect(editor.probe.fixtureError).not.toBeNull());
+    await waitFor(() => expect(editor.source).toBe(HEADER + "Keep this text\n\nNeighbor"));
+    expect(editor.probe.doc?.fixture).toBe("reader");
+    expect(editor.probe.sourceEditError).toBeNull();
+    expect(editor.writes()).toHaveLength(1);
+  });
+
+  it("keeps typing awaiting a preview when a fixture switch fails", async () => {
+    const editor = await harness();
+    editor.delayRender();
+    act(() => editor.probe.editMarkdownText(editor.path, "First"));
+    await waitFor(() => expect(editor.probe.doc?.rev).toBe("rev_2"));
+    act(() => editor.probe.editMarkdownText(editor.path, "First plus latest typing"));
+    editor.fixtureView.mockRejectedValueOnce(new Error("Preview unavailable"));
+    act(() => editor.probe.viewFixture("other"));
+    await waitFor(() => expect(editor.probe.fixtureError).not.toBeNull());
+    expect(editor.probe.doc?.fixture).toBe("reader");
+    expect(editor.probe.sourceEditError).toBeNull();
+    act(() => editor.deliverRender());
+    await waitFor(() => expect(editor.source).toContain("First plus latest typing"));
+    act(() => editor.deliverRender());
+    expect(editor.writes().map((input) => input.baseRev)).toEqual(["rev_1", "rev_2"]);
+    expect(editor.probe.doc?.origin.authoredSource).toBe(editor.source);
   });
 
   it("never rebases queued prose onto an external change through a delayed self render", async () => {

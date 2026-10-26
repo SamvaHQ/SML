@@ -1136,7 +1136,6 @@ export const createEditorBundle = (
         ) {
           return;
         }
-        if (state.doc.origin.kind === "markdown") invalidateMarkdown();
         set({ fixtureBusy: true, fixtureError: null });
         void capability.api.view(fixture).then(
           () => set({ fixtureBusy: false }),
@@ -1780,6 +1779,8 @@ export const createEditorBundle = (
       const snapshot = store.getState();
       if (snapshot.doc?.origin.kind === "markdown") {
         if (snapshot.conflict || obsoleteMarkdownRevisions.has(change.rev)) return;
+        // A failed view request leaves these edits valid; only the host's confirmed switch cancels them.
+        if (snapshot.doc.fixture !== change.fixture) invalidateMarkdown();
         if (snapshot.doc.rev !== change.rev) obsoleteMarkdownRevisions.add(snapshot.doc.rev);
       }
       applyChange(change, true);
