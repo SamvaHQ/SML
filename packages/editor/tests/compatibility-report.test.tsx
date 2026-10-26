@@ -41,8 +41,11 @@ it("keeps verification pending with zero known risks and filters distinct client
     },
   ];
   const view = render(<AttentionSummary checks={checks} />);
-  expect(view.baseElement.textContent).toContain("No known risks found");
-  expect(view.baseElement.textContent).toContain("1 finding group needs client verification");
+  expect(view.baseElement.textContent).toContain("No problems found");
+  expect(view.baseElement.textContent).toContain("1 tip to check in specific email clients.");
+  // Nothing is actionable, so the panel settles instead of heading an empty section.
+  expect(view.baseElement.textContent).not.toContain("Needs attention");
+  expect(view.baseElement.textContent).not.toContain("No known risks found");
   expect(view.baseElement.textContent).not.toContain("All checks passing");
   fireEvent.click(view.getByTestId("checks.compatibility-report"));
   const report = await view.findByTestId("checks.report");
@@ -66,7 +69,17 @@ it("keeps verification pending with zero known risks and filters distinct client
 it("does not present a document without checks as clear", () => {
   const view = render(<AttentionSummary checks={[]} />);
   expect(view.baseElement.textContent).toContain("No checks yet");
-  expect(view.baseElement.textContent).not.toContain("No known risks found");
+  expect(view.baseElement.textContent).not.toContain("No problems found");
+});
+
+it("shows Needs attention only while a check is actionable", () => {
+  const view = render(
+    <AttentionSummary
+      checks={[{ id: "size", severity: "warn", label: "Large message", detail: "120 KB" }]}
+    />,
+  );
+  expect(view.baseElement.textContent).toContain("Needs attention · 1");
+  expect(view.queryByTestId("checks.settled")).toBeNull();
 });
 
 it("uses checks loaded after mount when opening and resets filters on reopen", async () => {

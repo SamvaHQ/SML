@@ -251,7 +251,7 @@ describe("public editor chrome", () => {
     expect(view.queryByTestId("work-pane.panel.checks")).toBeNull();
     fireEvent.click(trigger);
     expect((await view.findByTestId("work-pane.panel.checks")).textContent).toContain(
-      "2 finding groups need client verification",
+      "2 tips to check in specific email clients.",
     );
     view.unmount();
 
@@ -550,7 +550,7 @@ describe("public editor chrome", () => {
     fireEvent.click(view.getByTestId("work-pane.add"));
     fireEvent.click(await view.findByTestId("work-pane.add.checks"));
     expect((await view.findByTestId("work-pane.panel.checks")).textContent).toContain(
-      "Needs attention",
+      "No problems found",
     );
     // An added tab closes from its own control; the tab before it takes over.
     fireEvent.click(view.getByTestId("work-pane.close.checks"));
