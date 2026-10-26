@@ -1,35 +1,21 @@
 core:changelogs:
-  - content: "---\npackages:\n  group:authoring:\n    type: minor\n---\n\n## Author newsletter issues in SML Markdown\n\nParse `issues/*.md` with typed YAML frontmatter and static SML component tags through\n`@samva/markup/markdown`. Unknown components, raw HTML, expressions, and invalid metadata return\nlocated diagnostics. Prose and component attributes retain exact editable source spans. Prose\nedits preserve ordinary punctuation and protect only syntax-sensitive delimiters and whitespace.\n\nCompile each issue into an email-only TSX layout containing one `<IssueContent />` from\n`@samva/markup/email`, then render the shared document to email or web. Vite discovers issues\nseparately from template entries and includes them in project build, render, and export workflows.\nExisting template email output and golden digests are unchanged.\n"
-    filename: sml-markdown.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## Calmer checks, a clearer brand menu, and toolbar buttons hosts can match\n\nThe Checks panel no longer shows \"Needs attention\" above \"No known risks found.\" When nothing is actionable it shows a settled \"No issues found\", and the note about email clients now counts \"tips\", the same word as the status bar.\n\nThe brand menu lists your brands by name with their swatches, under \"Apply a brand\" when the template has none. The organization default carries a muted \"Default\" tag, left off when the brand is already named Default.\n\nThe Publish sheet shows placeholder rows shaped like saved versions while they load, so the list does not jump when it arrives.\n\n`@samva/editor/shell` exports `EditorToolbarButton`. Contribute it to `toolbar.actions` and it matches the top bar's buttons in size, radius and type, folds to its icon with a tooltip when the top bar folds its own labels, and works as a Base UI `render` target such as a popover trigger.\n"
+    filename: editor-chrome-polish.md
     v: 0.0.0
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## Preview the web page beside the email, and edit Markdown text on the page\n\nA host that offers `render(entry, fixture, target)` shows an Email | Web toggle in the preview bar. The web page is selected the same way as the email: a click resolves `data-samva-instance` to the authored element, and the selection stays on the same element when you switch between the two. A host that does not offer `render` is unchanged, and `EmailRender` gains an optional `kind` so a render can be told apart from a `PageRender`.\n\nDouble-click text that was written in Markdown to edit it in place on the web page. Enter saves the text into the Markdown file through the host's project `lifecycle`, and Escape puts the text back. Text that holds inline markup, and text written in TSX, is not edited in place.\n\nThe Checks tab opens with \"Email differences\", which lists the components that look simpler in email than on the web, how many places each appears, and a Show action that selects the first one in the email. On the web page, the preview bar counts them.\n"
-    filename: editor-dual-preview.md
-    v: 0.0.0
-  - content: "---\npackages:\n  group:authoring:\n    type: minor\n---\n\n## Render email templates as web pages\n\n**Breaking:** replace `render(template, input, { channel })` with\n`render(template, input, { target })`. Use `target: \"email\"`, `\"sms\"`, or `\"whatsapp\"` for message\ndelivery, and `target: \"web\"` for the semantic HTML body and head hints of an email template.\nRecompile stored templates to compiled document version `sml: 2` before rendering them with this\nversion. Compilation digests change with this document format.\n\nEmail and web share the template's components, bindings, conditions, loops, and source positions.\nEmail preserves the existing rendered HTML, subject, preheader, and text byte for byte, including\nOutlook fallbacks. The web target emits semantic HTML with styles supplied separately to the page\nshell. `templateEmailDegradations` locates component fidelity declarations in source, and\n`checkCompatibility` reports content losses alongside client HTML findings.\n"
-    filename: semantic-target-lowering.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@samva/markup:\n    type: patch\n---\n\n## An important declaration keeps `!important` when it is inlined\n\nA stylesheet `!important` that wins the cascade is written onto the element's `style` with `!important`. The flag used to decide the winner and then disappear, so a later important rule could override the inlined value. An author's own important inline style is kept the same way.\n\nA logical padding shorthand keeps that flag on every physical side. `padding-inline: 3px 4px !important` becomes `padding-left: 3px !important` and `padding-right: 4px !important`.\n\nA property the generated dark-mode class restates is inlined without `!important`, including a declaration that only overlaps the color that changed. That class also uses `!important`, and an important inline style would keep the light color. A weaker rule kept in the head, such as a hover, is copied onto a more specific selector so it does not take that color; the copy inside the dark-mode query keeps the theme switch. A stronger rule is copied again after that guard. A shorthand in that copy also restates any locked longhand that still outranks it, so the shorthand does not reset a stronger inline color. The dark-mode copy resolves that shorthand and the longhand at their dark values. A pseudo-element keeps the color it sets for itself.\n"
-    filename: important-inline.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## Open Markdown issues in Source\n\nEmail documents accept a `markdown` origin with the complete issue source, including frontmatter,\nand `layout: { file }` identifying the host-owned TSX layout. The Source tab edits the issue through\nthe existing revision-fenced writer. Prose edits from either preview update the same source and\nparticipate in undo/redo without requiring a project lifecycle capability. Layout spans are\nread-only, and TSX-only structural, expression, fixture-data and class-name edits are hidden.\n\nThe host contract version is now `2026-10-26.1`: hosts must handle the email origin union and\nwrite `origin.file` for source saves. SMS and WhatsApp remain TSX-only. The TSX editing behavior\nand compiled email output are unchanged.\n"
+    filename: editor-markdown-source.md
     v: 0.0.0
 core:packages:
+  - id: npm:@samva/vite
+    updated: true
+  - id: npm:@samva/markup
+    updated: true
   - changelogIds:
-      - sml-markdown.md
-      - editor-dual-preview.md
-      - semantic-target-lowering.md
+      - editor-chrome-polish.md
+      - editor-markdown-source.md
     id: npm:@samva/editor
     updated: true
-  - changelogIds:
-      - sml-markdown.md
-      - semantic-target-lowering.md
-      - important-inline.md
-    id: npm:@samva/markup
-    updated: true
-  - changelogIds:
-      - sml-markdown.md
-      - semantic-target-lowering.md
-    id: npm:@samva/vite
-    updated: true
 npm:packages:
-  - id: npm:@samva/editor
-  - id: npm:@samva/markup
   - id: npm:@samva/vite
+  - id: npm:@samva/markup
+  - id: npm:@samva/editor
