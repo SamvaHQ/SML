@@ -13,6 +13,43 @@ import { useEditorStore } from "../state/context";
 import { cn, focusRing } from "./ui-classes";
 import { useEditorPortalContainer } from "./use-editor-portal";
 
+/**
+ * Holds the saved versions' place while they load. Each row repeats a landed version row's box
+ * (border, padding, a 20px title line over a 16px date line) so nothing moves when they arrive.
+ */
+function SavedVersionsSkeleton() {
+  return (
+    <section
+      data-testid="lifecycle-sheet.loading"
+      role="status"
+      aria-busy="true"
+      className="space-y-2"
+    >
+      <span className="sr-only">Loading saved versions</span>
+      <h3 aria-hidden="true" className="text-sm font-semibold">
+        Saved versions
+      </h3>
+      <div aria-hidden="true" className="space-y-2">
+        {SKELETON_ROWS.map((row) => (
+          <div
+            key={row}
+            data-testid="lifecycle-sheet.loading-row"
+            className="border-border flex items-start justify-between gap-4 rounded-lg border p-3"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="bg-muted block h-5 w-2/3 animate-pulse rounded motion-reduce:animate-none" />
+              <span className="bg-muted mt-1 block h-4 w-1/3 animate-pulse rounded motion-reduce:animate-none" />
+            </span>
+            <span className="bg-muted h-4 w-12 shrink-0 animate-pulse rounded motion-reduce:animate-none" />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+const SKELETON_ROWS = [0, 1, 2] as const;
+
 export const CONFIRM_PUBLISH_LABEL = "Publish saved version";
 
 /** The picker offers the images and fonts a template project stores as files. */
@@ -522,9 +559,7 @@ function OpenLifecycleSheet({
             </header>
 
             <div className="samva-editor-scroll min-h-0 flex-1 space-y-6 overflow-y-auto p-5">
-              {busy === "loading" && (
-                <p className="text-muted-foreground text-sm">Loading saved versions…</p>
-              )}
+              {busy === "loading" && <SavedVersionsSkeleton />}
               {error !== null && (
                 <p className="text-status-error text-sm" role="alert">
                   {error}
