@@ -550,7 +550,7 @@ describe("public editor chrome", () => {
     fireEvent.click(view.getByTestId("work-pane.add"));
     fireEvent.click(await view.findByTestId("work-pane.add.checks"));
     expect((await view.findByTestId("work-pane.panel.checks")).textContent).toContain(
-      "No problems found",
+      "No issues found",
     );
     // An added tab closes from its own control; the tab before it takes over.
     fireEvent.click(view.getByTestId("work-pane.close.checks"));

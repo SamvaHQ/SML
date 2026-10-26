@@ -44,7 +44,7 @@ export function AttentionSummary({
       ) : (
         <div data-testid="checks.settled" className="flex items-center gap-2">
           <span aria-hidden="true" className="bg-status-success size-2 shrink-0 rounded-full" />
-          <h3 className="text-foreground text-[13px] font-semibold">No problems found</h3>
+          <h3 className="text-foreground text-[13px] font-semibold">No issues found</h3>
         </div>
       )}
       <CompatibilityReport checks={checks} editable={editable} />

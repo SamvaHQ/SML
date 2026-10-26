@@ -41,7 +41,7 @@ it("keeps verification pending with zero known risks and filters distinct client
     },
   ];
   const view = render(<AttentionSummary checks={checks} />);
-  expect(view.baseElement.textContent).toContain("No problems found");
+  expect(view.baseElement.textContent).toContain("No issues found");
   expect(view.baseElement.textContent).toContain("1 tip to check in specific email clients.");
   // Nothing is actionable, so the panel settles instead of heading an empty section.
   expect(view.baseElement.textContent).not.toContain("Needs attention");
@@ -69,7 +69,7 @@ it("keeps verification pending with zero known risks and filters distinct client
 it("does not present a document without checks as clear", () => {
   const view = render(<AttentionSummary checks={[]} />);
   expect(view.baseElement.textContent).toContain("No checks yet");
-  expect(view.baseElement.textContent).not.toContain("No problems found");
+  expect(view.baseElement.textContent).not.toContain("No issues found");
 });
 
 it("shows Needs attention only while a check is actionable", () => {

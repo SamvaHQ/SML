@@ -6,7 +6,7 @@ packages:
 
 ## Calmer checks, a clearer brand menu, and toolbar buttons hosts can match
 
-The Checks panel no longer shows "Needs attention" above "No known risks found." When nothing is actionable it shows a settled "No problems found", and the note about email clients now counts "tips", the same word as the status bar.
+The Checks panel no longer shows "Needs attention" above "No known risks found." When nothing is actionable it shows a settled "No issues found", and the note about email clients now counts "tips", the same word as the status bar.
 
 The brand menu lists your brands by name with their swatches, under "Apply a brand" when the template has none. The organization default carries a muted "Default" tag, left off when the brand is already named Default.
 
