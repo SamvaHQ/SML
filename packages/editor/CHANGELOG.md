@@ -1,3 +1,39 @@
+## @samva/editor@0.19.0
+
+### Author newsletter issues in SML Markdown
+
+Parse `issues/*.md` with typed YAML frontmatter and static SML component tags through
+`@samva/markup/markdown`. Unknown components, raw HTML, expressions, and invalid metadata return
+located diagnostics. Prose and component attributes retain exact editable source spans. Prose
+edits preserve ordinary punctuation and protect only syntax-sensitive delimiters and whitespace.
+
+Compile each issue into an email-only TSX layout containing one `<IssueContent />` from
+`@samva/markup/email`, then render the shared document to email or web. Vite discovers issues
+separately from template entries and includes them in project build, render, and export workflows.
+Existing template email output and golden digests are unchanged.
+
+### Preview the web page beside the email, and edit Markdown text on the page
+
+A host that offers `render(entry, fixture, target)` shows an Email | Web toggle in the preview bar. The web page is selected the same way as the email: a click resolves `data-samva-instance` to the authored element, and the selection stays on the same element when you switch between the two. A host that does not offer `render` is unchanged, and `EmailRender` gains an optional `kind` so a render can be told apart from a `PageRender`.
+
+Double-click text that was written in Markdown to edit it in place on the web page. Enter saves the text into the Markdown file through the host's project `lifecycle`, and Escape puts the text back. Text that holds inline markup, and text written in TSX, is not edited in place.
+
+The Checks tab opens with "Email differences", which lists the components that look simpler in email than on the web, how many places each appears, and a Show action that selects the first one in the email. On the web page, the preview bar counts them.
+
+### Render email templates as web pages
+
+**Breaking:** replace `render(template, input, { channel })` with
+`render(template, input, { target })`. Use `target: "email"`, `"sms"`, or `"whatsapp"` for message
+delivery, and `target: "web"` for the semantic HTML body and head hints of an email template.
+Recompile stored templates to compiled document version `sml: 2` before rendering them with this
+version. Compilation digests change with this document format.
+
+Email and web share the template's components, bindings, conditions, loops, and source positions.
+Email preserves the existing rendered HTML, subject, preheader, and text byte for byte, including
+Outlook fallbacks. The web target emits semantic HTML with styles supplied separately to the page
+shell. `templateEmailDegradations` locates component fidelity declarations in source, and
+`checkCompatibility` reports content losses alongside client HTML findings.
+
 ## @samva/editor@0.18.1
 
 ### Preview and compatibility report close with an X

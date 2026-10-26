@@ -1,3 +1,39 @@
+## @samva/markup@0.19.0
+
+### Author newsletter issues in SML Markdown
+
+Parse `issues/*.md` with typed YAML frontmatter and static SML component tags through
+`@samva/markup/markdown`. Unknown components, raw HTML, expressions, and invalid metadata return
+located diagnostics. Prose and component attributes retain exact editable source spans. Prose
+edits preserve ordinary punctuation and protect only syntax-sensitive delimiters and whitespace.
+
+Compile each issue into an email-only TSX layout containing one `<IssueContent />` from
+`@samva/markup/email`, then render the shared document to email or web. Vite discovers issues
+separately from template entries and includes them in project build, render, and export workflows.
+Existing template email output and golden digests are unchanged.
+
+### Render email templates as web pages
+
+**Breaking:** replace `render(template, input, { channel })` with
+`render(template, input, { target })`. Use `target: "email"`, `"sms"`, or `"whatsapp"` for message
+delivery, and `target: "web"` for the semantic HTML body and head hints of an email template.
+Recompile stored templates to compiled document version `sml: 2` before rendering them with this
+version. Compilation digests change with this document format.
+
+Email and web share the template's components, bindings, conditions, loops, and source positions.
+Email preserves the existing rendered HTML, subject, preheader, and text byte for byte, including
+Outlook fallbacks. The web target emits semantic HTML with styles supplied separately to the page
+shell. `templateEmailDegradations` locates component fidelity declarations in source, and
+`checkCompatibility` reports content losses alongside client HTML findings.
+
+### An important declaration keeps `!important` when it is inlined
+
+A stylesheet `!important` that wins the cascade is written onto the element's `style` with `!important`. The flag used to decide the winner and then disappear, so a later important rule could override the inlined value. An author's own important inline style is kept the same way.
+
+A logical padding shorthand keeps that flag on every physical side. `padding-inline: 3px 4px !important` becomes `padding-left: 3px !important` and `padding-right: 4px !important`.
+
+A property the generated dark-mode class restates is inlined without `!important`, including a declaration that only overlaps the color that changed. That class also uses `!important`, and an important inline style would keep the light color. A weaker rule kept in the head, such as a hover, is copied onto a more specific selector so it does not take that color; the copy inside the dark-mode query keeps the theme switch. A stronger rule is copied again after that guard. A shorthand in that copy also restates any locked longhand that still outranks it, so the shorthand does not reset a stronger inline color. The dark-mode copy resolves that shorthand and the longhand at their dark values. A pseudo-element keeps the color it sets for itself.
+
 ## @samva/markup@0.17.0
 
 ### One compiler for every host, one render, one error model
