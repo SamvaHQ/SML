@@ -139,6 +139,7 @@ function StorageBanner() {
       <span>{storageError} Your work is kept here; export a copy or retry.</span>
       <button
         type="button"
+        data-testid="storage.retry"
         onClick={retrySave}
         className="border-border hover:bg-muted rounded-md border px-2.5 py-1 font-medium transition-colors"
       >

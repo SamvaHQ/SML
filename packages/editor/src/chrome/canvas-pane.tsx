@@ -280,6 +280,7 @@ export function CanvasPane({
         editable,
         sourceEditable: sourceWritable,
         lifecycleCapability,
+        doc: currentDoc,
       } = store.getState();
       // A page that is behind the email on screen would map its text onto the wrong origin.
       if (
@@ -288,12 +289,18 @@ export function CanvasPane({
         page.revision !== email.revision ||
         !editable ||
         !sourceWritable ||
-        lifecycleCapability?.status !== "ready"
+        (currentDoc?.origin.kind !== "markdown" && lifecycleCapability?.status !== "ready")
       )
         return false;
       const emailPath = correspondingPath(page.selections, email.selections, pagePath);
       const entry = email.selections.find((item) => item.instancePath === emailPath);
-      return entry?.origins.some((origin) => origin.fileName.endsWith(".md")) === true;
+      return (
+        entry?.origins.some((origin) =>
+          currentDoc?.origin.kind === "markdown"
+            ? origin.fileName === currentDoc.origin.file
+            : origin.fileName.endsWith(".md"),
+        ) === true
+      );
     },
     [store],
   );

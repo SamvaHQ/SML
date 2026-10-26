@@ -6,7 +6,13 @@ import {
 } from "@samva/editor/host";
 import { type EditableEditorHost } from "@samva/editor/host/effect";
 import { toAsyncHost } from "@samva/editor/host/effect";
-import { createMockHost, MOCK_FIXTURE_NAMES, NIMBUS_WELCOME_TSX } from "@samva/editor/mock";
+import {
+  createMarkdownMockHost,
+  createMockHost,
+  MOCK_FIXTURE_NAMES,
+  NIMBUS_ISSUE_MARKDOWN,
+  NIMBUS_WELCOME_TSX,
+} from "@samva/editor/mock";
 import {
   emailDefinitionInstances,
   emailSelectionSiblings,
@@ -300,5 +306,52 @@ describe("mock capabilities", () => {
       );
       expect(upload.url).toContain("hero.jpg");
     }
+  });
+});
+
+describe("Markdown mock", () => {
+  it("opens the issue with full frontmatter and a separate host-owned layout", async () => {
+    const { host } = await Effect.runPromise(createMarkdownMockHost);
+    const doc = await loadInitial(host);
+    expect(doc.origin).toEqual({
+      kind: "markdown",
+      file: "issues/launch.md",
+      authoredSource: NIMBUS_ISSUE_MARKDOWN,
+      layout: { file: "layout.tsx" },
+    });
+    expect(doc.fixtures).toEqual(["reader"]);
+    expect(doc.render?.subject).toBe("Launch notes");
+    const prose = doc.render?.selections.find((selection) => selection.tag === "p");
+    expect(prose?.origins[0]).toEqual({
+      fileName: "issues/launch.md",
+      lineNumber: 8,
+      columnNumber: 1,
+    });
+    expect(doc.render?.html).toContain('data-samva-instance="0.1"');
+  });
+
+  it("saves frontmatter and prose, emits the new render, and refuses a stale save", async () => {
+    const { host } = await Effect.runPromise(createMarkdownMockHost);
+    const { asyncHost, received, opened } = await openCollecting(host);
+    const next = NIMBUS_ISSUE_MARKDOWN.replace("title: Launch notes", "title: Fresh news").replace(
+      "Cold brew subscriptions",
+      "Gift subscriptions",
+    );
+    await asyncHost.writer.save({ kind: "authoredSource", baseRev: "rev_1", authoredSource: next });
+    await tick();
+    expect(received).toHaveLength(1);
+    const change = emailChange(received[0]!);
+    expect(change).toMatchObject({ rev: "rev_2", origin: "self", authoredSource: next });
+    expect(change.render?.subject).toBe("Fresh news");
+    expect(change.render?.html).toContain("Gift subscriptions");
+    await expect(
+      asyncHost.writer.save({
+        kind: "authoredSource",
+        baseRev: "rev_1",
+        authoredSource: NIMBUS_ISSUE_MARKDOWN,
+      }),
+    ).rejects.toMatchObject({ expectedRev: "rev_1", actualRev: "rev_2" });
+    expect((await loadInitial(host)).origin.authoredSource).toBe(next);
+    opened.close();
   });
 });

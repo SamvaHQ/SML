@@ -11,7 +11,7 @@ import { Data } from "effect";
  * carry it on the {@link EditorHost} they construct; the editor reads it to fail
  * loudly on a contract mismatch instead of silently mis-rendering.
  */
-export const contractVersion = "2026-10-03.1" as const;
+export const contractVersion = "2026-10-26.1" as const;
 
 export type TemplateChannel = "email" | "sms" | "whatsapp";
 
@@ -116,17 +116,26 @@ export type EmailPreviewState =
   | { readonly status: "stale"; readonly reason: string };
 
 /** The TSX entry the editor edits. It is the canonical value for every channel. */
-interface TsxOrigin {
+export interface TsxOrigin {
   readonly kind: "tsx";
   readonly file: string;
   readonly authoredSource: string;
 }
 
-interface DocumentIdentity {
+/** A complete Markdown issue, including frontmatter, rendered by the host against a TSX layout. */
+export interface MarkdownOrigin {
+  readonly kind: "markdown";
+  readonly file: string;
+  readonly authoredSource: string;
+  /** The layout is host-owned; source saves replace only the issue at `file`. */
+  readonly layout: { readonly file: string };
+}
+
+interface DocumentIdentity<TOrigin = TsxOrigin> {
   readonly id: string | null;
   readonly name: string;
   readonly rev: RevisionToken;
-  readonly origin: TsxOrigin;
+  readonly origin: TOrigin;
   readonly variables: ReadonlyArray<Variable>;
   readonly metadata: DocumentMetadata;
 }
@@ -215,11 +224,13 @@ interface ReadonlyAccess {
   readonly access: { readonly kind: "readonly"; readonly reason: string };
 }
 
-export interface EditableEmailDocument extends DocumentIdentity, EmailContent, EditableAccess {}
+export interface EditableEmailDocument
+  extends DocumentIdentity<TsxOrigin | MarkdownOrigin>, EmailContent, EditableAccess {}
 export interface EditableSmsDocument extends DocumentIdentity, SmsContent, EditableAccess {}
 export interface EditableWhatsAppDocument
   extends DocumentIdentity, WhatsAppContent, EditableAccess {}
-export interface ReadonlyEmailDocument extends DocumentIdentity, EmailContent, ReadonlyAccess {}
+export interface ReadonlyEmailDocument
+  extends DocumentIdentity<TsxOrigin | MarkdownOrigin>, EmailContent, ReadonlyAccess {}
 export interface ReadonlySmsDocument extends DocumentIdentity, SmsContent, ReadonlyAccess {}
 export interface ReadonlyWhatsAppDocument
   extends DocumentIdentity, WhatsAppContent, ReadonlyAccess {}
@@ -241,7 +252,7 @@ export const emailContentOf = (
   document.channel === "email" ? document : null;
 
 /**
- * A save unit. `authoredSource` replaces the canonical TSX entry and carries
+ * A save unit. `authoredSource` replaces the open origin's file (TSX or Markdown) and carries
  * `baseRev` for conflict detection. `metadata` patches envelope
  * defaults and the name; it is unversioned, so it carries no `baseRev`.
  */
@@ -268,7 +279,7 @@ interface ChangeFields {
    * collaboration).
    */
   readonly origin: "self" | "agent" | "external";
-  /** The canonical TSX at this revision, when the host knows it. */
+  /** The open origin's authored source at this revision, when the host knows it. */
   readonly authoredSource?: string | undefined;
 }
 

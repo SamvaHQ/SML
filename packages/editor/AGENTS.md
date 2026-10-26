@@ -17,8 +17,10 @@ boundaries—not compiler transforms—provide render isolation.
   and a form change is an exact source replacement (`@samva/markup/edit`) applied through
   `applySourceEdit` with a `coalesceKey`, so typing does not wait on the previous save.
 - An email selection is one rendered instance pinned to the revision and fixture it was taken in.
-  Its origin is the span of the TSX the compiler recorded for the element, and a visual edit is a
-  code transform of the static TSX at that span, saved through `DocumentWriter.save`. A selection
+  Its origin is the span the compiler recorded in TSX or Markdown. A TSX visual edit is a
+  code transform at that span; a Markdown prose edit is a guarded span replacement in the issue.
+  Both save the open origin through `DocumentWriter.save`. Foreign Markdown spans in a TSX
+  document use the project lifecycle instead. A selection
   the document has moved past is dropped or explicitly re-resolved, never applied to whatever now
   sits at that path.
 - `EditorProvider`'s `onSelectElement` reports only the user's own selection (a canvas click or

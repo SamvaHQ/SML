@@ -39,7 +39,7 @@ function SourcePanel({
   );
 }
 
-/** The canonical TSX entry, for every channel. */
+/** The canonical authored entry, for every channel: TSX, or the Markdown issue and its frontmatter. */
 export function SourceWorkspace() {
   const doc = useEditorStore((state) => state.doc);
   // Staged Design edits are undone and reset in order, so the source waits for them to be applied
@@ -55,10 +55,14 @@ export function SourceWorkspace() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       <SourcePanel
-        label={`Authored TSX · ${doc.origin.file}${staged ? " · apply or reset your Design edits to edit it" : ""}`}
+        label={`${doc.origin.kind === "markdown" ? "Authored Markdown" : "Authored TSX"} · ${doc.origin.file}${staged ? " · apply or reset your Design edits to edit it" : ""}`}
         source={doc.origin.authoredSource}
         editable={sourceEditable}
-        testId="source-workspace.authored-tsx"
+        testId={
+          doc.origin.kind === "markdown"
+            ? "source-workspace.authored-markdown"
+            : "source-workspace.authored-tsx"
+        }
         onChange={sourceEditable ? replaceAuthoredSource : undefined}
       />
     </div>

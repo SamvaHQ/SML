@@ -143,7 +143,7 @@ const harness = async (
           patch(
             {
               ...opened.initial,
-              origin: { ...opened.initial.origin, file: ENTRY, authoredSource: project[ENTRY]! },
+              origin: { kind: "tsx", file: ENTRY, authoredSource: project[ENTRY]! },
             },
             project[ENTRY],
           ),
