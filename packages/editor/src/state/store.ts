@@ -3,6 +3,8 @@ import type {
   DocumentChange,
   EditorDocument,
   EmailRender,
+  PageRender,
+  RenderTarget,
   FromDefault,
   RevisionToken,
 } from "@samva/editor/host";
@@ -14,7 +16,13 @@ import type {
   AsyncVersionsApi,
   EditorEvent,
 } from "@samva/editor/host";
-import { applySourceReplacements, type SourceReplacement } from "@samva/markup/edit";
+import { isPageRender } from "@samva/editor/host";
+import {
+  applySourceReplacements,
+  inspectMarkdownNode,
+  type SourceElement,
+  type SourceReplacement,
+} from "@samva/markup/edit";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 import type { DeviceMode } from "../canvas/device";
@@ -32,7 +40,9 @@ import {
   resolveSelection,
   withDocumentChange,
 } from "./derive";
+import { markdownEdit } from "./markdown-edit";
 import { createEditorSpine, type EditorSpine } from "./spine";
+import { correspondingPath } from "./target-map";
 import {
   DOCUMENT_SELECTION,
   ENVELOPE_SELECTION,
@@ -199,6 +209,10 @@ const clampZoom = (zoom: CanvasZoom): CanvasZoom =>
  * is stable forever — `useEditorStore((s) => s.actions)` never re-renders.
  */
 export interface EditorActions {
+  /** Read the selected content through the host's project lifecycle. */
+  readonly inspectMarkdown: (instancePath: string) => Promise<SourceElement | null>;
+  /** Save plain text through the host; consecutive typing is debounced into one edit. */
+  readonly editMarkdownText: (instancePath: string, text: string) => void;
   readonly applySourceEdit: (input: {
     readonly revision: string;
     readonly source: string;
@@ -226,6 +240,17 @@ export interface EditorActions {
   readonly replaceAuthoredSource: (source: string) => void;
   /** Show another declared fixture. A re-render at the same revision, not a document edit. */
   readonly viewFixture: (fixture: string) => void;
+  /**
+   * Preview the email or the web page. A web page needs the host's `render`; without it the
+   * target stays on email. The selection is kept: it resolves to the same authored element in
+   * either render.
+   */
+  readonly setPreviewTarget: (target: RenderTarget) => void;
+  /**
+   * Select the element a click in the web page landed on. Resolves the page's path to the email
+   * path the selection is kept in, and clears the selection when the email has no such element.
+   */
+  readonly selectFromPage: (pagePath: string) => void;
   /** Discard local edits and re-open the document from the host's current state. */
   readonly reload: () => void;
   /**
@@ -366,6 +391,14 @@ export interface EditorState {
   readonly telemetry: ((event: EditorEvent) => void) | undefined;
   readonly assetsCapability: Capability<AsyncAssetApi> | undefined;
   readonly fixtureCapability: Capability<AsyncFixtureApi> | undefined;
+  /** Whether the host renders the web page, so the toggle between targets is offered. */
+  readonly pageAvailable: boolean;
+  /** The surface the canvas previews. */
+  readonly previewTarget: RenderTarget;
+  /** The web page for the current revision and fixture; null until the host has rendered it. */
+  readonly pageRender: PageRender | null;
+  /** The last web page render failed; null when clear. */
+  readonly pageError: string | null;
   /** A fixture re-render is in flight. */
   readonly fixtureBusy: boolean;
   /** The last fixture switch failed; null when clear. */
@@ -488,6 +521,10 @@ export const createEditorBundle = (
   let userSelectListener: ((selection: UserSelection) => void) | undefined;
   let pinsListener: ((pins: ReadonlyArray<EditorPin>) => void) | undefined;
   let pinSequence = 0;
+  let markdownTimer: ReturnType<typeof setTimeout> | undefined;
+  let markdownGeneration = 0;
+  let markdownSaving = false;
+  let cancelMarkdownWait: (() => void) | undefined;
 
   /**
    * An uneditable host, readonly document, active lifecycle operation, or a refresh still waiting
@@ -526,6 +563,159 @@ export const createEditorBundle = (
   };
 
   const store: EditorStore = createStore<EditorState>((set, get) => {
+    // Our lifecycle gate still accepts typing; pending edits retain identities, never positions.
+    const markdownTarget = (instancePath: string, selected = false) => {
+      const state = get();
+      const { doc, render, selection } = state;
+      if (
+        host.access !== "editable" ||
+        doc?.access.kind === "readonly" ||
+        state.previewRefreshing ||
+        (state.lifecycleBusy && !markdownSaving) ||
+        !state.editable ||
+        !state.sourceEditable ||
+        state.hostBusy ||
+        state.conflict ||
+        state.pendingAuthoredSource !== null ||
+        doc?.channel !== "email" ||
+        doc.fixture === null ||
+        render === null ||
+        render.revision !== doc.rev ||
+        (selected &&
+          (selection.kind !== "element" ||
+            selection.instancePath !== instancePath ||
+            selection.revision !== render.revision ||
+            selection.fixture !== doc.fixture)) ||
+        state.lifecycleCapability?.status !== "ready"
+      )
+        return null;
+      const element = render.selections.find((entry) => entry.instancePath === instancePath);
+      const origin = element?.origins.find((entry) => entry.fileName.endsWith(".md"));
+      return element === undefined || origin === undefined
+        ? null
+        : {
+            doc,
+            render,
+            fixture: doc.fixture,
+            origin,
+            tag: element.tag,
+            api: state.lifecycleCapability.api,
+          };
+    };
+    const staleMarkdown = "This content changed. Select it again before editing.";
+    const pendingMarkdown = new Map<
+      string,
+      {
+        readonly file: string;
+        readonly tag: string;
+        readonly fixture: string;
+        readonly revision: string;
+        readonly text: string;
+      }
+    >();
+    // One element's edit that cannot be applied says why and leaves the others pending; only a
+    // failure of the write itself, which every pending edit shares, clears them all.
+    const refuseMarkdown = (reason: string): void => set({ sourceEditError: reason });
+    const failMarkdown = (reason: string): void => {
+      pendingMarkdown.clear();
+      refuseMarkdown(reason);
+    };
+    const waitForMarkdownRender = (revision: string, fixture: string): Promise<boolean> =>
+      new Promise((resolve) => {
+        const matches = () => {
+          const { doc, render } = get();
+          return doc?.rev === revision && doc.fixture === fixture && render?.revision === revision;
+        };
+        const finish = (ready: boolean) => {
+          clearTimeout(timer);
+          unsubscribe();
+          cancelMarkdownWait = undefined;
+          resolve(ready);
+        };
+        const timer = setTimeout(() => finish(false), 2000);
+        const unsubscribe = store.subscribe(() => {
+          if (matches()) finish(true);
+        });
+        cancelMarkdownWait = () => finish(false);
+        if (matches()) finish(true);
+      });
+    const drainMarkdown = (): void => {
+      if (markdownSaving || markdownTimer !== undefined) return;
+      const next = pendingMarkdown.entries().next();
+      if (next.done === true) return;
+      const [instancePath, item] = next.value;
+      pendingMarkdown.delete(instancePath);
+      const target = markdownTarget(instancePath);
+      if (
+        target === null ||
+        target.doc.rev !== item.revision ||
+        target.fixture !== item.fixture ||
+        target.tag !== item.tag ||
+        target.origin.fileName !== item.file
+      ) {
+        refuseMarkdown(staleMarkdown);
+        return drainMarkdown();
+      }
+      if (!actions.beginLifecycle()) return failMarkdown(staleMarkdown);
+      markdownSaving = true;
+      const generation = markdownGeneration;
+      void spine
+        .flushSaves()
+        .then(async () => {
+          if (generation !== markdownGeneration) return;
+          const project = await target.api.inspect();
+          if (generation !== markdownGeneration) return;
+          if (
+            markdownTarget(instancePath) === null ||
+            get().render !== target.render ||
+            get().doc?.fixture !== item.fixture ||
+            project.rev !== item.revision
+          )
+            return refuseMarkdown(staleMarkdown);
+          const file = project.files.find((entry) => entry.path === item.file);
+          if (file?.content == null || file.binary === true || file.status === "deleted")
+            return refuseMarkdown("This content is unavailable. Select it again before editing.");
+          const result = markdownEdit(
+            file.content,
+            file.path,
+            target.origin,
+            { kind: "text", text: item.text },
+            { tag: item.tag },
+          );
+          if (!result.ok) return refuseMarkdown(result.reason);
+          if (result.edits.length === 0) return;
+          const changed = applySourceReplacements(file.content, result.edits, {
+            markdown: { file: file.path },
+          });
+          if (!changed.ok)
+            return refuseMarkdown("This change cannot keep the text and formatting intact.");
+          const written = await target.api.updateFile({
+            path: file.path,
+            baseRev: project.rev,
+            content: changed.source,
+          });
+          if (generation !== markdownGeneration) return;
+          const ready = await waitForMarkdownRender(written.rev, item.fixture);
+          if (generation !== markdownGeneration) return;
+          if (!ready) return failMarkdown("Couldn't save this change. Try again.");
+          // Only the exact acknowledged render advances edits taken against this write's base.
+          // Each subsequent save resolves its instance again and reads the fresh project file.
+          for (const [path, pending] of pendingMarkdown) {
+            if (pending.revision === project.rev)
+              pendingMarkdown.set(path, { ...pending, revision: written.rev });
+          }
+        })
+        .catch(() => {
+          if (generation === markdownGeneration)
+            failMarkdown("Couldn't save this change. Try again.");
+        })
+        .finally(() => {
+          if (generation !== markdownGeneration) return;
+          markdownSaving = false;
+          actions.endLifecycle();
+          drainMarkdown();
+        });
+    };
     const commitSource = (
       authoredSource: string,
       enqueueOptions?: { readonly coalesceKey?: string | undefined },
@@ -662,6 +852,55 @@ export const createEditorBundle = (
     };
     const initialWorkTabs = readStoredWorkTabs();
     const actions: EditorActions = {
+      inspectMarkdown: async (instancePath) => {
+        const target = markdownTarget(instancePath, true);
+        if (target === null) return null;
+        const generation = markdownGeneration;
+        return target.api.inspect().then(
+          (project) => {
+            if (
+              generation !== markdownGeneration ||
+              get().render !== target.render ||
+              markdownTarget(instancePath, true) === null ||
+              project.rev !== target.doc.rev
+            )
+              return null;
+            const file = project.files.find((entry) => entry.path === target.origin.fileName);
+            return file?.content == null || file.binary === true || file.status === "deleted"
+              ? null
+              : inspectMarkdownNode(file.content, file.path, target.origin, { tag: target.tag });
+          },
+          () => {
+            if (generation === markdownGeneration)
+              set({ sourceEditError: "Couldn't read this content. Try again." });
+            return null;
+          },
+        );
+      },
+      editMarkdownText: (instancePath, text) => {
+        const target = markdownTarget(instancePath, true);
+        if (target === null) {
+          set({
+            sourceEditError: "This content cannot be edited right now. Select it again to retry.",
+          });
+          return;
+        }
+        set({ sourceEditError: null });
+        // The lifecycle has no coalesce key. Only the latest text in a typing burst is saved,
+        // and a save that is already running is followed by the latest text typed meanwhile.
+        pendingMarkdown.set(instancePath, {
+          file: target.origin.fileName,
+          tag: target.tag,
+          fixture: target.fixture,
+          revision: target.doc.rev,
+          text,
+        });
+        if (markdownTimer !== undefined) clearTimeout(markdownTimer);
+        markdownTimer = setTimeout(() => {
+          markdownTimer = undefined;
+          drainMarkdown();
+        }, 300);
+      },
       requestSourceAssistance: (originIndex) =>
         set({
           assistantOriginIndex: originIndex,
@@ -800,6 +1039,21 @@ export const createEditorBundle = (
               fixtureError: `Couldn't render the ${fixture} fixture.`,
             }),
         );
+      },
+
+      setPreviewTarget: (target) => {
+        if (target === "web" && host.render === undefined) return;
+        if (get().previewTarget === target) return;
+        set({ previewTarget: target });
+      },
+
+      selectFromPage: (pagePath) => {
+        const { pageRender, render } = get();
+        // A page from an earlier revision or fixture maps its origins onto the wrong email.
+        if (pageRender === null || render === null || pageRender.revision !== render.revision)
+          return;
+        const emailPath = correspondingPath(pageRender.selections, render.selections, pagePath);
+        actions.select(emailPath);
       },
 
       reload: () => {
@@ -1320,6 +1574,10 @@ export const createEditorBundle = (
       telemetry: host.telemetry,
       assetsCapability: host.assets,
       fixtureCapability: host.fixtures,
+      pageAvailable: host.render !== undefined,
+      previewTarget: "email",
+      pageRender: null,
+      pageError: null,
       fixtureBusy: false,
       fixtureError: null,
       diagnosticAssistance: null,
@@ -1429,10 +1687,64 @@ export const createEditorBundle = (
     if (state.pins !== previous.pins) pinsListener?.(state.pins);
   });
 
+  // The web page is the host's render of the same revision and fixture the email shows, so it is
+  // requested whenever those change while the page is the previewed target.
+  let pageRequest = 0;
+  const syncPage = (state: EditorState, previous: EditorState | null) => {
+    const render = host.render;
+    const { doc } = state;
+    if (render === undefined || state.previewTarget !== "web" || doc === null) return;
+    const revision = state.render?.revision ?? null;
+    const fixture = doc.fixture;
+    if (
+      previous !== null &&
+      previous.previewTarget === "web" &&
+      previous.previewEpoch === state.previewEpoch &&
+      previous.render?.revision === revision &&
+      previous.doc?.fixture === fixture
+    ) {
+      return;
+    }
+    if (fixture === null || revision === null) {
+      store.setState({ pageRender: null, pageError: null });
+      return;
+    }
+    pageRequest += 1;
+    const request = pageRequest;
+    void render(doc.origin.file, fixture, "web").then(
+      (page) => {
+        if (request !== pageRequest) return;
+        // Only the page for the render now on screen is kept; any other is for a document the
+        // author has moved past.
+        const current = page !== null && isPageRender(page) ? page : null;
+        const matches = current !== null && current.revision === store.getState().render?.revision;
+        store.setState({
+          pageRender: matches ? current : null,
+          pageError: matches ? null : "Couldn't render the web page.",
+        });
+      },
+      () => {
+        if (request !== pageRequest) return;
+        store.setState({ pageRender: null, pageError: "Couldn't render the web page." });
+      },
+    );
+  };
+  store.subscribe((state, previous) => syncPage(state, previous));
+
   return {
     host,
     store,
-    spine,
+    spine: {
+      ...spine,
+      dispose: () => {
+        markdownGeneration += 1;
+        cancelMarkdownWait?.();
+        if (markdownTimer !== undefined) clearTimeout(markdownTimer);
+        markdownTimer = undefined;
+        store.setState({ lifecycleBusy: false });
+        spine.dispose();
+      },
+    },
     setUserSelectListener: (listener) => {
       userSelectListener = listener;
     },

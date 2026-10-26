@@ -1,3 +1,4 @@
+import { INSTANCE_PATH_ATTRIBUTE } from "@samva/markup/edit";
 import { type ReactNode, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -142,8 +143,18 @@ export interface EmailFrameProps {
    * browser from zooming the page and reports the gesture so the canvas zooms instead.
    */
   readonly onZoomGesture?: ((gesture: ZoomGesture) => void) | undefined;
+  /**
+   * Whether the text of this element can be edited in place. Asked on a double-click; only an
+   * element that holds nothing but text is offered, so editing never flattens inline markup.
+   */
+  readonly canEditText?: ((instancePath: string) => boolean) | undefined;
+  /** The text an author typed into an element in place, reported when they finish. */
+  readonly onEditText?: ((instancePath: string, text: string) => void) | undefined;
   /** Mount the document again when this changes, as a refresh does. */
   readonly epoch?: number | undefined;
+  /** The frame's accessible name; the web page is shown in the same frame with its own. */
+  readonly title?: string | undefined;
+  readonly testId?: string | undefined;
 }
 
 /**
@@ -161,6 +172,10 @@ const FrameDocument = ({
   onHover,
   onContextMenu,
   onZoomGesture,
+  canEditText,
+  onEditText,
+  title = "Email canvas",
+  testId = "canvas.frame",
 }: {
   readonly document_: string;
   readonly mount: PreparedPreviewDocument["mount"] | undefined;
@@ -171,15 +186,33 @@ const FrameDocument = ({
   readonly onHover?: ((instancePath: string | null) => void) | undefined;
   readonly onContextMenu?: EmailFrameProps["onContextMenu"];
   readonly onZoomGesture?: EmailFrameProps["onZoomGesture"];
+  readonly canEditText?: EmailFrameProps["canEditText"];
+  readonly onEditText?: EmailFrameProps["onEditText"];
+  readonly title?: string | undefined;
+  readonly testId?: string | undefined;
 }): ReactNode => {
   const ref = useRef<HTMLIFrameElement>(null);
   const [body, setBody] = useState<HTMLElement | null>(null);
   // Handlers are read at event time so re-attaching listeners is never needed for
   // a changed callback identity, and the document listeners live with the frame.
-  const handlers = useRef({ onSelect, onHover, onContextMenu, onZoomGesture });
+  const handlers = useRef({
+    onSelect,
+    onHover,
+    onContextMenu,
+    onZoomGesture,
+    canEditText,
+    onEditText,
+  });
   useLayoutEffect(() => {
-    handlers.current = { onSelect, onHover, onContextMenu, onZoomGesture };
-  }, [onSelect, onHover, onContextMenu, onZoomGesture]);
+    handlers.current = {
+      onSelect,
+      onHover,
+      onContextMenu,
+      onZoomGesture,
+      canEditText,
+      onEditText,
+    };
+  }, [onSelect, onHover, onContextMenu, onZoomGesture, canEditText, onEditText]);
 
   // Layout effect (not passive) so the frame is wired and the portal content is
   // committed before the browser paints — otherwise one empty frame flashes.
@@ -242,6 +275,48 @@ const FrameDocument = ({
       }
       handlers.current.onSelect?.(resolveInstancePath(event.target));
     };
+    // A double-click makes an element that holds only text editable in place. Enter or leaving
+    // the element commits it, Escape puts the text back; the render only changes once it commits,
+    // so the caret is never rewritten mid-edit.
+    const onDoubleClick = (event: MouseEvent) => {
+      const { canEditText: allowed, onEditText: commit } = handlers.current;
+      const path = resolveInstancePath(event.target);
+      if (path === null || allowed?.(path) !== true || commit === undefined) return;
+      const element = idoc.querySelector<HTMLElement>(
+        `[${INSTANCE_PATH_ATTRIBUTE}="${CSS.escape(path)}"]`,
+      );
+      if (element === null || element.children.length > 0) return;
+      event.preventDefault();
+      const original = element.textContent ?? "";
+      let cancelled = false;
+      element.contentEditable = "plaintext-only";
+      element.focus();
+      const range = idoc.createRange();
+      range.selectNodeContents(element);
+      const selection = idoc.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      const finish = () => {
+        element.removeEventListener("keydown", onEditKey);
+        element.removeEventListener("blur", finish);
+        element.removeAttribute("contenteditable");
+        const text = element.textContent ?? "";
+        if (cancelled) element.textContent = original;
+        else if (text !== original) commit(path, text);
+      };
+      const onEditKey = (key: KeyboardEvent) => {
+        if (key.key === "Enter" && !key.shiftKey) {
+          key.preventDefault();
+          element.blur();
+        } else if (key.key === "Escape") {
+          key.preventDefault();
+          cancelled = true;
+          element.blur();
+        }
+      };
+      element.addEventListener("keydown", onEditKey);
+      element.addEventListener("blur", finish);
+    };
     const onMove = (event: MouseEvent) => {
       if (!onOverlay(event.target)) handlers.current.onHover?.(resolveInstancePath(event.target));
     };
@@ -278,6 +353,7 @@ const FrameDocument = ({
 
     const attach = () => {
       idoc.addEventListener("click", onClick);
+      idoc.addEventListener("dblclick", onDoubleClick);
       idoc.addEventListener("mousemove", onMove);
       idoc.addEventListener("mouseleave", onLeave);
       idoc.addEventListener("contextmenu", onContext);
@@ -286,6 +362,7 @@ const FrameDocument = ({
     };
     const detach = () => {
       idoc.removeEventListener("click", onClick);
+      idoc.removeEventListener("dblclick", onDoubleClick);
       idoc.removeEventListener("mousemove", onMove);
       idoc.removeEventListener("mouseleave", onLeave);
       idoc.removeEventListener("contextmenu", onContext);
@@ -321,8 +398,8 @@ const FrameDocument = ({
   return (
     <iframe
       ref={ref}
-      data-testid="canvas.frame"
-      title="Email canvas"
+      data-testid={testId}
+      title={title}
       sandbox="allow-same-origin"
       style={{
         width,

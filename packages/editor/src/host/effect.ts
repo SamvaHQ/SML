@@ -18,12 +18,16 @@ import type {
   EditableEditorDocument,
   EditorDocument,
   EditorEvent,
+  EmailRender,
+  FixtureName,
   FontEntry,
+  PageRender,
   LifecycleUnavailable,
   ProjectFileExists,
   ProjectLifecycleState,
   PublishedProjectCommit,
   ReadonlyEditorDocument,
+  RenderTarget,
   RevisionToken,
   UploadedImage,
   UploadImageInput,
@@ -166,6 +170,14 @@ interface EditorHostCapabilities {
   readonly lifecycle?: Capability<LifecycleApi> | undefined;
   readonly versions?: Capability<VersionsApi> | undefined;
   readonly telemetry?: ((event: EditorEvent) => Effect.Effect<void>) | undefined;
+  /** Render the open document for one target; see the async contract's `render`. */
+  readonly render?:
+    | ((
+        entry: string,
+        fixture: FixtureName,
+        target: RenderTarget,
+      ) => Effect.Effect<EmailRender | PageRender | null>)
+    | undefined;
 }
 
 export interface EditableEditorHost extends EditorHostCapabilities {
@@ -298,6 +310,10 @@ export function toAsyncHost(host: EditorHost): AsyncEditorHost {
         updateFile: (input) => Effect.runPromise(api.updateFile(input)),
         putAsset: (input) => Effect.runPromise(api.putAsset(input)),
       })),
+    render:
+      host.render &&
+      ((entry: string, fixture: FixtureName, target: RenderTarget) =>
+        Effect.runPromise(host.render!(entry, fixture, target))),
     telemetry:
       telemetry &&
       ((event: EditorEvent) => {

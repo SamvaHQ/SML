@@ -16,10 +16,11 @@ import {
   LockedAction,
 } from "@samva/editor/shell";
 import { Effect } from "effect";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { useEditorStore } from "../src/state/context";
 import type { CompiledHostControls } from "./compiled-host";
+import type { IssueSource } from "./issue-host";
 import { createPromiseHost } from "./promise-host";
 import { createWorkspaceHost, WorkspaceDemoShell } from "./workspace-demo";
 
@@ -118,6 +119,11 @@ const WORKSPACE_DEMO =
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).get("demo") === "workspace";
 
+/** `?demo=issue` opens a Markdown newsletter issue, edited on its web page. */
+const ISSUE_DEMO =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("demo") === "issue";
+
 /** A replacement for the Preview icon, so the demo shows a host's icon set taking effect. */
 const DemoPreviewIcon = ({ className }: { readonly className?: string }) => (
   <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
@@ -165,14 +171,36 @@ const demoContributions = (onToggleTheme: () => void): ReadonlyArray<EditorContr
   },
 ];
 
+/** The Markdown file the issue demo's host holds, so an edit made on the page shows what it wrote. */
+const IssueSourceReadout = ({ source }: { readonly source: IssueSource }) => {
+  const text = useSyncExternalStore(source.subscribe, source.read);
+  return (
+    <pre
+      data-testid="dev-app.issue-source"
+      className="bg-card text-card-foreground fixed right-3 bottom-3 z-50 max-h-72 w-96 overflow-auto rounded-md border p-3 text-[11px] whitespace-pre-wrap shadow-lg"
+    >
+      {`issues/launch.md\n\n${text}`}
+    </pre>
+  );
+};
+
 export const App = () => {
   const emitRef = useRef<MockHostControls["emit"] | null>(null);
+  const [issueSource, setIssueSource] = useState<IssueSource | null>(null);
   const [controls, setControls] = useState<CompiledHostControls | null>(null);
   const [host, setHost] = useState<AsyncEditorHost | null>(() =>
     EXTENSIONS_DEMO ? createPromiseHost() : null,
   );
   useEffect(() => {
     if (EXTENSIONS_DEMO) return;
+    if (ISSUE_DEMO) {
+      void import("./issue-host").then(async ({ createIssueHost }) => {
+        const issue = await createIssueHost();
+        setIssueSource(issue.source);
+        setHost(issue.host);
+      });
+      return;
+    }
     if (WORKSPACE_DEMO) {
       // The workspace demo compiles the real Nimbus template in the browser. The compiler loads
       // only here, so `/` keeps its small, compiler-free graph.
@@ -245,6 +273,7 @@ export const App = () => {
             onBack={() => console.info("[harness] back to templates")}
           />
         )}
+        {issueSource === null ? null : <IssueSourceReadout source={issueSource} />}
         <HarnessProbe />
       </EditorProvider>
     </div>

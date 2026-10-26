@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 
+import type { RenderTarget } from "../host/types";
 import { cn } from "../lib/utils";
 import { useEditorStore } from "../state/context";
 import { DEVICE_WIDTH } from "../state/store";
@@ -11,12 +12,15 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 import { EditorCanvasModeSwitch } from "./design-controls";
 import { Mobile, Monitor, MoreHorizontal, OpenExternal, Refresh } from "./editor-icons";
+import { useEmailDifferences } from "./email-differences";
 import { usePart, type PartProps } from "./part";
 import { usePreviewChrome } from "./preview-context";
 import { Segmented, Tip } from "./ui";
@@ -120,9 +124,11 @@ export function EditorPreviewBar({
   /** Extra rows for the bar's menu, which then shows at every width. */
   readonly viewMenu?: ReactNode | undefined;
 }) {
-  const { device, working, canRefresh } = useEditorStore(
+  const { device, target, pageAvailable, working, canRefresh } = useEditorStore(
     useShallow((state) => ({
       device: state.previewDevice,
+      pageAvailable: state.pageAvailable,
+      target: state.pageAvailable ? state.previewTarget : "email",
       working: state.fixtureBusy || state.pendingAuthoredSource !== null || state.previewRefreshing,
       canRefresh:
         state.doc !== null &&
@@ -132,8 +138,14 @@ export function EditorPreviewBar({
         !state.lifecycleBusy,
     })),
   );
-  const { setPreviewDevice, refreshPreview } = useEditorStore((state) => state.actions);
-  const { hostBusy, openInNewTab } = usePreviewChrome();
+  const { setPreviewDevice, setPreviewTarget, refreshPreview, openWorkTab } = useEditorStore(
+    (state) => state.actions,
+  );
+  const { hostBusy, openInNewTab: emailOpenInNewTab } = usePreviewChrome();
+  // Open, the size readout and the Design and Pin switches are about the delivered email.
+  const onWeb = target === "web";
+  const openInNewTab = onWeb ? undefined : emailOpenInNewTab;
+  const differing = useEmailDifferences().length;
   const size = useSizeReadout();
   const busy = working || hostBusy;
 
@@ -151,6 +163,23 @@ export function EditorPreviewBar({
               data-slot="editor-preview-bar-center"
               className="flex min-w-0 flex-1 items-center justify-center gap-1.5"
             >
+              {pageAvailable && (
+                <span
+                  data-slot="editor-preview-bar-target"
+                  className="inline-flex @max-[28rem]/preview-bar:hidden"
+                >
+                  <Segmented<RenderTarget>
+                    ariaLabel="Preview as"
+                    value={target}
+                    onChange={setPreviewTarget}
+                    size="sm"
+                    options={[
+                      { value: "email", testId: "preview-bar.target.email", label: "Email" },
+                      { value: "web", testId: "preview-bar.target.web", label: "Web" },
+                    ]}
+                  />
+                </span>
+              )}
               <Segmented
                 ariaLabel="Preview width"
                 value={device}
@@ -172,18 +201,33 @@ export function EditorPreviewBar({
                 ]}
               />
               <FixtureSelect testId="preview-bar.fixture" />
+              {onWeb && differing > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-slot="editor-preview-bar-differences"
+                  data-testid="preview-bar.differences"
+                  data-editor-control=""
+                  onClick={() => openWorkTab("checks")}
+                  className="text-muted-foreground shrink-0 @max-[28rem]/preview-bar:hidden"
+                >
+                  {differing} differ in email
+                </Button>
+              )}
             </div>
-            <EditorCanvasModeSwitch />
-            <Tip label={size.help}>
-              <span
-                tabIndex={0}
-                data-slot="editor-preview-bar-size"
-                data-testid="preview-bar.size"
-                className="text-muted-foreground focus-visible:ring-ring/50 shrink-0 rounded-md px-1.5 text-xs leading-7 tabular-nums outline-none focus-visible:ring-3 @max-[28rem]/preview-bar:hidden"
-              >
-                {size.text}
-              </span>
-            </Tip>
+            {!onWeb && <EditorCanvasModeSwitch />}
+            {!onWeb && (
+              <Tip label={size.help}>
+                <span
+                  tabIndex={0}
+                  data-slot="editor-preview-bar-size"
+                  data-testid="preview-bar.size"
+                  className="text-muted-foreground focus-visible:ring-ring/50 shrink-0 rounded-md px-1.5 text-xs leading-7 tabular-nums outline-none focus-visible:ring-3 @max-[28rem]/preview-bar:hidden"
+                >
+                  {size.text}
+                </span>
+              </Tip>
+            )}
             {openInNewTab !== undefined && (
               <span className="inline-flex @max-[28rem]/preview-bar:hidden">
                 <Tip label="Open in a new tab">
@@ -238,18 +282,49 @@ export function EditorPreviewBar({
                   <MoreHorizontal />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-60">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>Preview</DropdownMenuLabel>
-                    <div className="text-muted-foreground px-1.5 pb-1.5 text-xs tabular-nums">
-                      {size.text}
-                    </div>
-                    {openInNewTab !== undefined && (
-                      <DropdownMenuItem data-editor-control="" onClick={openInNewTab}>
-                        <OpenExternal />
-                        Open in a new tab
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuGroup>
+                  {pageAvailable && (
+                    <>
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>Preview as</DropdownMenuLabel>
+                        <DropdownMenuRadioGroup
+                          value={target}
+                          onValueChange={(value) => {
+                            if (value === "email" || value === "web") setPreviewTarget(value);
+                          }}
+                        >
+                          <DropdownMenuRadioItem value="email" data-editor-control="">
+                            Email
+                          </DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="web" data-editor-control="">
+                            Web
+                          </DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                        {onWeb && differing > 0 && (
+                          <DropdownMenuItem
+                            data-editor-control=""
+                            onClick={() => openWorkTab("checks")}
+                          >
+                            {differing} differ in email
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuGroup>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  {!onWeb && (
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Preview</DropdownMenuLabel>
+                      <div className="text-muted-foreground px-1.5 pb-1.5 text-xs tabular-nums">
+                        {size.text}
+                      </div>
+                      {openInNewTab !== undefined && (
+                        <DropdownMenuItem data-editor-control="" onClick={openInNewTab}>
+                          <OpenExternal />
+                          Open in a new tab
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuGroup>
+                  )}
                   {viewMenu !== undefined && (
                     <>
                       <DropdownMenuSeparator />
