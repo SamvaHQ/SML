@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useState } from "react";
 
-import { projectDiagnosticCheck, summarizeChecks } from "../state/derive";
+import { projectDiagnosticCheck, summarizeChecks, tipChecks } from "../state/derive";
 import type { CheckItem } from "../state/types";
 import { assessmentLabels } from "./assessment-labels";
 import { CheckActions } from "./check-actions";
@@ -18,9 +18,7 @@ export function AttentionSummary({
   readonly editable?: boolean;
 }) {
   const { actionable } = summarizeChecks(checks);
-  const pending = checks.filter((check) =>
-    check.diagnostics?.some((item) => item.compatibility?.assessment === "unverified"),
-  ).length;
+  const pending = tipChecks(checks).length;
   return (
     <section
       className="space-y-3"

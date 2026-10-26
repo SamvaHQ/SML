@@ -6,6 +6,7 @@ import { afterEach, expect, it } from "@effect/vitest";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 
 import { AttentionSummary } from "../src/chrome/compatibility-report";
+import { describeChecks } from "../src/state/derive";
 import type { CheckItem } from "../src/state/types";
 
 afterEach(cleanup);
@@ -115,4 +116,28 @@ it("uses checks loaded after mount when opening and resets filters on reopen", a
     "unverified",
   );
   expect((view.getByTestId("checks.report.client") as HTMLSelectElement).value).toBe("all");
+});
+
+it("counts tips the way the status bar does when a warning shares the finding", () => {
+  const checks: ReadonlyArray<CheckItem> = [
+    {
+      id: "compat:mixed",
+      severity: "warn",
+      label: "Mixed",
+      detail: "",
+      diagnostics: [
+        {
+          code: "feature",
+          severity: "info",
+          message: "Verify Outlook rendering",
+          origins: [],
+          compatibility: { assessment: "unverified", title: "Rendering needs verification" },
+        },
+      ],
+    },
+  ];
+  const view = render(<AttentionSummary checks={checks} />);
+  expect(describeChecks(checks).text).toBe("1 warning");
+  expect(view.baseElement.textContent).toContain("These checks do not confirm rendering");
+  expect(view.baseElement.textContent).not.toContain("tip");
 });

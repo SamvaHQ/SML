@@ -341,14 +341,21 @@ export interface ChecksStatus {
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
 /**
+ * The tips among `checks`: `info` checks holding a finding no client has verified. The status bar
+ * and the Checks panel count the same set.
+ */
+export const tipChecks = (checks: ReadonlyArray<CheckItem>): ReadonlyArray<CheckItem> =>
+  summarizeChecks(checks).info.filter((check) =>
+    check.diagnostics?.some((item) => item.compatibility?.assessment === "unverified"),
+  );
+
+/**
  * Word the checks by severity for the status bar. A tip is a note that still needs a look: an
  * `info` check holding a finding no client has verified. Measurements such as the size are not.
  */
 export const describeChecks = (checks: ReadonlyArray<CheckItem>): ChecksStatus => {
-  const { errorCount, warnCount, info } = summarizeChecks(checks);
-  const tips = info.filter((check) =>
-    check.diagnostics?.some((item) => item.compatibility?.assessment === "unverified"),
-  );
+  const { errorCount, warnCount } = summarizeChecks(checks);
+  const tips = tipChecks(checks);
   const parts: ChecksStatusPart[] = [];
   if (errorCount > 0)
     parts.push({ severity: "error", text: plural(errorCount, "error", "errors") });
