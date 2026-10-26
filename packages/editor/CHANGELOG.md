@@ -1,3 +1,27 @@
+## @samva/editor@0.20.0
+
+### Calmer checks, a clearer brand menu, and toolbar buttons hosts can match
+
+The Checks panel no longer shows "Needs attention" above "No known risks found." When nothing is actionable it shows a settled "No issues found", and the note about email clients now counts "tips", the same word as the status bar.
+
+The brand menu lists your brands by name with their swatches, under "Apply a brand" when the template has none. The organization default carries a muted "Default" tag, left off when the brand is already named Default.
+
+The Publish sheet shows placeholder rows shaped like saved versions while they load, so the list does not jump when it arrives.
+
+`@samva/editor/shell` exports `EditorToolbarButton`. Contribute it to `toolbar.actions` and it matches the top bar's buttons in size, radius and type, folds to its icon with a tooltip when the top bar folds its own labels, and works as a Base UI `render` target such as a popover trigger.
+
+### Open Markdown issues in Source
+
+Email documents accept a `markdown` origin with the complete issue source, including frontmatter,
+and `layout: { file }` identifying the host-owned TSX layout. The Source tab edits the issue through
+the existing revision-fenced writer. Prose edits from either preview update the same source and
+participate in undo/redo without requiring a project lifecycle capability. Layout spans are
+read-only, and TSX-only structural, expression, fixture-data and class-name edits are hidden.
+
+The host contract version is now `2026-10-26.1`: hosts must handle the email origin union and
+write `origin.file` for source saves. SMS and WhatsApp remain TSX-only. The TSX editing behavior
+and compiled email output are unchanged.
+
 ## @samva/editor@0.19.0
 
 ### Author newsletter issues in SML Markdown
