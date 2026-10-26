@@ -1,10 +1,11 @@
 {
   "name": "@samva/editor",
   "version": "0.18.1",
-  "description": "Embeddable editor for Samva template projects written in TSX",
+  "description": "Embeddable editor for Samva templates and Markdown newsletter issues",
   "keywords": [
     "editor",
     "email",
+    "markdown",
     "react",
     "samva",
     "sml",

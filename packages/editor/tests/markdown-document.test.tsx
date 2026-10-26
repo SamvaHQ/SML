@@ -14,8 +14,9 @@ import {
 } from "@samva/editor/host";
 import { previewEmail } from "@samva/markup/edit";
 import { compileIssue } from "@samva/markup/markdown";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 
+import { EditorShell } from "../src/chrome/shell";
 import { EditorProvider } from "../src/state/provider";
 import { useEditorProbe, type EditorProbe } from "./store-probe";
 
@@ -28,7 +29,7 @@ import {jsonSchema} from "@samva/markup/input-schema";
 import {Email,IssueContent} from "@samva/markup/email";
 export default defineTemplate({id:"layout",schema:jsonSchema({type:"object",properties:{}}),fixtures:{reader:{}},email:{subject:()=>"News",body:()=> <Email><IssueContent /></Email>}});`;
 
-const harness = async (body = "Hello\n\nNeighbor") => {
+const harness = async (body = "Hello\n\nNeighbor", shell = false) => {
   let source = HEADER + body;
   let rev = "rev_1";
   let counter = 1;
@@ -117,6 +118,7 @@ const harness = async (body = "Hello\n\nNeighbor") => {
   const view = render(
     <EditorProvider host={host}>
       <Probe />
+      {shell ? <EditorShell /> : null}
     </EditorProvider>,
   );
   await waitFor(() => expect(probe.doc).not.toBeNull());
@@ -152,8 +154,8 @@ const harness = async (body = "Hello\n\nNeighbor") => {
     delayRender: () => {
       delayRender = true;
     },
-    deliverRender: () => {
-      const change = delayed.shift();
+    deliverRender: (index = 0) => {
+      const change = delayed.splice(index, 1)[0];
       if (change === undefined) throw new Error("No delayed render");
       receive?.(change);
     },
@@ -168,7 +170,7 @@ describe("Markdown as the open source document", () => {
     });
     act(() => editor.probe.editMarkdownText(editor.path, "Welcome"));
     await waitFor(() => expect(editor.source).toBe(HEADER + "Welcome\n\nNeighbor"));
-    await waitFor(() => expect(editor.probe.lifecycleBusy).toBe(false));
+    await waitFor(() => expect(editor.probe.render?.html).toContain("Welcome"));
     expect(editor.writes()[0]?.baseRev).toBe("rev_1");
     expect(editor.probe.doc?.origin.authoredSource).toBe(editor.source);
     expect(editor.probe.render?.html).toContain("Welcome");
@@ -279,7 +281,7 @@ describe("Markdown as the open source document", () => {
   });
 
   it("keeps text typed during an unavailable save through Retry", async () => {
-    const editor = await harness();
+    const editor = await harness("Hello\n\nNeighbor", true);
     let reject!: (cause: unknown) => void;
     editor.save.mockImplementationOnce(
       () =>
@@ -292,10 +294,119 @@ describe("Markdown as the open source document", () => {
     act(() => editor.probe.editMarkdownText(editor.path, "First plus latest typing"));
     await act(async () => reject(new DocumentUnavailable({ reason: "Offline" })));
     await waitFor(() => expect(editor.probe.storageError).toBe("Offline"));
-    act(() => editor.probe.retrySave());
+    const retry = await editor.view.findByTestId("storage.retry");
+    expect(retry.closest("[inert]")).toBeNull();
+    fireEvent.click(retry);
     await waitFor(() => expect(editor.source).toContain("First plus latest typing"));
     await waitFor(() => expect(editor.probe.lifecycleBusy).toBe(false));
     expect(editor.probe.storageError).toBeNull();
     expect(editor.probe.doc?.origin.authoredSource).toBe(editor.source);
+  });
+
+  it("fences every earlier Source revision when several renders are delayed", async () => {
+    const editor = await harness();
+    editor.delayRender();
+    act(() => editor.probe.replaceAuthoredSource(HEADER + "First"));
+    await act(() => editor.probe.flushSaves());
+    act(() => editor.probe.replaceAuthoredSource(HEADER + "Second"));
+    await act(() => editor.probe.flushSaves());
+    await act(() => editor.external("External text"));
+    act(() => editor.deliverRender());
+    expect(editor.probe.doc?.origin.authoredSource).toBe(HEADER + "External text");
+    act(() => editor.deliverRender());
+    expect(editor.probe.doc?.rev).toBe("rev_4");
+    expect(editor.probe.doc?.origin.authoredSource).toBe(HEADER + "External text");
+    expect(editor.writes()).toHaveLength(2);
+  });
+
+  it("does not rewind Source when an older self render follows a newer one", async () => {
+    const editor = await harness();
+    editor.delayRender();
+    act(() => editor.probe.replaceAuthoredSource(HEADER + "First"));
+    await act(() => editor.probe.flushSaves());
+    act(() => editor.probe.replaceAuthoredSource(HEADER + "Second"));
+    await act(() => editor.probe.flushSaves());
+    act(() => editor.deliverRender(1));
+    expect(editor.probe.doc?.rev).toBe("rev_3");
+    act(() => editor.deliverRender());
+    expect(editor.probe.doc?.origin.authoredSource).toBe(HEADER + "Second");
+    expect(editor.probe.render?.revision).toBe("rev_3");
+  });
+
+  it("discards queued prose when the author reloads the document", async () => {
+    const editor = await harness();
+    act(() => editor.probe.editMarkdownText(editor.path, "Queued"));
+    act(() => editor.probe.reload());
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(editor.save).not.toHaveBeenCalled();
+    expect(editor.probe.doc?.origin.authoredSource).toBe(HEADER + "Hello\n\nNeighbor");
+  });
+
+  it("keeps a lifecycle snapshot when an older source render arrives", async () => {
+    const editor = await harness();
+    editor.delayRender();
+    act(() => editor.probe.replaceAuthoredSource(HEADER + "Before restore"));
+    await act(() => editor.probe.flushSaves());
+    act(() =>
+      editor.probe.adoptLifecycleSnapshot({ rev: "rev_3", authoredSource: HEADER + "Restored" }),
+    );
+    act(() => editor.deliverRender());
+    expect(editor.probe.doc?.rev).toBe("rev_3");
+    expect(editor.probe.doc?.origin.authoredSource).toBe(HEADER + "Restored");
+  });
+
+  it("waits to acquire the lifecycle until queued prose is saved", async () => {
+    const editor = await harness();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const write = editor.save.getMockImplementation()!;
+    editor.save.mockImplementationOnce(async (input) => {
+      await gate;
+      return write(input);
+    });
+    act(() => editor.probe.editMarkdownText(editor.path, "First"));
+    expect(editor.probe.beginLifecycle()).toBe(false);
+    await waitFor(() => expect(editor.save).toHaveBeenCalledTimes(1));
+    act(() => editor.probe.editMarkdownText(editor.path, "First plus latest typing"));
+    expect(editor.probe.beginLifecycle()).toBe(false);
+    await act(async () => release());
+    await waitFor(() => expect(editor.source).toContain("First plus latest typing"));
+    await waitFor(() => expect(editor.probe.render?.html).toContain("First plus latest typing"));
+    await waitFor(() => expect(editor.probe.beginLifecycle()).toBe(true));
+    act(() => editor.probe.endLifecycle());
+    expect(editor.writes()).toHaveLength(2);
+  });
+
+  it("inspects a shifted neighbor in the source belonging to the displayed render", async () => {
+    const editor = await harness("**one** and *two* and *three*");
+    const strong = editor.probe.render!.selections.find(
+      (item) => item.tag === "strong",
+    )!.instancePath;
+    const neighbor = editor.probe.render!.selections.find(
+      (item) => item.tag === "em",
+    )!.instancePath;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const write = editor.save.getMockImplementation()!;
+    editor.save.mockImplementationOnce(async (input) => {
+      await gate;
+      return write(input);
+    });
+    act(() => editor.probe.select(strong));
+    act(() => editor.probe.editMarkdownText(strong, "one0123456789"));
+    await waitFor(() => expect(editor.save).toHaveBeenCalledTimes(1));
+    act(() => editor.probe.select(neighbor));
+    expect(await editor.probe.inspectMarkdown(neighbor)).toMatchObject({
+      properties: [{ name: "children", value: "two" }],
+    });
+    act(() => editor.probe.editMarkdownText(neighbor, "two updated"));
+    await act(async () => release());
+    await waitFor(() =>
+      expect(editor.source).toBe(HEADER + "**one0123456789** and *two updated* and *three*"),
+    );
   });
 });

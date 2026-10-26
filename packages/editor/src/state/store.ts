@@ -526,6 +526,8 @@ export const createEditorBundle = (
   let markdownGeneration = 0;
   let markdownSaving = false;
   let markdownEntryRevision: string | null = null;
+  let markdownEntrySource: string | null = null;
+  // Revision tokens are opaque: retire each one as the writer or change stream advances past it.
   const obsoleteMarkdownRevisions = new Set<string>();
   let invalidateMarkdown: () => void = () => {};
   let cancelMarkdownWait: (() => void) | undefined;
@@ -575,7 +577,7 @@ export const createEditorBundle = (
         host.access !== "editable" ||
         doc?.access.kind === "readonly" ||
         state.previewRefreshing ||
-        (state.lifecycleBusy && !markdownSaving) ||
+        (state.lifecycleBusy && (!markdownSaving || markdownEntryRevision !== null)) ||
         !state.editable ||
         !state.sourceEditable ||
         state.hostBusy ||
@@ -602,7 +604,14 @@ export const createEditorBundle = (
       if (element === undefined || origin === undefined) return null;
       const target = { doc, render, fixture: doc.fixture, origin, tag: element.tag };
       if (doc.origin.kind === "markdown")
-        return { ...target, kind: "entry" as const, source: doc.origin.authoredSource };
+        return {
+          ...target,
+          kind: "entry" as const,
+          source:
+            render.revision === markdownEntryRevision && markdownEntrySource !== null
+              ? markdownEntrySource
+              : doc.origin.authoredSource,
+        };
       if (state.lifecycleCapability?.status !== "ready") return null;
       return { ...target, kind: "project" as const, api: state.lifecycleCapability.api };
     };
@@ -618,7 +627,7 @@ export const createEditorBundle = (
       }
     >();
     // One element's edit that cannot be applied says why and leaves the others pending; only a
-    // failure of the write itself, which every pending edit shares, clears them all.
+    // unrecoverable failure of the write itself, which every pending edit shares, clears them all.
     const refuseMarkdown = (reason: string): void => set({ sourceEditError: reason });
     const failMarkdown = (reason: string): void => {
       pendingMarkdown.clear();
@@ -626,7 +635,7 @@ export const createEditorBundle = (
     };
     invalidateMarkdown = () => {
       const hadEdits = markdownSaving || pendingMarkdown.size > 0;
-      const ownedGate = markdownSaving;
+      const ownedGate = markdownSaving && markdownEntryRevision === null;
       markdownGeneration += 1;
       pendingMarkdown.clear();
       if (markdownTimer !== undefined) clearTimeout(markdownTimer);
@@ -634,6 +643,7 @@ export const createEditorBundle = (
       cancelMarkdownWait?.();
       markdownSaving = false;
       markdownEntryRevision = null;
+      markdownEntrySource = null;
       set({
         ...(ownedGate ? { lifecycleBusy: false } : {}),
         ...(hadEdits ? { sourceEditError: staleMarkdown } : {}),
@@ -693,9 +703,11 @@ export const createEditorBundle = (
         refuseMarkdown(staleMarkdown);
         return drainMarkdown();
       }
-      if (!actions.beginLifecycle()) return failMarkdown(staleMarkdown);
+      if (target.kind === "project" && !actions.beginLifecycle())
+        return failMarkdown(staleMarkdown);
       markdownSaving = true;
       markdownEntryRevision = target.kind === "entry" ? item.revision : null;
+      markdownEntrySource = target.kind === "entry" ? target.source : null;
       const generation = markdownGeneration;
       void spine
         .flushSaves()
@@ -722,7 +734,7 @@ export const createEditorBundle = (
               undoHistory: [...state.undoHistory, { before: target.source, after: changed.source }],
               redoHistory: [],
             });
-            commitSource(changed.source);
+            commitSource(changed.source, { markdownSpan: true });
             const revision = await flushMarkdownSource();
             if (generation !== markdownGeneration) return;
             if (get().conflict || get().storageError !== null)
@@ -786,16 +798,22 @@ export const createEditorBundle = (
           if (generation !== markdownGeneration) return;
           markdownSaving = false;
           markdownEntryRevision = null;
-          actions.endLifecycle();
+          markdownEntrySource = null;
+          if (target.kind === "project") actions.endLifecycle();
           drainMarkdown();
         });
     };
     const commitSource = (
       authoredSource: string,
-      enqueueOptions?: { readonly coalesceKey?: string | undefined },
+      enqueueOptions?: {
+        readonly coalesceKey?: string | undefined;
+        readonly markdownSpan?: boolean | undefined;
+      },
     ): void => {
       const state = get();
       if (state.doc === null) return;
+      if (markdownEntryRevision !== null && enqueueOptions?.markdownSpan !== true)
+        invalidateMarkdown();
       set({
         doc: withAuthoredSource(state.doc, authoredSource),
         pendingAuthoredSource: authoredSource,
@@ -1140,6 +1158,7 @@ export const createEditorBundle = (
 
       reload: () => {
         if (get().lifecycleBusy) return;
+        if (get().doc?.origin.kind === "markdown") invalidateMarkdown();
         set({ conflict: false, storageError: null, fixtureError: null, designSettling: false });
         spine.reload();
       },
@@ -1148,6 +1167,10 @@ export const createEditorBundle = (
 
       beginLifecycle: () => {
         const state = get();
+        if (state.doc?.origin.kind === "markdown" && (markdownSaving || pendingMarkdown.size > 0)) {
+          set({ sourceEditError: "Your text is still saving. Try again in a moment." });
+          return false;
+        }
         if (
           state.lifecycleBusy ||
           state.doc === null ||
@@ -1163,6 +1186,13 @@ export const createEditorBundle = (
       endLifecycle: () => set({ lifecycleBusy: false }),
 
       adoptLifecycleSnapshot: (input) => {
+        const before = get();
+        if (before.doc?.origin.kind === "markdown") {
+          if (before.doc.rev !== input.rev) obsoleteMarkdownRevisions.add(before.doc.rev);
+          if (before.render !== null && before.render.revision !== input.rev)
+            obsoleteMarkdownRevisions.add(before.render.revision);
+          invalidateMarkdown();
+        }
         spine.adoptRev(input.rev);
         set((current) => {
           if (current.doc === null) return { conflict: false };
@@ -1173,20 +1203,14 @@ export const createEditorBundle = (
             ...committedDocument(current, doc, null),
             sourceEditable: sourceEditableFor(doc),
             conflict: false,
+            sourceEditError: null,
             ...(replaced ? { designDraft: null, designCompare: false } : {}),
           };
         });
       },
 
       retrySave: () => {
-        const state = get();
-        const retryingMarkdown =
-          markdownEntryRevision !== null &&
-          state.storageError !== null &&
-          host.access === "editable" &&
-          state.doc?.access.kind === "editable" &&
-          !state.previewRefreshing;
-        if (gated(state) && !retryingMarkdown) return;
+        if (gated(get())) return;
         spine.retrySave();
         if (get().designSettling) settleDesignWrite();
       },
@@ -1721,6 +1745,7 @@ export const createEditorBundle = (
 
   spine = createEditorSpine(host, {
     onInitial: (doc) => {
+      obsoleteMarkdownRevisions.clear();
       store.setState((current) => ({
         ...committedDocument(current, doc, null),
         previewRefreshing: false,
@@ -1730,9 +1755,13 @@ export const createEditorBundle = (
       }));
     },
     onPersistedRevision: (rev) => {
-      if (store.getState().doc?.origin.kind === "markdown" && store.getState().conflict) {
-        obsoleteMarkdownRevisions.add(rev);
-        return;
+      const snapshot = store.getState();
+      if (snapshot.doc?.origin.kind === "markdown") {
+        if (snapshot.conflict || obsoleteMarkdownRevisions.has(rev)) {
+          obsoleteMarkdownRevisions.add(rev);
+          return;
+        }
+        if (snapshot.doc.rev !== rev) obsoleteMarkdownRevisions.add(snapshot.doc.rev);
       }
       store.setState((current) =>
         current.doc === null ? current : { doc: { ...current.doc, rev }, draftSavedAt: Date.now() },
@@ -1741,11 +1770,11 @@ export const createEditorBundle = (
     // Our own acked save came back with the render the host produced for it.
     // Local text that has moved on since is kept; everything else is the host's.
     onSelfAck: (change) => {
-      if (
-        store.getState().doc?.origin.kind === "markdown" &&
-        (store.getState().conflict || obsoleteMarkdownRevisions.has(change.rev))
-      )
-        return;
+      const snapshot = store.getState();
+      if (snapshot.doc?.origin.kind === "markdown") {
+        if (snapshot.conflict || obsoleteMarkdownRevisions.has(change.rev)) return;
+        if (snapshot.doc.rev !== change.rev) obsoleteMarkdownRevisions.add(snapshot.doc.rev);
+      }
       applyChange(change, true);
     },
     onForeignChange: (change, saveInFlight) => {
