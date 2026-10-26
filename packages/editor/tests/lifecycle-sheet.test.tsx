@@ -152,7 +152,7 @@ describe("LifecycleSheet", () => {
     for (const row of rows) {
       expect(row.innerHTML).toContain("motion-reduce:animate-none");
     }
-    expect(view.queryByText("Loading saved versions…")).toBeNull();
+    expect(loading.textContent).not.toContain("…");
 
     await act(async () => {
       finish(state());

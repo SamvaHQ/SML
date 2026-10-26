@@ -40,7 +40,6 @@ const mountShell = async (width: number) => {
   const view = render(
     <EditorProvider host={editor.host}>
       <EditorShell
-        onPreview={() => {}}
         contributions={[
           {
             slot: "toolbar.actions",
@@ -97,13 +96,13 @@ describe("EditorToolbarButton", () => {
           <PopoverTrigger
             render={<EditorToolbarButton data-testid="test.trigger" icon={<svg />} label="Notes" />}
           />
-          <PopoverContent>Panel</PopoverContent>
+          <PopoverContent data-testid="test.panel">Panel</PopoverContent>
         </Popover>
       </EditorProvider>,
     );
     const trigger = view.getByTestId("test.trigger");
     expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
     fireEvent.click(trigger);
-    expect(await view.findByText("Panel")).toBeTruthy();
+    expect(await view.findByTestId("test.panel")).toBeTruthy();
   });
 });
