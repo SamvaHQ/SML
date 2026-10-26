@@ -44,6 +44,8 @@ export type { EditorContribution, EditorSlot } from "./chrome/contributions";
 export type { EditorIcon, EditorIconName, EditorIcons } from "./chrome/icon-set";
 export { EditorGlyph } from "./chrome/editor-glyph";
 export { LockedAction } from "./chrome/locked-action";
+export { EditorToolbarButton } from "./chrome/toolbar-button";
+export type { EditorToolbarButtonProps } from "./chrome/toolbar-button";
 export type { LockedActionProps } from "./chrome/locked-action";
 export type { EditorHostChrome, EditorLifecycleControls, EditorShellProps } from "./chrome/shell";
 export type { EditorAssistantControls, EditorAssistantWorkspace } from "./chrome/use-assistant";

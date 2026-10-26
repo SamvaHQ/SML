@@ -70,6 +70,9 @@ boundaries—not compiler transforms—provide render isolation.
 - A chrome part renders through `usePart`: one `data-slot`, its state as data attributes,
   `className` (string or function of state) merged with tailwind-merge, and Base UI's `render`.
   A new part or state attribute is documented in the README's parts table.
+- A host's `toolbar.actions` button is an `EditorToolbarButton`, not the host's own button, so it
+  keeps the top bar's size and folds its label when the bar does. It folds on `layoutMode !== "wide"`,
+  which is where `topbar.tsx` folds Preview; change the two together.
 - Secondary controls (tab close, per-row actions) use `revealOnRowHover`: shown on hover or
   keyboard focus, always shown where the device cannot hover.
 

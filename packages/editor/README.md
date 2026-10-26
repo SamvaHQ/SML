@@ -7,15 +7,15 @@ recipient receives.
 
 ## Entry points
 
-| Subpath                     | What it is                                                                                |
-| --------------------------- | ----------------------------------------------------------------------------------------- |
-| `@samva/editor/host`        | The host an embedder implements (`AsyncEditorHost`), with the contract's types and errors |
-| `@samva/editor/host/effect` | The host for an Effect codebase (`EditorHost`), and `toAsyncHost`, which adapts it        |
-| `@samva/editor/shell`       | `EditorProvider`, `EditorShell`, contributions, icons (`EditorGlyph`), and `LockedAction` |
-| `@samva/editor/channels`    | SMS/WhatsApp form reads and exact source edits over the authored TSX                      |
-| `@samva/editor/mock`        | An in-memory host + sample document for the harness and tests                             |
-| `@samva/editor/styles.css`  | The chrome's editor-specific tokens + component CSS (see below)                           |
-| `@samva/editor/base.css`    | Optional neutral light/dark base tokens for hosts without their own theme                 |
+| Subpath                     | What it is                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `@samva/editor/host`        | The host an embedder implements (`AsyncEditorHost`), with the contract's types and errors                        |
+| `@samva/editor/host/effect` | The host for an Effect codebase (`EditorHost`), and `toAsyncHost`, which adapts it                               |
+| `@samva/editor/shell`       | `EditorProvider`, `EditorShell`, contributions, icons (`EditorGlyph`), `LockedAction`, and `EditorToolbarButton` |
+| `@samva/editor/channels`    | SMS/WhatsApp form reads and exact source edits over the authored TSX                                             |
+| `@samva/editor/mock`        | An in-memory host + sample document for the harness and tests                                                    |
+| `@samva/editor/styles.css`  | The chrome's editor-specific tokens + component CSS (see below)                                                  |
+| `@samva/editor/base.css`    | Optional neutral light/dark base tokens for hosts without their own theme                                        |
 
 ## Writing a host
 
@@ -57,6 +57,19 @@ A contribution names the region it lands in: `frame.start`, `toolbar.leading`,
 `toolbar.actions`, `document.switcher`, `rail.assistant`, `rail.review`, `canvas.overlay` or
 `statusbar.headline`. The editor owns each region's layout. A region that holds one thing
 refuses a second contribution, and an id used twice fails, so a host bug is loud.
+
+A `toolbar.actions` button should be an `EditorToolbarButton` so it matches the top bar's own
+buttons: it takes an `icon`, a `label` and the usual button props (`onClick`, `disabled`,
+`data-testid`), draws a ghost button at Preview's height, radius, type and icon size, and folds to
+the icon with the label as its tooltip and accessible name exactly when the top bar folds its own
+labels (every frame narrower than 1280px). It forwards its ref and props, so a Base UI `render`
+target such as a popover trigger can use it:
+
+```tsx
+import { EditorToolbarButton } from "@samva/editor/shell";
+
+<PopoverTrigger render={<EditorToolbarButton icon={<ClockIcon />} label="History" />} />;
+```
 
 ### Layout
 
