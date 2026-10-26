@@ -288,8 +288,10 @@ describe("topbar brand chip", () => {
     expect((await view.findByTestId("topbar.brand-none")).textContent).toBe("No brand");
     await openMenu(view, "topbar.brand-none");
     const use = view.getByTestId("topbar.brand-use");
-    expect(use.textContent).toContain("Use Acme");
-    // The default leads the menu, so it is not listed a second time.
+    // Brands are listed by name; the default leads and carries a tag.
+    expect(use.textContent).toBe("AcmeDefault");
+    expect(view.getByTestId("topbar.brand-menu").textContent).toContain("Apply a brand");
+    expect(view.getByTestId("topbar.brand-option.holiday").textContent).toBe("Holiday");
     expect(view.queryByTestId("topbar.brand-option.acme")).toBeNull();
     await act(async () => {
       fireEvent.click(use);
@@ -304,6 +306,20 @@ describe("topbar brand chip", () => {
     });
     expect((await view.findByTestId("topbar.brand")).textContent).toBe("Acme");
     expect(view.queryByTestId("topbar.brand-none")).toBeNull();
+  });
+
+  it("omits the Default tag when the brand is already named Default", async () => {
+    stubWideShell();
+    const project = arrangeProject(OVERRIDES);
+    const named: EditorBrand = { slug: "default", name: "Default", isDefault: true };
+    const view = render(
+      <EditorProvider host={project.host}>
+        <EditorShell brand={brandSource(project.readTheme, [named, holiday])} />
+      </EditorProvider>,
+    );
+
+    await openMenu(view, "topbar.brand-none");
+    expect(view.getByTestId("topbar.brand-use").textContent).toBe("Default");
   });
 
   it("creates the theme when the project has none", async () => {

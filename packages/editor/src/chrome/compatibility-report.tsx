@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useState } from "react";
 
-import { projectDiagnosticCheck, summarizeChecks } from "../state/derive";
+import { projectDiagnosticCheck, summarizeChecks, tipChecks } from "../state/derive";
 import type { CheckItem } from "../state/types";
 import { assessmentLabels } from "./assessment-labels";
 import { CheckActions } from "./check-actions";
@@ -18,31 +18,37 @@ export function AttentionSummary({
   readonly editable?: boolean;
 }) {
   const { actionable } = summarizeChecks(checks);
-  const pending = checks.filter((check) =>
-    check.diagnostics?.some((item) => item.compatibility?.assessment === "unverified"),
-  ).length;
+  const pending = tipChecks(checks).length;
   return (
-    <section className="space-y-3" aria-label="Needs attention">
-      <h3 className="text-foreground text-[13px] font-semibold">
-        Needs attention{actionable.length > 0 ? ` · ${actionable.length}` : ""}
-      </h3>
-      {actionable.length === 0 ? (
-        <p className="text-muted-foreground text-xs">
-          {checks.length === 0 ? "No checks yet." : "No known risks found."}
-        </p>
+    <section
+      className="space-y-3"
+      aria-label={actionable.length > 0 ? "Needs attention" : "Checks"}
+    >
+      {actionable.length > 0 ? (
+        <>
+          <h3 className="text-foreground text-[13px] font-semibold">
+            Needs attention · {actionable.length}
+          </h3>
+          {actionable.map((check) => (
+            <CheckDetails
+              key={check.id}
+              check={check}
+              actions={editable ? <CheckActions check={check} /> : undefined}
+            />
+          ))}
+        </>
+      ) : checks.length === 0 ? (
+        <p className="text-muted-foreground text-xs">No checks yet.</p>
       ) : (
-        actionable.map((check) => (
-          <CheckDetails
-            key={check.id}
-            check={check}
-            actions={editable ? <CheckActions check={check} /> : undefined}
-          />
-        ))
+        <div data-testid="checks.settled" className="flex items-center gap-2">
+          <span aria-hidden="true" className="bg-status-success size-2 shrink-0 rounded-full" />
+          <h3 className="text-foreground text-[13px] font-semibold">No issues found</h3>
+        </div>
       )}
       <CompatibilityReport checks={checks} editable={editable} />
       <p className="text-muted-foreground text-[11.5px]">
         {pending > 0
-          ? `${pending} finding group${pending === 1 ? " needs" : "s need"} client verification.`
+          ? `${pending} ${pending === 1 ? "tip" : "tips"} to check in specific email clients.`
           : "These checks do not confirm rendering in every inbox."}
       </p>
     </section>

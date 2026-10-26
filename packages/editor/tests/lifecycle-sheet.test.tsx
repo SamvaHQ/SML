@@ -135,6 +135,32 @@ const mount = (overrides: LifecycleOverrides) =>
   );
 
 describe("LifecycleSheet", () => {
+  it("holds the saved versions' place with a skeleton while they load", async () => {
+    let finish: (value: ReturnType<typeof state>) => void = () => {};
+    const inspect = vi.fn(
+      () =>
+        new Promise<ReturnType<typeof state>>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const view = mount({ inspect });
+    const loading = await view.findByTestId("lifecycle-sheet.loading");
+    expect(loading.getAttribute("aria-busy")).toBe("true");
+    const rows = view.getAllByTestId("lifecycle-sheet.loading-row");
+    expect(rows).toHaveLength(3);
+    // A still fill replaces the pulse for people who ask for reduced motion.
+    for (const row of rows) {
+      expect(row.innerHTML).toContain("motion-reduce:animate-none");
+    }
+    expect(loading.textContent).not.toContain("…");
+
+    await act(async () => {
+      finish(state());
+    });
+    await waitFor(() => expect(view.queryByTestId("lifecycle-sheet.loading")).toBeNull());
+    expect(view.getByTestId("lifecycle-sheet.confirm-publish")).toBeTruthy();
+  });
+
   it("publishes the exact clean saved commit", async () => {
     const inspect = vi.fn(() => Promise.resolve(state()));
     const publish = vi.fn(() =>
