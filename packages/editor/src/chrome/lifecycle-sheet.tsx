@@ -13,9 +13,12 @@ import { useEditorStore } from "../state/context";
 import { cn, focusRing } from "./ui-classes";
 import { useEditorPortalContainer } from "./use-editor-portal";
 
+const pulse = "bg-muted animate-pulse motion-reduce:animate-none";
+
 /**
- * Holds the saved versions' place while they load. Each row repeats a landed version row's box
- * (border, padding, a 20px title line over a 16px date line) so nothing moves when they arrive.
+ * Holds the sheet's place while it loads: the current-version card and the project files sit above
+ * the saved versions, so they get placeholders too, and each version row repeats a landed row's
+ * box (border, padding, a 20px title line over a 16px date line).
  */
 function SavedVersionsSkeleton() {
   return (
@@ -26,23 +29,33 @@ function SavedVersionsSkeleton() {
       className="space-y-2"
     >
       <span className="sr-only">Loading saved versions</span>
-      <h3 aria-hidden="true" className="text-sm font-semibold">
-        Saved versions
-      </h3>
-      <div aria-hidden="true" className="space-y-2">
-        {SKELETON_ROWS.map((row) => (
-          <div
-            key={row}
-            data-testid="lifecycle-sheet.loading-row"
-            className="border-border flex items-start justify-between gap-4 rounded-lg border p-3"
-          >
-            <span className="min-w-0 flex-1">
-              <span className="bg-muted block h-5 w-2/3 animate-pulse rounded motion-reduce:animate-none" />
-              <span className="bg-muted mt-1 block h-4 w-1/3 animate-pulse rounded motion-reduce:animate-none" />
-            </span>
-            <span className="bg-muted h-4 w-12 shrink-0 animate-pulse rounded motion-reduce:animate-none" />
+      <div aria-hidden="true" className="space-y-6">
+        <div className="border-border rounded-lg border p-4">
+          <span className={`${pulse} block h-5 w-1/3 rounded`} />
+          <span className={`${pulse} mt-1 block h-4 w-1/2 rounded`} />
+        </div>
+        <div className="space-y-2">
+          <span className={`${pulse} block h-7 w-1/4 rounded`} />
+          <div className="border-border divide-border divide-y rounded-lg border">
+            <span className={`${pulse} m-3 block h-4 w-1/2 rounded`} />
           </div>
-        ))}
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Saved versions</h3>
+          {SKELETON_ROWS.map((row) => (
+            <div
+              key={row}
+              data-testid="lifecycle-sheet.loading-row"
+              className="border-border flex items-start justify-between gap-4 rounded-lg border p-3"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="bg-muted block h-5 w-2/3 animate-pulse rounded motion-reduce:animate-none" />
+                <span className="bg-muted mt-1 block h-4 w-1/3 animate-pulse rounded motion-reduce:animate-none" />
+              </span>
+              <span className="bg-muted h-4 w-12 shrink-0 animate-pulse rounded motion-reduce:animate-none" />
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
