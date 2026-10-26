@@ -11,7 +11,9 @@ import { useEditorStore } from "../state/context";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
@@ -68,8 +70,8 @@ function Swatch({ brand }: { readonly brand: EditorBrand | null }) {
 
 /**
  * The brand the project's theme imports, as one chip with a menu: the organization's brands to
- * switch to (a check marks the current one), the default brand when none is imported, and the
- * host's "Manage brands" link. `onUseBrand` writes the import and saves.
+ * switch to (a check marks the current one, a tag marks the default), and the host's "Manage
+ * brands" link. `onUseBrand` writes the import and saves.
  */
 export function BrandChip({
   source,
@@ -126,11 +128,12 @@ export function BrandChip({
 
   const current = view.kind === "brand" ? view.brand : null;
   const defaultBrand = view.kind === "none" ? view.defaultBrand : null;
-  // With no import the default brand leads the menu as "Use …", so the list below holds the rest.
+  // The organization's default leads the list; the rest keep the host's order.
   const choices =
     defaultBrand === null
       ? view.brands
-      : view.brands.filter(({ slug }) => slug !== defaultBrand.slug);
+      : [defaultBrand, ...view.brands.filter(({ slug }) => slug !== defaultBrand.slug)];
+  const applied = view.kind === "brand";
   const choose =
     canWrite && onUseBrand !== undefined
       ? (brand: EditorBrand) => {
@@ -142,7 +145,7 @@ export function BrandChip({
         }
       : undefined;
   const manage = source.manageLink?.();
-  const hasMenu = choices.length > 0 || defaultBrand !== null || manage !== undefined;
+  const hasMenu = choices.length > 0 || manage !== undefined;
 
   let label = "No brand";
   let testId = "topbar.brand-none";
@@ -185,38 +188,42 @@ export function BrandChip({
             <ChevronDown className="size-3 shrink-0" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56" data-testid="topbar.brand-menu">
-            {defaultBrand !== null && (
-              <DropdownMenuItem
-                data-testid="topbar.brand-use"
-                disabled={choose === undefined || busy}
-                title={`Theme this template with ${defaultBrand.name}`}
-                onClick={() => choose?.(defaultBrand)}
-              >
-                <Swatch brand={defaultBrand} />
-                <span className="min-w-0 flex-1 truncate">Use {defaultBrand.name}</span>
-              </DropdownMenuItem>
+            {choices.length > 0 && (
+              <DropdownMenuGroup>
+                {!applied && <DropdownMenuLabel>Apply a brand</DropdownMenuLabel>}
+                {choices.map((brand) => {
+                  const isCurrent = current?.slug === brand.slug;
+                  // The default row of an unthemed template is the one-click choice.
+                  const isUse = !applied && brand.slug === defaultBrand?.slug;
+                  return (
+                    <DropdownMenuItem
+                      key={brand.slug}
+                      data-testid={isUse ? "topbar.brand-use" : `topbar.brand-option.${brand.slug}`}
+                      aria-current={isCurrent || undefined}
+                      disabled={choose === undefined || busy}
+                      onClick={() => {
+                        if (!isCurrent) choose?.(brand);
+                      }}
+                    >
+                      <Swatch brand={brand} />
+                      <span className="min-w-0 flex-1 truncate">{brand.name}</span>
+                      {brand.isDefault && brand.name.trim().toLowerCase() !== "default" && (
+                        <span
+                          data-slot="editor-brand-default-tag"
+                          className="text-muted-foreground shrink-0 text-xs"
+                        >
+                          Default
+                        </span>
+                      )}
+                      {isCurrent && <Check className="text-muted-foreground size-3.5" />}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuGroup>
             )}
-            {choices.map((brand) => {
-              const isCurrent = current?.slug === brand.slug;
-              return (
-                <DropdownMenuItem
-                  key={brand.slug}
-                  data-testid={`topbar.brand-option.${brand.slug}`}
-                  aria-current={isCurrent || undefined}
-                  disabled={choose === undefined || busy}
-                  onClick={() => {
-                    if (!isCurrent) choose?.(brand);
-                  }}
-                >
-                  <Swatch brand={brand} />
-                  <span className="min-w-0 flex-1 truncate">{brand.name}</span>
-                  {isCurrent && <Check className="text-muted-foreground size-3.5" />}
-                </DropdownMenuItem>
-              );
-            })}
             {manage !== undefined && (
               <>
-                {(choices.length > 0 || defaultBrand !== null) && <DropdownMenuSeparator />}
+                {choices.length > 0 && <DropdownMenuSeparator />}
                 <DropdownMenuItem
                   data-testid="topbar.brand-manage"
                   render={<a href={manage.href} />}
