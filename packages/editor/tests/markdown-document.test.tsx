@@ -27,12 +27,13 @@ const HEADER = "---\ntitle: News\nslug: news\ntopic: product\n---\n\n";
 const LAYOUT = `import {defineTemplate} from "@samva/markup";
 import {jsonSchema} from "@samva/markup/input-schema";
 import {Email,IssueContent} from "@samva/markup/email";
-export default defineTemplate({id:"layout",schema:jsonSchema({type:"object",properties:{}}),fixtures:{reader:{}},email:{subject:()=>"News",body:()=> <Email><IssueContent /></Email>}});`;
+export default defineTemplate({id:"layout",schema:jsonSchema({type:"object",properties:{}}),fixtures:{reader:{},other:{}},email:{subject:()=>"News",body:()=> <Email><IssueContent /></Email>}});`;
 
 const harness = async (body = "Hello\n\nNeighbor", shell = false) => {
   let source = HEADER + body;
   let rev = "rev_1";
   let counter = 1;
+  let fixture = "reader";
   let receive: ((change: DocumentChange) => void) | undefined;
   let delayRender = false;
   const delayed: DocumentChange[] = [];
@@ -44,12 +45,12 @@ const harness = async (body = "Hello\n\nNeighbor", shell = false) => {
       tailwind: false,
     });
     if (compiled.template === undefined) throw new Error(JSON.stringify(compiled.diagnostics));
-    const preview = previewEmail(compiled.template, compiled.fixtures.reader);
+    const preview = previewEmail(compiled.template, compiled.fixtures[fixture]);
     return {
       channel: "email" as const,
       preview: { status: "current" as const },
-      fixture: "reader",
-      fixtures: ["reader"],
+      fixture,
+      fixtures: Object.keys(compiled.fixtures),
       render: {
         subject: preview.subject,
         html: preview.html,
@@ -109,6 +110,15 @@ const harness = async (body = "Hello\n\nNeighbor", shell = false) => {
       },
     },
     writer: { save },
+    fixtures: {
+      status: "ready",
+      api: {
+        view: async (name) => {
+          fixture = name;
+          receive?.({ rev, origin: "self", authoredSource: source, ...(await content()) });
+        },
+      },
+    },
   };
   let probe!: EditorProbe;
   function Probe() {
@@ -262,6 +272,37 @@ describe("Markdown as the open source document", () => {
     act(() => editor.deliverRender());
     await waitFor(() => expect(editor.probe.lifecycleBusy).toBe(false));
     expect(editor.writes().map((input) => input.baseRev)).toEqual(["rev_1", "rev_2"]);
+  });
+
+  it("retains queued typing when the acknowledged preview takes more than two seconds", async () => {
+    const editor = await harness();
+    editor.delayRender();
+    act(() => editor.probe.editMarkdownText(editor.path, "First"));
+    await waitFor(() => expect(editor.probe.doc?.rev).toBe("rev_2"));
+    act(() => editor.probe.editMarkdownText(editor.path, "First plus latest typing"));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2100));
+    });
+    expect(editor.probe.sourceEditError).toBeNull();
+    expect(editor.writes()).toHaveLength(1);
+    act(() => editor.deliverRender());
+    await waitFor(() => expect(editor.source).toContain("First plus latest typing"));
+    act(() => editor.deliverRender());
+    expect(editor.probe.doc?.origin.authoredSource).toBe(editor.source);
+    expect(editor.writes().map((input) => input.baseRev)).toEqual(["rev_1", "rev_2"]);
+  });
+
+  it("invalidates pending preview edits when the author switches fixtures", async () => {
+    const editor = await harness();
+    editor.delayRender();
+    act(() => editor.probe.editMarkdownText(editor.path, "First"));
+    await waitFor(() => expect(editor.probe.doc?.rev).toBe("rev_2"));
+    act(() => editor.probe.editMarkdownText(editor.path, "Pending for reader"));
+    act(() => editor.probe.viewFixture("other"));
+    await waitFor(() => expect(editor.probe.doc?.fixture).toBe("other"));
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(editor.writes()).toHaveLength(1);
+    expect(editor.source).toBe(HEADER + "First\n\nNeighbor");
   });
 
   it("never rebases queued prose onto an external change through a delayed self render", async () => {

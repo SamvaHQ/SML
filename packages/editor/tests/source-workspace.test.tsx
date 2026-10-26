@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "@effect/vitest";
 import type { AsyncEditorHost } from "@samva/editor/host";
 import { previewEmail } from "@samva/markup/edit";
 import { compileIssue } from "@samva/markup/markdown";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 
 import { SourceWorkspace } from "../src/channels/source-workspace";
 import { SourceControls } from "../src/chrome/source-controls";
@@ -95,28 +95,35 @@ describe("Markdown source documents", () => {
     const { host, selections } = await markdownDocument();
     const own = selections.find((item) => item.tag === "p" && item.origins[0]?.fileName === ISSUE)!;
     const layoutSpan = selections.find((item) => item.origins[0]?.fileName === LAYOUT)!;
-    function Controls({ path }: { readonly path: string }) {
-      const entry = useEditorStore((state) =>
-        state.render?.selections.find((item) => item.instancePath === path),
-      );
+    let probe!: EditorProbe;
+    function Controls() {
+      probe = useEditorProbe();
+      const entry = useEditorStore((state) => {
+        const { selection } = state;
+        if (selection.kind !== "element") return undefined;
+        return state.render?.selections.find(
+          (item) => item.instancePath === selection.instancePath,
+        );
+      });
       return entry === undefined ? null : <SourceControls selection={entry} />;
     }
-    const mount = (path: string) =>
-      render(
-        <EditorProvider host={host}>
-          <Controls path={path} />
-        </EditorProvider>,
-      );
-    const prose = mount(own.instancePath);
-    // The host here offers no project files, so the text itself is not readable; what matters is
-    // that the Markdown controls, not the TSX ones, own the span.
-    await prose.findByTestId("markdown.unavailable");
-    expect(prose.queryByTestId("source.unavailable")).toBeNull();
-    cleanup();
-    const frame = mount(layoutSpan.instancePath);
-    const note = await frame.findByTestId("source.layout-readonly");
+    const view = render(
+      <EditorProvider host={host}>
+        <Controls />
+      </EditorProvider>,
+    );
+    await waitFor(() => expect(probe.render).not.toBeNull());
+    act(() => probe.select(own.instancePath));
+    const text = (await view.findByTestId("markdown.text")) as HTMLTextAreaElement;
+    expect(text.value).toContain("Hello");
+    expect(text.disabled).toBe(false);
+    expect(text.readOnly).toBe(false);
+    expect(view.queryByTestId("source.unavailable")).toBeNull();
+    expect(host.lifecycle).toBeUndefined();
+    act(() => probe.select(layoutSpan.instancePath));
+    const note = await view.findByTestId("source.layout-readonly");
     expect(note.textContent).toContain(LAYOUT);
-    expect(frame.queryByTestId("markdown.text")).toBeNull();
-    expect(frame.container.querySelector("[data-slot=editor-element-controls]")).toBeNull();
+    expect(view.queryByTestId("markdown.text")).toBeNull();
+    expect(view.container.querySelector("[data-slot=editor-element-controls]")).toBeNull();
   });
 });

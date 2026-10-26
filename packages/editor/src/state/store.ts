@@ -667,19 +667,25 @@ export const createEditorBundle = (
           cancelMarkdownWait = () => finish(false);
         }).then((ready) => (ready ? flushMarkdownSource() : Promise.reject(cause)));
       });
-    const waitForMarkdownRender = (revision: string, fixture: string): Promise<boolean> =>
+    const waitForMarkdownRender = (
+      revision: string,
+      fixture: string,
+      kind: "entry" | "project",
+    ): Promise<boolean> =>
       new Promise((resolve) => {
         const matches = () => {
           const { doc, render } = get();
           return doc?.rev === revision && doc.fixture === fixture && render?.revision === revision;
         };
         const finish = (ready: boolean) => {
-          clearTimeout(timer);
+          if (timer !== undefined) clearTimeout(timer);
           unsubscribe();
           cancelMarkdownWait = undefined;
           resolve(ready);
         };
-        const timer = setTimeout(() => finish(false), 2000);
+        // An acknowledged entry save can render slowly; its queued text is still the author's
+        // work. Only a source, fixture, or session change cancels it. Project-file edits keep their own timeout.
+        const timer = kind === "project" ? setTimeout(() => finish(false), 2000) : undefined;
         const unsubscribe = store.subscribe(() => {
           if (matches()) finish(true);
         });
@@ -739,7 +745,7 @@ export const createEditorBundle = (
             if (generation !== markdownGeneration) return;
             if (get().conflict || get().storageError !== null)
               return failMarkdown("Couldn't save this change. Try again.");
-            const ready = await waitForMarkdownRender(revision, item.fixture);
+            const ready = await waitForMarkdownRender(revision, item.fixture, target.kind);
             if (generation !== markdownGeneration) return;
             if (!ready) return failMarkdown("Couldn't save this change. Try again.");
             for (const [path, pending] of pendingMarkdown) {
@@ -780,7 +786,7 @@ export const createEditorBundle = (
             content: changed.source,
           });
           if (generation !== markdownGeneration) return;
-          const ready = await waitForMarkdownRender(written.rev, item.fixture);
+          const ready = await waitForMarkdownRender(written.rev, item.fixture, target.kind);
           if (generation !== markdownGeneration) return;
           if (!ready) return failMarkdown("Couldn't save this change. Try again.");
           // Only the exact acknowledged render advances edits taken against this write's base.
@@ -1130,6 +1136,7 @@ export const createEditorBundle = (
         ) {
           return;
         }
+        if (state.doc.origin.kind === "markdown") invalidateMarkdown();
         set({ fixtureBusy: true, fixtureError: null });
         void capability.api.view(fixture).then(
           () => set({ fixtureBusy: false }),
