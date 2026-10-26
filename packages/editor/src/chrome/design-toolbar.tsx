@@ -24,10 +24,12 @@ export function DesignToolbar({
 }: {
   readonly selection: EmailElementSelection;
 }): ReactNode {
-  const { entry, source, revision, rev, ready } = useEditorStore(
+  const { entry, source, markdown, revision, rev, ready } = useEditorStore(
     useShallow((state) => ({
-      entry: state.doc?.origin.file ?? null,
-      source: state.doc?.origin.authoredSource ?? null,
+      // Block edits are TSX transforms; a Markdown document has no TSX entry to run them on.
+      entry: state.doc?.origin.kind === "tsx" ? state.doc.origin.file : null,
+      source: state.doc?.origin.kind === "tsx" ? state.doc.origin.authoredSource : null,
+      markdown: state.doc?.origin.kind === "markdown",
       revision: state.render?.revision ?? null,
       rev: state.doc?.rev ?? null,
       ready:
@@ -40,7 +42,13 @@ export function DesignToolbar({
   );
   const { applySourceEdit, select } = useEditorStore((state) => state.actions);
   const name = useEditorStore((state) =>
-    [friendlyName(selection, state.doc?.origin.authoredSource ?? ""), occurrenceNote(selection)]
+    [
+      friendlyName(
+        selection,
+        state.doc?.origin.kind === "tsx" ? state.doc.origin.authoredSource : "",
+      ),
+      occurrenceNote(selection),
+    ]
       .filter((part) => part !== undefined)
       .join(" "),
   );
@@ -64,8 +72,9 @@ export function DesignToolbar({
     const edits = structuralReplacements(source, target, operation);
     if (edits !== null) applySourceEdit({ revision, source, edits, design: { label } });
   };
-  const why =
-    target === null && origin !== undefined && origin.fileName !== entry
+  const why = markdown
+    ? "Edit the text from the properties; the layout is not edited here."
+    : target === null && origin !== undefined && origin.fileName !== entry
       ? `Written in ${origin.fileName}. Edit it from the properties.`
       : undefined;
   const button = (input: {
@@ -107,34 +116,38 @@ export function DesignToolbar({
         },
         children: <ArrowUp />,
       })}
-      {button({
-        label: "Move earlier",
-        testId: "move-earlier",
-        enabled: available && target.previous !== null,
-        onClick: () => run({ kind: "reorder", direction: "before" }, "Move block earlier"),
-        children: <ChevronUp />,
-      })}
-      {button({
-        label: "Move later",
-        testId: "move-later",
-        enabled: available && target.next !== null,
-        onClick: () => run({ kind: "reorder", direction: "after" }, "Move block later"),
-        children: <ChevronDown />,
-      })}
-      {button({
-        label: "Duplicate",
-        testId: "duplicate",
-        enabled: available && target.structural,
-        onClick: () => run({ kind: "duplicate" }, "Duplicate block"),
-        children: <Duplicate />,
-      })}
-      {button({
-        label: "Delete",
-        testId: "delete",
-        enabled: available && target.structural,
-        onClick: () => run({ kind: "delete" }, "Delete block"),
-        children: <Trash />,
-      })}
+      {!markdown && (
+        <>
+          {button({
+            label: "Move earlier",
+            testId: "move-earlier",
+            enabled: available && target.previous !== null,
+            onClick: () => run({ kind: "reorder", direction: "before" }, "Move block earlier"),
+            children: <ChevronUp />,
+          })}
+          {button({
+            label: "Move later",
+            testId: "move-later",
+            enabled: available && target.next !== null,
+            onClick: () => run({ kind: "reorder", direction: "after" }, "Move block later"),
+            children: <ChevronDown />,
+          })}
+          {button({
+            label: "Duplicate",
+            testId: "duplicate",
+            enabled: available && target.structural,
+            onClick: () => run({ kind: "duplicate" }, "Duplicate block"),
+            children: <Duplicate />,
+          })}
+          {button({
+            label: "Delete",
+            testId: "delete",
+            enabled: available && target.structural,
+            onClick: () => run({ kind: "delete" }, "Delete block"),
+            children: <Trash />,
+          })}
+        </>
+      )}
     </div>
   );
 }

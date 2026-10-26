@@ -119,7 +119,7 @@ const WORKSPACE_DEMO =
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).get("demo") === "workspace";
 
-/** `?demo=issue` opens a Markdown newsletter issue, edited on its web page. */
+/** `?demo=issue` opens a Markdown newsletter issue with email and web previews. */
 const ISSUE_DEMO =
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).get("demo") === "issue";
@@ -175,10 +175,7 @@ const demoContributions = (onToggleTheme: () => void): ReadonlyArray<EditorContr
 const IssueSourceReadout = ({ source }: { readonly source: IssueSource }) => {
   const text = useSyncExternalStore(source.subscribe, source.read);
   return (
-    <pre
-      data-testid="dev-app.issue-source"
-      className="bg-card text-card-foreground fixed right-3 bottom-3 z-50 max-h-72 w-96 overflow-auto rounded-md border p-3 text-[11px] whitespace-pre-wrap shadow-lg"
-    >
+    <pre data-testid="dev-app.issue-source" hidden>
       {`issues/launch.md\n\n${text}`}
     </pre>
   );
@@ -257,8 +254,8 @@ export const App = () => {
           />
         ) : (
           <EditorShell
-            // The Promise host keeps metadata read-only, so a rename would have nowhere to go.
-            renameEnabled={!EXTENSIONS_DEMO}
+            // These demo hosts do not persist template names.
+            renameEnabled={!EXTENSIONS_DEMO && !ISSUE_DEMO}
             contributions={
               EXTENSIONS_DEMO
                 ? demoContributions(toggleTheme)

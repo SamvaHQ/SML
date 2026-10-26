@@ -54,6 +54,48 @@ export default function WelcomeEmail({ firstName, claimUrl }) {
   )
 }`;
 
+/** Compiler-free Markdown fixture; the dev issue host exercises real compilation. */
+export const NIMBUS_ISSUE_MARKDOWN = `---
+title: Launch notes
+slug: launch-notes
+---
+
+# What shipped this week
+
+Cold brew subscriptions are live in every region.
+`;
+
+const ISSUE_FILE = "issues/launch.md";
+
+// This fixture represents plain headings and prose only. It supplies host-owned render truth,
+// not a Markdown compiler; arbitrary issue syntax belongs in the real dev host.
+const renderMockIssue = (source: string, revision: string): EmailRender => {
+  const lines = source.split("\n");
+  const frontmatterEnd = lines.indexOf("---", 1);
+  const children: MockNode[] = lines.flatMap((line, index) => {
+    if (index <= frontmatterEnd || line.trim() === "") return [];
+    const heading = /^(#{1,6}) (.*)$/.exec(line);
+    return [
+      {
+        tag: heading === null ? "p" : `h${heading[1]!.length}`,
+        authored: true,
+        text: heading === null ? line : heading[2]!,
+        origins: [{ fileName: ISSUE_FILE, lineNumber: index + 1, columnNumber: 1 }],
+      },
+    ];
+  });
+  const { html, positions } = serialize({ tag: "body", authored: false, origins: [], children });
+  return {
+    revision,
+    subject:
+      lines.find((line, index) => index < frontmatterEnd && line.startsWith("title: "))?.slice(7) ??
+      "Launch notes",
+    html,
+    text: children.map((child) => child.text).join("\n\n"),
+    selections: emailSelections(positions),
+  };
+};
+
 const ENTRY_FILE = "src/Welcome.tsx";
 
 const at = (lineNumber: number, columnNumber: number): JsxSourceLocation => ({
@@ -262,6 +304,7 @@ const INITIAL_METADATA: EditableEmailDocument["metadata"] = {
 };
 
 interface MockState {
+  readonly kind: "tsx" | "markdown";
   readonly authoredSource: string;
   readonly name: string;
   readonly metadata: EditableEmailDocument["metadata"];
@@ -294,9 +337,12 @@ const emailContent = (state: MockState) =>
           state.staleReason === undefined
             ? { status: "current" as const }
             : { status: "stale" as const, reason: state.staleReason },
-        fixtures: MOCK_FIXTURE_NAMES,
+        fixtures: state.kind === "markdown" ? ["reader"] : MOCK_FIXTURE_NAMES,
         fixture: state.fixture,
-        render: renderMockFixture(state.fixture, state.previewRevision),
+        render:
+          state.kind === "markdown"
+            ? renderMockIssue(state.authoredSource, state.previewRevision)
+            : renderMockFixture(state.fixture, state.previewRevision),
         diagnostics: [],
         incompatibilities: [],
       };
@@ -313,162 +359,179 @@ export interface MockHostControls {
   }) => Effect.Effect<void>;
 }
 
-export const createMockHost: Effect.Effect<MockHostControls> = Effect.gen(function* () {
-  const changes = yield* PubSub.unbounded<DocumentChange>();
-  const revCounter = yield* Ref.make(1);
-  const stateRef = yield* Ref.make<MockState>({
-    authoredSource: NIMBUS_WELCOME_TSX,
-    name: "Welcome — first bag on us",
-    metadata: INITIAL_METADATA,
-    rev: "rev_1",
-    previewRevision: "rev_1",
-    fixture: MOCK_FIXTURE_NAMES[0]!,
-    broken: false,
-  });
+const makeMockHost = (kind: MockState["kind"]): Effect.Effect<MockHostControls> =>
+  Effect.gen(function* () {
+    const changes = yield* PubSub.unbounded<DocumentChange>();
+    const revCounter = yield* Ref.make(1);
+    const stateRef = yield* Ref.make<MockState>({
+      kind,
+      authoredSource: kind === "markdown" ? NIMBUS_ISSUE_MARKDOWN : NIMBUS_WELCOME_TSX,
+      name: kind === "markdown" ? "Launch notes" : "Welcome — first bag on us",
+      metadata: INITIAL_METADATA,
+      rev: "rev_1",
+      previewRevision: "rev_1",
+      fixture: kind === "markdown" ? "reader" : MOCK_FIXTURE_NAMES[0]!,
+      broken: false,
+    });
 
-  const mintRev = Ref.modify(revCounter, (n) => [`rev_${n + 1}`, n + 1] as const);
+    const mintRev = Ref.modify(revCounter, (n) => [`rev_${n + 1}`, n + 1] as const);
 
-  const buildDocument = (state: MockState): EditableEmailDocument => ({
-    id: "tpl_nimbus_welcome",
-    name: state.name,
-    origin: { kind: "tsx", file: ENTRY_FILE, authoredSource: state.authoredSource },
-    access: { kind: "editable" },
-    rev: state.rev,
-    variables: VARIABLES,
-    metadata: state.metadata,
-    ...emailContent(state),
-  });
-
-  const publish = (state: MockState, origin: "self" | "agent" | "external") =>
-    PubSub.publish(changes, {
+    const buildDocument = (state: MockState): EditableEmailDocument => ({
+      id: state.kind === "markdown" ? "issue_launch" : "tpl_nimbus_welcome",
+      name: state.name,
+      origin:
+        state.kind === "markdown"
+          ? {
+              kind: "markdown",
+              file: ISSUE_FILE,
+              authoredSource: state.authoredSource,
+              layout: { file: "layout.tsx" },
+            }
+          : { kind: "tsx", file: ENTRY_FILE, authoredSource: state.authoredSource },
+      access: { kind: "editable" },
       rev: state.rev,
-      origin,
-      authoredSource: state.authoredSource,
+      variables: state.kind === "markdown" ? [] : VARIABLES,
+      metadata: state.metadata,
       ...emailContent(state),
     });
 
-  const document: DocumentReader<EditableEmailDocument> = {
-    // Subscribe BEFORE reading the snapshot so nothing published in between is
-    // lost — the returned stream tails the same attached subscription.
-    open: Effect.gen(function* () {
-      const subscription = yield* PubSub.subscribe(changes);
-      const state = yield* Ref.get(stateRef);
-      return {
-        initial: buildDocument(state),
-        changes: Stream.fromEffectRepeat(PubSub.take(subscription)),
-      };
-    }),
-  };
+    const publish = (state: MockState, origin: "self" | "agent" | "external") =>
+      PubSub.publish(changes, {
+        rev: state.rev,
+        origin,
+        authoredSource: state.authoredSource,
+        ...emailContent(state),
+      });
 
-  const writer: DocumentWriter = {
-    save: (update) =>
-      Effect.gen(function* () {
+    const document: DocumentReader<EditableEmailDocument> = {
+      // Subscribe BEFORE reading the snapshot so nothing published in between is
+      // lost — the returned stream tails the same attached subscription.
+      open: Effect.gen(function* () {
+        const subscription = yield* PubSub.subscribe(changes);
         const state = yield* Ref.get(stateRef);
-
-        if (update.kind === "metadata") {
-          // Metadata is not versioned with the source: keep the rev and emit no
-          // change, so a rename never makes the next source save conflict.
-          yield* Ref.set(stateRef, {
-            ...state,
-            name: update.patch.name ?? state.name,
-            metadata: {
-              fromDefault:
-                update.patch.fromDefault === undefined
-                  ? state.metadata.fromDefault
-                  : (update.patch.fromDefault ?? undefined),
-              replyToDefault:
-                update.patch.replyToDefault === undefined
-                  ? state.metadata.replyToDefault
-                  : (update.patch.replyToDefault ?? undefined),
-            },
-          });
-          return { rev: state.rev };
-        }
-
-        if (update.baseRev !== state.rev) {
-          return yield* new DocumentConflict({
-            expectedRev: update.baseRev,
-            actualRev: state.rev,
-          });
-        }
-
-        const rev = yield* mintRev;
-        const next = {
-          ...state,
-          authoredSource: update.authoredSource,
-          rev,
-          previewRevision: rev,
-          staleReason: undefined,
+        return {
+          initial: buildDocument(state),
+          changes: Stream.fromEffectRepeat(PubSub.take(subscription)),
         };
-        yield* Ref.set(stateRef, next);
-        yield* publish(next, "self");
-        return { rev };
       }),
-  };
+    };
 
-  const fixtures: Capability<FixtureApi> = {
-    status: "ready",
-    api: {
-      view: (fixture) =>
+    const writer: DocumentWriter = {
+      save: (update) =>
         Effect.gen(function* () {
           const state = yield* Ref.get(stateRef);
-          if (!MOCK_FIXTURE_NAMES.includes(fixture) || state.broken !== false) return;
-          const next = { ...state, fixture };
+
+          if (update.kind === "metadata") {
+            // Metadata is not versioned with the source: keep the rev and emit no
+            // change, so a rename never makes the next source save conflict.
+            yield* Ref.set(stateRef, {
+              ...state,
+              name: update.patch.name ?? state.name,
+              metadata: {
+                fromDefault:
+                  update.patch.fromDefault === undefined
+                    ? state.metadata.fromDefault
+                    : (update.patch.fromDefault ?? undefined),
+                replyToDefault:
+                  update.patch.replyToDefault === undefined
+                    ? state.metadata.replyToDefault
+                    : (update.patch.replyToDefault ?? undefined),
+              },
+            });
+            return { rev: state.rev };
+          }
+
+          if (update.baseRev !== state.rev) {
+            return yield* new DocumentConflict({
+              expectedRev: update.baseRev,
+              actualRev: state.rev,
+            });
+          }
+
+          const rev = yield* mintRev;
+          const next = {
+            ...state,
+            authoredSource: update.authoredSource,
+            rev,
+            previewRevision: rev,
+            staleReason: undefined,
+          };
           yield* Ref.set(stateRef, next);
-          // A fixture switch re-renders the same build, so the revision holds.
           yield* publish(next, "self");
+          return { rev };
         }),
-    },
-  };
+    };
 
-  const assets: Capability<AssetApi> = {
-    status: "ready",
-    api: {
-      uploadImage: (input) =>
-        Effect.gen(function* () {
-          yield* Effect.sleep("200 millis");
-          return { url: `https://cdn.samva.local/${input.name}` };
-        }),
-      fonts: {
-        catalog: Effect.succeed([
-          {
-            family: "Instrument Sans",
-            fallback: "Arial, Helvetica, sans-serif",
-          },
-          {
-            family: "Iowan Old Style",
-            fallback: "Georgia, 'Times New Roman', serif",
-          },
-        ]),
+    const fixtures: Capability<FixtureApi> = {
+      status: "ready",
+      api: {
+        view: (fixture) =>
+          Effect.gen(function* () {
+            const state = yield* Ref.get(stateRef);
+            const names = state.kind === "markdown" ? ["reader"] : MOCK_FIXTURE_NAMES;
+            if (!names.includes(fixture) || state.broken !== false) return;
+            const next = { ...state, fixture };
+            yield* Ref.set(stateRef, next);
+            // A fixture switch re-renders the same build, so the revision holds.
+            yield* publish(next, "self");
+          }),
       },
-    },
-  };
+    };
 
-  const host: EditableEditorHost = {
-    contractVersion,
-    access: "editable",
-    sourceAccess: "editable",
-    document,
-    writer,
-    fixtures,
-    assets,
-  };
+    const assets: Capability<AssetApi> = {
+      status: "ready",
+      api: {
+        uploadImage: (input) =>
+          Effect.gen(function* () {
+            yield* Effect.sleep("200 millis");
+            return { url: `https://cdn.samva.local/${input.name}` };
+          }),
+        fonts: {
+          catalog: Effect.succeed([
+            {
+              family: "Instrument Sans",
+              fallback: "Arial, Helvetica, sans-serif",
+            },
+            {
+              family: "Iowan Old Style",
+              fallback: "Georgia, 'Times New Roman', serif",
+            },
+          ]),
+        },
+      },
+    };
 
-  const emit: MockHostControls["emit"] = (input) =>
-    Effect.gen(function* () {
-      const rev = yield* mintRev;
-      const state = yield* Ref.get(stateRef);
-      const next: MockState = {
-        ...state,
-        rev,
-        authoredSource: input.authoredSource ?? state.authoredSource,
-        broken: input.broken ?? state.broken,
-        previewRevision: input.staleReason === undefined ? rev : state.previewRevision,
-        staleReason: input.staleReason,
-      };
-      yield* Ref.set(stateRef, next);
-      yield* publish(next, input.origin);
-    });
+    const host: EditableEditorHost = {
+      contractVersion,
+      access: "editable",
+      sourceAccess: "editable",
+      document,
+      writer,
+      fixtures,
+      assets,
+    };
 
-  return { host, emit };
-});
+    const emit: MockHostControls["emit"] = (input) =>
+      Effect.gen(function* () {
+        const rev = yield* mintRev;
+        const state = yield* Ref.get(stateRef);
+        const next: MockState = {
+          ...state,
+          rev,
+          authoredSource: input.authoredSource ?? state.authoredSource,
+          broken: input.broken ?? state.broken,
+          previewRevision: input.staleReason === undefined ? rev : state.previewRevision,
+          staleReason: input.staleReason,
+        };
+        yield* Ref.set(stateRef, next);
+        yield* publish(next, input.origin);
+      });
+
+    return { host, emit };
+  });
+
+/** The default TSX welcome document, unchanged for existing embedders. */
+export const createMockHost: Effect.Effect<MockHostControls> = makeMockHost("tsx");
+
+/** A Markdown issue whose complete authored source is saved through the document writer. */
+export const createMarkdownMockHost: Effect.Effect<MockHostControls> = makeMockHost("markdown");

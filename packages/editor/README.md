@@ -1,7 +1,8 @@
 # @samva/editor
 
 An embeddable template editor for Git-backed email template projects. The canonical value is
-the TSX entry, editable when the host grants source access. The host compiles that entry to a compiled template
+a TSX entry or a Markdown issue (including frontmatter), editable when the host grants source access.
+The host compiles the source to a compiled template
 and hands the editor one rendered fixture per channel, so the workspace shows the message a
 recipient receives.
 
@@ -245,8 +246,29 @@ The document is a union over two independent concerns:
 - `channel`: `email`, `sms` or `whatsapp`;
 - `access`: editable or read-only, including the reason shown by the chrome.
 
-Every document carries `origin.authoredSource`, the canonical TSX entry, and that
-is the only thing a save writes. Every document additionally carries what the
+Every document carries `origin.authoredSource`, the complete source of `origin.file`, and that
+is the only file an `authoredSource` save writes. `origin.kind` is `"tsx"` for a template entry
+or `"markdown"` for an email issue; SMS and WhatsApp remain TSX. A Markdown origin also identifies
+the host-owned TSX layout:
+
+```ts
+origin: {
+  kind: "markdown",
+  file: "issues/launch.md",
+  authoredSource: "---\ntitle: Launch\nslug: launch\ntopic: product\n---\n\nHello",
+  layout: { file: "layout.tsx" },
+}
+```
+
+Hosts must use `contractVersion` (`2026-10-26.1`) and handle both email origin kinds. Source
+replacement, undo/redo, and prose span edits use the same revision-fenced writer for the open
+file. A Markdown host needs no `lifecycle` capability for prose edits; foreign Markdown spans in
+a TSX document still use `lifecycle.inspect` and `updateFile`. Structural, expression, fixture-data,
+and class-name transforms are available only for TSX. Layout spans in a Markdown document are
+read-only here. `render(entry, fixture, target)` receives the open issue path, and the host renders
+it against the declared layout.
+
+Every document additionally carries what the
 host's compile produced at that revision: the fixture names the template
 declares, which one is being viewed, the channel's render (`EmailRender`,
 `SmsRender` or `WhatsAppRender`), and the build's diagnostics. A `render` of

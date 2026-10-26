@@ -101,11 +101,41 @@ describe("EditorDocument", () => {
     expect(document.origin.authoredSource).toContain("export default");
   });
 
+  it("accepts a complete Markdown email origin and keeps other channels TSX-only", () => {
+    const origin = {
+      kind: "markdown",
+      file: "issues/news.md",
+      authoredSource: "---\ntitle: News\nslug: news\ntopic: product\n---\nHello",
+      layout: { file: "layout.tsx" },
+    } as const;
+    const document = {
+      ...IDENTITY,
+      ...EMAIL_CONTENT,
+      origin,
+      access: { kind: "editable" },
+    } satisfies EditableEmailDocument;
+    expect(document.origin.file).toBe("issues/news.md");
+    // @ts-expect-error Markdown issues render as email/web; SMS authors TSX.
+    const sms: EditableEditorDocument = {
+      ...IDENTITY,
+      ...SMS_CONTENT,
+      origin,
+      access: { kind: "editable" },
+    };
+    const incomplete: EditableEmailDocument = {
+      ...document,
+      // @ts-expect-error The host must identify the layout rendering this issue.
+      origin: { kind: "markdown", file: origin.file, authoredSource: origin.authoredSource },
+    };
+    expect(sms.channel).toBe("sms");
+    expect(incomplete.channel).toBe("email");
+  });
+
   it("refuses shapes outside the contract at compile time", () => {
     const refused: ReadonlyArray<EditableEditorDocument> = [
       // @ts-expect-error A channel render is the channel's own: a WhatsApp render on an SMS document.
       { ...IDENTITY, ...SMS_CONTENT, render: WHATSAPP_RENDER, access: { kind: "editable" } },
-      // @ts-expect-error The origin is always the TSX entry.
+      // @ts-expect-error Only TSX and Markdown source documents are supported.
       { ...IDENTITY, ...EMAIL_CONTENT, origin: { kind: "html" }, access: { kind: "editable" } },
     ];
     expect(refused).toHaveLength(2);

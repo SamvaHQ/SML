@@ -39,6 +39,7 @@ import {
   documentChecks,
   resolveSelection,
   withDocumentChange,
+  withAuthoredSource,
 } from "./derive";
 import { markdownEdit } from "./markdown-edit";
 import { createEditorSpine, type EditorSpine } from "./spine";
@@ -236,7 +237,7 @@ export interface EditorActions {
   readonly requestSourceAssistance: (originIndex: number) => void;
   /** Open Assistant with one exact finding from the current draft. */
   readonly requestDiagnosticAssistance: (check: CheckItem) => void;
-  /** The one write path: replace the canonical TSX entry and persist it through the spine. */
+  /** The one write path: replace the open source file and persist it through the spine. */
   readonly replaceAuthoredSource: (source: string) => void;
   /** Show another declared fixture. A re-render at the same revision, not a document edit. */
   readonly viewFixture: (fixture: string) => void;
@@ -524,6 +525,9 @@ export const createEditorBundle = (
   let markdownTimer: ReturnType<typeof setTimeout> | undefined;
   let markdownGeneration = 0;
   let markdownSaving = false;
+  let markdownEntryRevision: string | null = null;
+  const obsoleteMarkdownRevisions = new Set<string>();
+  let invalidateMarkdown: () => void = () => {};
   let cancelMarkdownWait: (() => void) | undefined;
 
   /**
@@ -576,31 +580,31 @@ export const createEditorBundle = (
         !state.sourceEditable ||
         state.hostBusy ||
         state.conflict ||
-        state.pendingAuthoredSource !== null ||
+        (state.pendingAuthoredSource !== null &&
+          !(markdownSaving && doc?.origin.kind === "markdown")) ||
         doc?.channel !== "email" ||
         doc.fixture === null ||
         render === null ||
-        render.revision !== doc.rev ||
+        (render.revision !== doc.rev && render.revision !== markdownEntryRevision) ||
         (selected &&
           (selection.kind !== "element" ||
             selection.instancePath !== instancePath ||
             selection.revision !== render.revision ||
-            selection.fixture !== doc.fixture)) ||
-        state.lifecycleCapability?.status !== "ready"
+            selection.fixture !== doc.fixture))
       )
         return null;
       const element = render.selections.find((entry) => entry.instancePath === instancePath);
-      const origin = element?.origins.find((entry) => entry.fileName.endsWith(".md"));
-      return element === undefined || origin === undefined
-        ? null
-        : {
-            doc,
-            render,
-            fixture: doc.fixture,
-            origin,
-            tag: element.tag,
-            api: state.lifecycleCapability.api,
-          };
+      const origin = element?.origins.find((entry) =>
+        doc.origin.kind === "markdown"
+          ? entry.fileName === doc.origin.file
+          : entry.fileName.endsWith(".md"),
+      );
+      if (element === undefined || origin === undefined) return null;
+      const target = { doc, render, fixture: doc.fixture, origin, tag: element.tag };
+      if (doc.origin.kind === "markdown")
+        return { ...target, kind: "entry" as const, source: doc.origin.authoredSource };
+      if (state.lifecycleCapability?.status !== "ready") return null;
+      return { ...target, kind: "project" as const, api: state.lifecycleCapability.api };
     };
     const staleMarkdown = "This content changed. Select it again before editing.";
     const pendingMarkdown = new Map<
@@ -620,6 +624,39 @@ export const createEditorBundle = (
       pendingMarkdown.clear();
       refuseMarkdown(reason);
     };
+    invalidateMarkdown = () => {
+      const hadEdits = markdownSaving || pendingMarkdown.size > 0;
+      const ownedGate = markdownSaving;
+      markdownGeneration += 1;
+      pendingMarkdown.clear();
+      if (markdownTimer !== undefined) clearTimeout(markdownTimer);
+      markdownTimer = undefined;
+      cancelMarkdownWait?.();
+      markdownSaving = false;
+      markdownEntryRevision = null;
+      set({
+        ...(ownedGate ? { lifecycleBusy: false } : {}),
+        ...(hadEdits ? { sourceEditError: staleMarkdown } : {}),
+      });
+    };
+    // Keep text typed during an unavailable write until the author's Retry has saved its base.
+    // Waiting on the store also lets an external change or disposal cancel the continuation.
+    const flushMarkdownSource = (): Promise<RevisionToken> =>
+      spine.flushSaves().catch((cause: unknown) => {
+        if (get().storageError === null || get().conflict) return Promise.reject(cause);
+        return new Promise<boolean>((resolve) => {
+          const finish = (ready: boolean) => {
+            unsubscribe();
+            cancelMarkdownWait = undefined;
+            resolve(ready);
+          };
+          const unsubscribe = store.subscribe((state) => {
+            if (state.conflict) finish(false);
+            else if (state.storageError === null) finish(true);
+          });
+          cancelMarkdownWait = () => finish(false);
+        }).then((ready) => (ready ? flushMarkdownSource() : Promise.reject(cause)));
+      });
     const waitForMarkdownRender = (revision: string, fixture: string): Promise<boolean> =>
       new Promise((resolve) => {
         const matches = () => {
@@ -658,11 +695,47 @@ export const createEditorBundle = (
       }
       if (!actions.beginLifecycle()) return failMarkdown(staleMarkdown);
       markdownSaving = true;
+      markdownEntryRevision = target.kind === "entry" ? item.revision : null;
       const generation = markdownGeneration;
       void spine
         .flushSaves()
         .then(async () => {
           if (generation !== markdownGeneration) return;
+          if (target.kind === "entry") {
+            if (get().render !== target.render || get().doc?.rev !== item.revision)
+              return refuseMarkdown(staleMarkdown);
+            const result = markdownEdit(
+              target.source,
+              item.file,
+              target.origin,
+              { kind: "text", text: item.text },
+              { tag: item.tag },
+            );
+            if (!result.ok) return refuseMarkdown(result.reason);
+            if (result.edits.length === 0) return;
+            const changed = applySourceReplacements(target.source, result.edits, {
+              markdown: { file: item.file },
+            });
+            if (!changed.ok) return refuseMarkdown(changed.reason);
+            const state = get();
+            set({
+              undoHistory: [...state.undoHistory, { before: target.source, after: changed.source }],
+              redoHistory: [],
+            });
+            commitSource(changed.source);
+            const revision = await flushMarkdownSource();
+            if (generation !== markdownGeneration) return;
+            if (get().conflict || get().storageError !== null)
+              return failMarkdown("Couldn't save this change. Try again.");
+            const ready = await waitForMarkdownRender(revision, item.fixture);
+            if (generation !== markdownGeneration) return;
+            if (!ready) return failMarkdown("Couldn't save this change. Try again.");
+            for (const [path, pending] of pendingMarkdown) {
+              if (pending.revision === item.revision)
+                pendingMarkdown.set(path, { ...pending, revision });
+            }
+            return;
+          }
           const project = await target.api.inspect();
           if (generation !== markdownGeneration) return;
           if (
@@ -712,6 +785,7 @@ export const createEditorBundle = (
         .finally(() => {
           if (generation !== markdownGeneration) return;
           markdownSaving = false;
+          markdownEntryRevision = null;
           actions.endLifecycle();
           drainMarkdown();
         });
@@ -723,7 +797,7 @@ export const createEditorBundle = (
       const state = get();
       if (state.doc === null) return;
       set({
-        doc: { ...state.doc, origin: { ...state.doc.origin, authoredSource } },
+        doc: withAuthoredSource(state.doc, authoredSource),
         pendingAuthoredSource: authoredSource,
         sourceEditError: null,
       });
@@ -856,6 +930,10 @@ export const createEditorBundle = (
         const target = markdownTarget(instancePath, true);
         if (target === null) return null;
         const generation = markdownGeneration;
+        if (target.kind === "entry")
+          return inspectMarkdownNode(target.source, target.origin.fileName, target.origin, {
+            tag: target.tag,
+          });
         return target.api.inspect().then(
           (project) => {
             if (
@@ -892,7 +970,7 @@ export const createEditorBundle = (
           file: target.origin.fileName,
           tag: target.tag,
           fixture: target.fixture,
-          revision: target.doc.rev,
+          revision: target.render.revision,
           text,
         });
         if (markdownTimer !== undefined) clearTimeout(markdownTimer);
@@ -947,9 +1025,13 @@ export const createEditorBundle = (
           return;
         }
         // An edit that would leave the static profile is refused where the author can read why.
-        const result = applySourceReplacements(input.source, input.edits, {
-          profile: { entry: state.doc.origin.file },
-        });
+        const result = applySourceReplacements(
+          input.source,
+          input.edits,
+          state.doc.origin.kind === "markdown"
+            ? { markdown: { file: state.doc.origin.file } }
+            : { profile: { entry: state.doc.origin.file } },
+        );
         if (!result.ok) {
           set({ sourceEditError: result.reason });
           return;
@@ -1084,14 +1166,7 @@ export const createEditorBundle = (
         spine.adoptRev(input.rev);
         set((current) => {
           if (current.doc === null) return { conflict: false };
-          const doc: EditorDocument = {
-            ...current.doc,
-            rev: input.rev,
-            origin: {
-              ...current.doc.origin,
-              authoredSource: input.authoredSource,
-            },
-          };
+          const doc = { ...withAuthoredSource(current.doc, input.authoredSource), rev: input.rev };
           // A restore replaces the entry, so edits staged on the old one no longer apply.
           const replaced = input.authoredSource !== current.doc.origin.authoredSource;
           return {
@@ -1104,7 +1179,14 @@ export const createEditorBundle = (
       },
 
       retrySave: () => {
-        if (gated(get())) return;
+        const state = get();
+        const retryingMarkdown =
+          markdownEntryRevision !== null &&
+          state.storageError !== null &&
+          host.access === "editable" &&
+          state.doc?.access.kind === "editable" &&
+          !state.previewRefreshing;
+        if (gated(state) && !retryingMarkdown) return;
         spine.retrySave();
         if (get().designSettling) settleDesignWrite();
       },
@@ -1648,14 +1730,32 @@ export const createEditorBundle = (
       }));
     },
     onPersistedRevision: (rev) => {
+      if (store.getState().doc?.origin.kind === "markdown" && store.getState().conflict) {
+        obsoleteMarkdownRevisions.add(rev);
+        return;
+      }
       store.setState((current) =>
         current.doc === null ? current : { doc: { ...current.doc, rev }, draftSavedAt: Date.now() },
       );
     },
     // Our own acked save came back with the render the host produced for it.
     // Local text that has moved on since is kept; everything else is the host's.
-    onSelfAck: (change) => applyChange(change, true),
+    onSelfAck: (change) => {
+      if (
+        store.getState().doc?.origin.kind === "markdown" &&
+        (store.getState().conflict || obsoleteMarkdownRevisions.has(change.rev))
+      )
+        return;
+      applyChange(change, true);
+    },
     onForeignChange: (change, saveInFlight) => {
+      const snapshot = store.getState();
+      if (snapshot.doc?.origin.kind === "markdown") {
+        if (snapshot.doc.rev !== change.rev) obsoleteMarkdownRevisions.add(snapshot.doc.rev);
+        if (snapshot.render !== null && snapshot.render.revision !== change.rev)
+          obsoleteMarkdownRevisions.add(snapshot.render.revision);
+        invalidateMarkdown();
+      }
       if (saveInFlight) {
         // Our optimistic base was stale when this landed. Keep the newer local
         // text and surface the conflict rather than replacing it with a remote

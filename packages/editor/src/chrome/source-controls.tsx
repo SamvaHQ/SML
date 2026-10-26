@@ -732,7 +732,8 @@ function FixtureSourceSession() {
   const { applySourceEdit, openSource } = useEditorStore((state) => state.actions);
   const [draft, setDraft] = useState<string | null>(null);
   const [review, setReview] = useState(false);
-  if (doc?.channel !== "email") return null;
+  // Fixtures are declared in the TSX entry; a Markdown document has none to edit here.
+  if (doc?.channel !== "email" || doc.origin.kind !== "tsx") return null;
   const fixture = inspectSourceFixtures(doc.origin.authoredSource).find(
     (entry) => entry.name === doc.fixture,
   );
@@ -819,9 +820,25 @@ export function SourceControls({ selection }: { readonly selection: EmailElement
     (state) =>
       `${state.doc?.rev}:${state.doc?.origin.authoredSource}:${state.doc?.channel === "email" ? state.doc.fixture : ""}`,
   );
+  const markdownEntry = useEditorStore((state) =>
+    state.doc?.origin.kind === "markdown" ? state.doc.origin.file : null,
+  );
+  const first = selection.origins[0]?.fileName;
   // Text written in a Markdown issue is edited as text; the element's TSX props and classes
-  // do not exist there.
-  if (selection.origins[0]?.fileName.endsWith(".md") === true) {
+  // do not exist there. In a Markdown document nothing else is editable: its layout is TSX the
+  // issue does not own, so the TSX transforms are never offered.
+  if (markdownEntry !== null) {
+    return first === markdownEntry ? (
+      <MarkdownControls key={selection.instancePath} selection={selection} />
+    ) : (
+      <p data-testid="source.layout-readonly" className="text-muted-foreground mt-3 pb-3 text-xs">
+        {first === undefined
+          ? "This part is generated, so there is nothing to edit here."
+          : `This part comes from the layout (${first}). Open the layout separately or ask the agent.`}
+      </p>
+    );
+  }
+  if (first?.endsWith(".md") === true) {
     return <MarkdownControls key={selection.instancePath} selection={selection} />;
   }
   return <SourceControlsSession key={identity} selection={selection} />;

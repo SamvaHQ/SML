@@ -22,8 +22,12 @@ export function CheckActions({ check }: { readonly check: CheckItem }) {
   const requestDiagnosticAssistance = useEditorStore(
     (state) => state.actions.requestDiagnosticAssistance,
   );
+  // The link-target fix is a TSX transform; a Markdown document has no anchors to rewrite here.
   if (doc === null || !sourceEditable) return null;
-  const edits = newWindowTargetFix(check, doc.origin.authoredSource, doc.origin.file);
+  const edits =
+    doc.origin.kind === "tsx"
+      ? newWindowTargetFix(check, doc.origin.authoredSource, doc.origin.file)
+      : [];
   if (edits.length === 0 && !assistantDocked) return null;
   const upgradable = check.diagnostics?.some((diagnostic) => hasUpgradeRecipe(diagnostic.code));
   const blocked = pending || conflict || lifecycleBusy;

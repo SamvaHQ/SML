@@ -276,7 +276,7 @@ function OpenLifecycleSheet({
       .then((state) => {
         if (cancelled) return;
         setLoaded(state);
-        const entryPath = doc?.origin.kind === "tsx" ? doc.origin.file : undefined;
+        const entryPath = doc?.origin.file;
         setSelectedFilePath((currentPath) =>
           currentPath !== null && state.files.some(({ path }) => path === currentPath)
             ? currentPath
@@ -481,7 +481,7 @@ function OpenLifecycleSheet({
       setError(`${file.name} is larger than 1 MB. Choose a smaller file.`);
       return;
     }
-    const entryPath = doc?.origin.kind === "tsx" ? doc.origin.file : undefined;
+    const entryPath = doc?.origin.file;
     const path = target?.replacePath ?? addedFilePath(entryPath, file.name);
     void file
       .arrayBuffer()

@@ -113,14 +113,16 @@ export const resolveSelection = (
 
 // ── Document merging ─────────────────────────────────────────────────────────
 
-/**
- * Apply a host change to the current document.
- *
- * The host owns every field but the authored TSX: a change replaces the
- * revision and the whole channel payload it carries. `authoredSource` is taken
- * only when the editor holds no newer unsaved edit, so a render arriving for an
- * earlier save never rewinds what the source rail is showing.
- */
+/** Replace source while preserving the channel's origin type. */
+export const withAuthoredSource = (
+  document: EditorDocument,
+  authoredSource: string,
+): EditorDocument =>
+  document.channel === "email"
+    ? { ...document, origin: { ...document.origin, authoredSource } }
+    : { ...document, origin: { ...document.origin, authoredSource } };
+
+/** Apply the host's build, preserving any newer unsaved source over an earlier acknowledgment. */
 export const withDocumentChange = (
   document: EditorDocument,
   change: DocumentChange,

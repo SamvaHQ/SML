@@ -9,16 +9,13 @@ import {
   type EmailRender,
   type ProjectLifecycleState,
 } from "@samva/editor/host";
+import { checkCompatibility } from "@samva/markup/compatibility";
 import { previewEmail } from "@samva/markup/edit";
 import { compileIssue } from "@samva/markup/markdown";
 
 import { renderPage } from "./page-render";
 
-// `?demo=issue` hosts a newsletter issue: a TSX layout that places `<IssueContent />` and one
-// Markdown issue the layout renders. The host holds both files, recompiles the issue on every
-// save, and answers a prose edit made on the web page the way a project host does: the editor
-// reads the Markdown through `lifecycle.inspect`, writes it back through `updateFile`, and the
-// host publishes the render of what was written, for the email and the web page alike.
+// The host compiles the authored Markdown against its separate, host-owned TSX layout.
 
 const LAYOUT_FILE = "layout.tsx";
 const ISSUE_FILE = "issues/launch.md";
@@ -57,6 +54,8 @@ We also rewrote the roasting guide so a first bag takes five minutes to understa
 ## Coming next
 
 Gift bundles arrive in March.
+
+<Button href="https://nimbus.example/guide">Read the roasting guide</Button>
 `;
 
 const VARIABLES: EditableEmailDocument["variables"] = [];
@@ -114,7 +113,10 @@ export const createIssueHost = async (): Promise<{
       fixture: render === null ? null : "reader",
       render,
       diagnostics: compiled.diagnostics,
-      incompatibilities: [],
+      incompatibilities:
+        compiled.template === undefined
+          ? []
+          : checkCompatibility(compiled.template, compiled.fixtures),
     };
   };
 
@@ -137,22 +139,42 @@ export const createIssueHost = async (): Promise<{
       new LifecycleUnavailable({ reason: "The issue demo supports editing text only." }),
     );
 
-  const lifecycle: AsyncLifecycleApi = {
-    inspect: async () => state(),
-    updateFile: async ({ path, baseRev, content: next }) => {
+  // Serialize writes so two saves based on one revision cannot both succeed while compiling.
+  let pending = Promise.resolve();
+  const writeFile = (
+    path: string,
+    baseRev: string,
+    next: string | null,
+    origin: "self" | "external",
+  ) => {
+    const operation = pending.then(async () => {
       if (baseRev !== rev())
         return Promise.reject(new DocumentConflict({ expectedRev: baseRev, actualRev: rev() }));
-      if (next !== null) project[path] = next;
+      if (next === null) delete project[path];
+      else project[path] = next;
       compiled = await build();
       counter += 1;
       const change: DocumentChange = {
         rev: rev(),
-        origin: "external",
-        authoredSource: LAYOUT,
+        origin,
+        authoredSource: project[ISSUE_FILE] ?? "",
         ...content(),
       };
       for (const listener of listeners) listener(change);
       for (const listener of sourceListeners) listener();
+      return { rev: rev() };
+    });
+    pending = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation;
+  };
+
+  const lifecycle: AsyncLifecycleApi = {
+    inspect: async () => state(),
+    updateFile: async ({ path, baseRev, content: next }) => {
+      await writeFile(path, baseRev, next, "external");
       return state();
     },
     publish: refused,
@@ -172,7 +194,12 @@ export const createIssueHost = async (): Promise<{
           id: "issue_launch",
           name: "Launch notes",
           rev: rev(),
-          origin: { kind: "tsx", file: LAYOUT_FILE, authoredSource: LAYOUT },
+          origin: {
+            kind: "markdown",
+            file: ISSUE_FILE,
+            authoredSource: project[ISSUE_FILE] ?? "",
+            layout: { file: LAYOUT_FILE },
+          },
           access: { kind: "editable" },
           variables: VARIABLES,
           metadata: {},
@@ -182,10 +209,14 @@ export const createIssueHost = async (): Promise<{
       },
     },
     writer: {
-      save: async () => ({ rev: rev() }),
+      save: async (update) =>
+        update.kind === "metadata"
+          ? { rev: rev() }
+          : writeFile(ISSUE_FILE, update.baseRev, update.authoredSource, "self"),
     },
     lifecycle: { status: "ready", api: lifecycle },
-    render: async (_entry, _fixture, target) => {
+    render: async (entry, _fixture, target) => {
+      if (entry !== ISSUE_FILE) return null;
       const template = compiled.template;
       if (template === undefined) return null;
       if (target === "email") return renderEmail();
