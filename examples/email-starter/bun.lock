@@ -5,10 +5,10 @@
     "": {
       "name": "samva-email-starter",
       "dependencies": {
-        "@samva/markup": "0.19.0",
+        "@samva/markup": "0.20.0",
       },
       "devDependencies": {
-        "@samva/vite": "0.19.0",
+        "@samva/vite": "0.20.0",
         "@types/node": "26.4.0",
         "typescript": "7.0.2",
         "vite": "8.2.2",
@@ -80,9 +80,9 @@
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
 
-    "@samva/markup": ["@samva/markup@0.19.0", "", { "dependencies": { "@babel/parser": "^8.0.4", "@cfworker/json-schema": "4.1.1", "@standard-schema/spec": "1.1.0", "better-result": "3.0.1", "caniemail": "2.0.2", "css-tree": "3.2.1", "mdast-util-from-markdown": "^2.1.0", "mdast-util-mdx-expression": "^2.0.1", "mdast-util-mdx-jsx": "^3.2.0", "micromark-extension-mdx-expression": "^3.0.1", "micromark-extension-mdx-jsx": "^3.0.2", "tailwindcss": "^4.3.3", "yaml": "^2.9.1" } }, "sha512-3tYFQJ0j6sH0aKDlg2EmR3ZOl3WFY66QOW8Gn3Kp5lQ/EEth8ZEx2uRzyvyDB2D2AyUc7zPR0R6MLiX+hBLgUA=="],
+    "@samva/markup": ["@samva/markup@0.20.0", "", { "dependencies": { "@babel/parser": "^8.0.4", "@cfworker/json-schema": "4.1.1", "@standard-schema/spec": "1.1.0", "better-result": "3.0.1", "caniemail": "2.0.2", "css-tree": "3.2.1", "mdast-util-from-markdown": "^2.1.0", "mdast-util-mdx-expression": "^2.0.1", "mdast-util-mdx-jsx": "^3.2.0", "micromark-extension-mdx-expression": "^3.0.1", "micromark-extension-mdx-jsx": "^3.0.2", "tailwindcss": "^4.3.3", "yaml": "^2.9.1" } }, "sha512-wdFfSFUSWR3UhoElhUq2GnwJfCAWBI7ImRUsFD2XVXK2K/ApBci8u91ZcACkAlJumZl0UlZjVTOQvLtJZMjwTA=="],
 
-    "@samva/vite": ["@samva/vite@0.19.0", "", { "dependencies": { "@samva/markup": "^0.19.0" }, "peerDependencies": { "vite": "^8.2.2" } }, "sha512-cgTAmKtie72nH7jzI49a1UPwhLOPumsYETtRE6OXOrCDBKT8PQecZRkC4neNpmtMCk2TNvz7ujodgouYe2CioA=="],
+    "@samva/vite": ["@samva/vite@0.20.0", "", { "dependencies": { "@samva/markup": "^0.20.0" }, "peerDependencies": { "vite": "^8.2.2" } }, "sha512-yuR70aYXXNUfyC7B7M/JE2lNXx7ls7RwwfCmVW+ppRSk/LbIPv5HXfsM6dORYc6qm9l5MfkfGnHHzAEGPppyyA=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
