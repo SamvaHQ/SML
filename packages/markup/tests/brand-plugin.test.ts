@@ -53,7 +53,7 @@ describe("a brand plugin", () => {
       ACME,
     );
     expect(errors(compiled)).toEqual([]);
-    const { html } = render(compiled.template!, {}, { channel: "email", brandPlugin: ACME });
+    const { html } = render(compiled.template!, {}, { target: "email", brandPlugin: ACME });
     expect(html).toContain('data-acme-footer=""');
     expect(html).toContain('<span data-acme-unsubscribe="">');
     expect(html).toContain('href="{{acme.unsubscribe}}" data-acme-no-track');

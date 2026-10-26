@@ -2,10 +2,16 @@
 // editor and agents read, and what every send renders. It is JSON, versioned, and carries no code.
 // Rendering it is a pure function of the template and the input (see `./render-template`).
 
+import type {
+  EmailPresentation,
+  SemanticComponent,
+  SemanticIntrinsic,
+  WebPresentation,
+} from "./ir/nodes";
 import type { SmsSegmentInfo } from "./sms-segments";
 
 /** The version this package writes. A publication pins the version it was built with. */
-export const COMPILED_TEMPLATE_VERSION = 1;
+export const COMPILED_TEMPLATE_VERSION = 2;
 
 /**
  * Where a node came from: `[line, column]` in the entry file, or `[line, column, file]` with an
@@ -132,19 +138,25 @@ export interface CompiledPreheader {
   readonly preheader: true;
 }
 
-/** A node in an email body. A bare value in child position is rendered as escaped text. */
+/** A semantic body node or an email primitive produced by target lowering. Bare values are escaped text. */
 export type CompiledNode =
   | CompiledValue
   | CompiledElement
   | CompiledIf
   | CompiledEach
   | CompiledRaw
-  | CompiledPreheader;
+  | CompiledPreheader
+  | SemanticComponent
+  | SemanticIntrinsic;
 
 export interface CompiledEmail {
   readonly subject: CompiledValue;
   readonly preheader?: CompiledValue;
   readonly body: CompiledNode;
+  /** Resolved email presentation, indexed by deterministic lowering order; contains no body. */
+  readonly presentation?: EmailPresentation;
+  /** Project CSS for the web target; email's resolved cascade is independent. */
+  readonly web?: WebPresentation;
 }
 
 /** A plain-text channel body: text pieces, conditionals and loops. */
@@ -204,8 +216,34 @@ export interface CompiledTemplate {
   readonly schema: Readonly<Record<string, unknown>>;
 }
 
-/** The channels a template can declare and `render` can render. */
+/** The channels a template can declare. */
 export type Channel = "email" | "sms" | "whatsapp";
+
+/** Email and web lower the same body; plain-message targets keep their authored channels. */
+export type Target = Channel | "web";
+
+/** An element's offsets in rendered HTML and its authored source reference. */
+export interface RenderedPosition {
+  readonly start: number;
+  readonly end: number;
+  readonly tag: string;
+  readonly src?: CompiledSource;
+}
+
+/** Values for a host-owned page shell. Styles are CSS text, never HTML. */
+export interface PageHeadHints {
+  readonly title?: string;
+  readonly lang?: string;
+  readonly dir?: "ltr" | "rtl" | "auto";
+  readonly styles: string;
+}
+
+/** A semantic body fragment, with shell hints and offsets for source selection. */
+export interface RenderedPage {
+  readonly html: string;
+  readonly headHints: PageHeadHints;
+  readonly positions: readonly RenderedPosition[];
+}
 
 export interface RenderedEmail {
   readonly subject: string;
@@ -247,9 +285,10 @@ export interface RenderedWhatsApp {
   readonly buttons: readonly RenderedWhatsAppButton[];
 }
 
-/** What `render` returns for each channel. */
+/** What `render` returns for each target. */
 export interface RenderedMessage {
   readonly email: RenderedEmail;
+  readonly web: RenderedPage;
   readonly sms: RenderedSms;
   readonly whatsapp: RenderedWhatsApp;
 }

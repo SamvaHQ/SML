@@ -5,6 +5,7 @@ export { render, RenderError, type RenderDiagnostic } from "./render-template";
 export {
   COMPILED_TEMPLATE_VERSION,
   type Channel,
+  type Target,
   type CompiledArithmetic,
   type CompiledComparison,
   type CompiledEach,
@@ -26,6 +27,9 @@ export {
   type CompiledWhatsAppButton,
   type CompiledWhatsAppButtonNode,
   type RenderedEmail,
+  type RenderedPage,
+  type PageHeadHints,
+  type RenderedPosition,
   type RenderedMessage,
   type RenderedSms,
   type RenderedWhatsApp,
@@ -46,3 +50,16 @@ export {
   type EmailTag,
 } from "./email/elements";
 export { smsSegmentInfo, type SmsEncoding, type SmsSegmentInfo } from "./sms-segments";
+
+export type {
+  SemanticComponentName,
+  SemanticComponent,
+  SemanticProp,
+  SemanticBlock,
+  SemanticInline,
+  SemanticIntrinsic,
+  EmailPresentation,
+  EmailPresentationOverride,
+  WebPresentation,
+  WebCssRule,
+} from "./ir/nodes";

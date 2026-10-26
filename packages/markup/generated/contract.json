@@ -1,6 +1,6 @@
 {
   "contract": 1,
-  "compiledTemplateVersion": 1,
+  "compiledTemplateVersion": 2,
   "template": {
     "extension": ".tsx",
     "directories": ["templates", "emails"],
@@ -1549,6 +1549,11 @@
       "code": "dynamic-numeric-prop",
       "summary": "A prop that sizes layout at compile time is not a number literal.",
       "fix": "Write the number literally, for example height={44}."
+    },
+    {
+      "code": "email-component-degradation",
+      "summary": "A component loses content or behavior when lowered to email.",
+      "fix": "Compare the email and web previews; provide an email-safe equivalent for content readers need."
     },
     {
       "code": "email-contrast",

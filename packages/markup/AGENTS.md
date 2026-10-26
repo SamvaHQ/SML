@@ -56,9 +56,9 @@ Tooling entries are what a host (Vite, the CLI, the editor, the API, the templat
 - `@samva/markup/diagnostics` — source spans and line maps, the `DIAGNOSTIC_CODES` registry with
   each code's fix and upgrade recipe, and `EmailDiagnostic`. It does not load the compiler, so a
   host that only reports imports it.
-- `@samva/markup/render` — `render(template, input, { channel, locale?, timeZone?, brandPlugin? })`,
-  which returns the `channel`'s message (`RenderedEmail`, `RenderedSms` with its segment counts, or
-  `RenderedWhatsApp`) and throws only `RenderError`, including for a template compiled by another
+- `@samva/markup/render` — `render(template, input, { target, locale?, timeZone?, brandPlugin? })`,
+  which returns the target's output (`RenderedEmail`, `RenderedPage` with body HTML and head hints,
+  `RenderedSms` with its segment counts, or `RenderedWhatsApp`) and throws only `RenderError`, including for a template compiled by another
   `COMPILED_TEMPLATE_VERSION`; the `Compiled*` types; the email element table and `escapeText` /
   `escapeAttribute`; `smsSegmentInfo`. Its import closure excludes the compiler's libraries
   (`tests/entry-closure.test.ts`): it is the send-time security boundary and what the API bundles.
@@ -168,7 +168,7 @@ Read the contract before authoring. Import only subpaths declared in `package.js
 
 - `tsc --noEmit` over the template project catches unsupported elements, attributes, and props.
 - `compileTemplate` reports every static-profile, binding and fixture finding with a source
-  location, and `render(compiled.template, fixture, { channel: "email" })` proves one fixture's
+  location, and `render(compiled.template, fixture, { target: "email" })` proves one fixture's
   output without executing the template.
 - `samva templates check` (from `@samva/cli`) compiles every entry and renders every fixture,
   reporting findings with source locations.

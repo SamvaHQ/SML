@@ -225,7 +225,7 @@ export const renderEmailFixtures = (
         templateId: entry.id,
         fixture,
         rendered: render(entry.compiled, input, {
-          channel: "email",
+          target: "email",
           ...options,
           ...(entry.brandPlugin === undefined ? {} : { brandPlugin: entry.brandPlugin }),
         }),
@@ -284,8 +284,16 @@ export const renderChannelFixture = (
   try {
     const input = entry.fixtures[fixture];
     return channel === "sms"
-      ? { ok: true, channel, text: render(entry.compiled, input, { channel, ...options }).text }
-      : { ok: true, channel, message: render(entry.compiled, input, { channel, ...options }) };
+      ? {
+          ok: true,
+          channel,
+          text: render(entry.compiled, input, { target: channel, ...options }).text,
+        }
+      : {
+          ok: true,
+          channel,
+          message: render(entry.compiled, input, { target: channel, ...options }),
+        };
   } catch (cause) {
     return { ok: false, diagnostics: renderFindings(cause, entry.id, fixture) };
   }

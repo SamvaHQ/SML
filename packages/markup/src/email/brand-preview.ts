@@ -78,7 +78,7 @@ export const previewBrand = async (
   // it; those refusals are findings about the brand, returned like the compile's.
   // oxlint-disable-next-line samva/no-try-catch-or-throw -- render signals a refused render by throwing RenderError; this API returns findings instead.
   try {
-    const { html } = render(compiled.template, {}, { channel: "email", brandPlugin: plugin });
+    const { html } = render(compiled.template, {}, { target: "email", brandPlugin: plugin });
     return { html, diagnostics: compiled.diagnostics };
   } catch (cause) {
     // oxlint-disable-next-line samva/no-try-catch-or-throw -- Anything but a RenderError is a defect, not a finding about the brand.

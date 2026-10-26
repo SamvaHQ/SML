@@ -65,7 +65,7 @@ describe("browser entries without process", () => {
         brand: BRAND,
       });
       expect(compiled.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
-      return render(compiled.template!, {}, { channel: "email" }).html;
+      return render(compiled.template!, {}, { target: "email" }).html;
     });
     expect(html).toContain("background-color:#e11d48");
     expect(html).toContain("#fb7185");

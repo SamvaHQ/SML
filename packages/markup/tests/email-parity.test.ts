@@ -28,6 +28,6 @@ it("compiles and renders the parity corpus to the golden digests", async () => {
   if (compiled.template === undefined) return;
   expect(await parityDigest(parityCompileText(compiled))).toBe(PARITY_COMPILE_DIGEST);
   expect(
-    await parityDigests(render(compiled.template, compiled.fixtures.basic, { channel: "email" })),
+    await parityDigests(render(compiled.template, compiled.fixtures.basic, { target: "email" })),
   ).toEqual(PARITY_DIGESTS);
 });

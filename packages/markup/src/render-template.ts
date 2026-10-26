@@ -4,7 +4,7 @@
 import { TaggedError } from "better-result";
 
 import type {
-  Channel,
+  Target,
   CompiledArithmetic,
   CompiledComparison,
   CompiledEach,
@@ -20,6 +20,8 @@ import type {
   CompiledValue,
   CompiledWhatsAppButtonNode,
   RenderedEmail,
+  RenderedPage,
+  RenderedPosition,
   RenderedMessage,
   RenderedSms,
   RenderedWhatsApp,
@@ -31,6 +33,11 @@ import { emailElement, EMAIL_GLOBAL_ATTRIBUTES, type EmailAttributeSpec } from "
 import type { EmailElementSpec, EmailLayout } from "./email/elements";
 import { samvaBrandPlugin } from "./email/samva-brand-plugin";
 import { callFormatter, createFmt, type Fmt } from "./fmt";
+import { applyEmailPresentation } from "./ir/email-presentation";
+import type { WebCssRule } from "./ir/nodes";
+import { validateEmailIr } from "./ir/validate";
+import { lowerEmailNodes } from "./lower/email";
+import { lowerWebNodes, WEB_BASE_STYLES, webElement, type WebHeadValues } from "./lower/web";
 import { smsSegmentInfo } from "./sms-segments";
 
 // Rendering a compiled template is a pure function of the template and the input. Untrusted data
@@ -74,13 +81,7 @@ interface RenderSettings {
   readonly brandPlugin?: BrandPlugin | undefined;
 }
 
-/** One rendered element's offset range in the HTML, and the source it was lowered from. */
-export interface RenderedPosition {
-  readonly start: number;
-  readonly end: number;
-  readonly tag: string;
-  readonly src?: CompiledSource;
-}
+export type { RenderedPosition } from "./compiled-template";
 
 /** The email render, with where each element landed in the HTML when it asked for `positions`. */
 export interface PositionedEmail extends RenderedEmail {
@@ -127,7 +128,7 @@ const isSafeUrl = (value: string): boolean =>
 
 const CSS_PROPERTY = /^(--[a-zA-Z0-9-]+|[a-zA-Z][a-zA-Z0-9-]*)$/;
 const CSS_UNSAFE = /[;{}<>\\]|expression\s*\(|@import|\/\*/i;
-const CSS_URL = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
+const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*))\s*\)/gi;
 
 const kebab = (property: string): string =>
   property.startsWith("--") ? property : property.replace(/[A-Z]/g, (l) => `-${l.toLowerCase()}`);
@@ -152,6 +153,9 @@ const declarationValue = (property: string, value: string | number): string =>
   typeof value === "number" && value !== 0 && !UNITLESS.has(property) && !property.startsWith("--")
     ? `${value}px`
     : String(value);
+
+const webWidth = (value: string | number): string =>
+  typeof value === "number" || /^\d+(?:\.\d+)?$/.test(value) ? `${value}px` : value;
 
 // ── Concrete tree ─────────────────────────────────────────────────────────────
 
@@ -194,6 +198,17 @@ interface Ctx {
   /** The channel's rendered preheader, consumed by the first `{preheader:true}` marker. */
   preheader: string | undefined;
   markerUsed: boolean;
+  readonly web?: {
+    readonly styles: Map<string, string>;
+    readonly hints: ReadonlyMap<CompiledElement, WebHeadValues>;
+    readonly stylesheets: ReadonlyMap<CompiledNode, readonly WebCssRule[]>;
+    readonly gridTracks: ReadonlyMap<CompiledValue, readonly (CompiledValue | undefined)[]>;
+    readonly authoredCss: string[];
+    title?: string;
+    lang?: string;
+    dir?: "ltr" | "rtl" | "auto";
+    hinted: boolean;
+  };
 }
 
 const report = (ctx: Ctx, code: string, message: string): void => {
@@ -422,7 +437,23 @@ const declarations = (
       continue;
     }
     const [property, raw] = entry;
-    const value = evalValue(ctx, scope, raw, depth + 1);
+    const tracks = ctx.web?.gridTracks.get(raw);
+    const value =
+      tracks === undefined
+        ? evalValue(ctx, scope, raw, depth + 1)
+        : tracks
+            .map((track) => {
+              const width =
+                track === undefined ? undefined : evalValue(ctx, scope, track, depth + 1);
+              if (width === undefined || width === null) return "minmax(0,1fr)";
+              if (
+                typeof width !== "string" &&
+                !(typeof width === "number" && Number.isFinite(width))
+              )
+                return invalid("A Column width must be a string or finite number.");
+              return webWidth(width);
+            })
+            .join(" ");
     if (value === undefined || value === null) continue;
     if (typeof property !== "string" || !CSS_PROPERTY.test(property)) {
       report(
@@ -436,7 +467,12 @@ const declarations = (
       report(ctx, "invalid-style-value", `Style ${property} must be a string or finite number.`);
       continue;
     }
-    const text = declarationValue(property, value);
+    const text =
+      ctx.web !== undefined &&
+      ["width", "max-width"].includes(kebab(property)) &&
+      typeof value === "string"
+        ? webWidth(value)
+        : declarationValue(property, value);
     if (CSS_UNSAFE.test(text) || CONTROL_CHARACTERS.test(text)) {
       report(
         ctx,
@@ -446,9 +482,12 @@ const declarations = (
       continue;
     }
     let unsafeUrl: string | undefined;
-    for (const match of text.matchAll(CSS_URL)) {
-      if (!isSafeUrl(match[2] ?? "")) unsafeUrl = match[2] ?? "";
+    const urls = [...text.matchAll(CSS_URL)];
+    for (const match of urls) {
+      const url = match[1] ?? match[2] ?? (match[3] ?? "").trim();
+      if (!isSafeUrl(url)) unsafeUrl = url;
     }
+    if ([...text.matchAll(/url\(/gi)].length !== urls.length) unsafeUrl = text;
     if (unsafeUrl !== undefined) {
       report(
         ctx,
@@ -465,6 +504,17 @@ const declarations = (
 const styleText = (ctx: Ctx, scope: Scope, style: CompiledStyle, depth: number): string => {
   checkDepth(depth);
   if (typeof style === "string") {
+    if (ctx.web !== undefined) {
+      const fields = style
+        .split(";")
+        .filter((part) => part.trim() !== "")
+        .map((part) => {
+          const at = part.indexOf(":");
+          if (at < 1) return invalid("A static web style contains property:value declarations.");
+          return [part.slice(0, at).trim(), part.slice(at + 1).trim()] as const;
+        });
+      return declarations(ctx, scope, fields, depth);
+    }
     if (CONTROL_CHARACTERS.test(style)) {
       report(ctx, "unsafe-style-value", "A style contains control characters.");
       return "";
@@ -565,6 +615,10 @@ const buildAttributes = (
     // The brand footer's unsubscribe link: its href is a placeholder the send path fills per
     // delivery, and the no-track marker keeps click tracking from rewriting it.
     if (tag === "a" && name === "href" && raw === ctx.brandPlugin.unsubscribeUrlPlaceholder) {
+      if (ctx.web !== undefined && node.reserved !== true) {
+        report(ctx, "reserved-url", "Only a brand footer can write its unsubscribe placeholder.");
+        continue;
+      }
       present.add(name);
       emitted.push(
         ` href="${escapeAttribute(ctx.brandPlugin.unsubscribeUrlPlaceholder)}" ${ctx.brandPlugin.noTrackAttribute}`,
@@ -633,9 +687,24 @@ const buildAttributes = (
       report(ctx, "missing-attribute", `<${tag}> requires the ${name} attribute.`);
     }
   }
-  if (node.style !== undefined) {
+  if (node.style !== undefined && ctx.web === undefined) {
     const css = styleText(ctx, scope, node.style, depth + 1);
     if (css !== "") emitted.push(` style="${escapeAttribute(css)}"`);
+  }
+  if (node.style !== undefined && ctx.web !== undefined) {
+    const css = styleText(ctx, scope, node.style, depth + 1);
+    if (css !== "") {
+      let name = ctx.web.styles.get(css);
+      if (name === undefined) {
+        name = `sml-web-style-${ctx.web.styles.size}`;
+        ctx.web.styles.set(css, name);
+      }
+      // Append to the already validated authored class rather than emitting a duplicate attribute.
+      const classAt = emitted.findIndex((part) => part.startsWith(' class="'));
+      const combined = ` class="${escapeAttribute(classes === undefined || classes === "" ? name : `${classes} ${name}`)}"`;
+      if (classAt < 0) emitted.push(combined);
+      else emitted[classAt] = combined;
+    }
   }
   return emitted.join("");
 };
@@ -700,7 +769,12 @@ const evalElement = (
     report(ctx, "unsupported-element", "A plain-text body cannot contain elements.");
     return;
   }
-  const spec = typeof tag === "string" ? emailElement(tag) : undefined;
+  const spec =
+    typeof tag === "string"
+      ? ctx.web === undefined
+        ? emailElement(tag)
+        : webElement(tag)
+      : undefined;
   if (spec === undefined) {
     report(
       ctx,
@@ -708,6 +782,28 @@ const evalElement = (
       `<${String(tag)}> is not part of the supported email vocabulary.`,
     );
     return;
+  }
+  if (ctx.web !== undefined) {
+    const hints = ctx.web.hints.get(node);
+    if (hints !== undefined && !ctx.web.hinted) {
+      ctx.web.hinted = true;
+      if (hints.title !== undefined)
+        ctx.web.title = textOf(evalValue(ctx, scope, hints.title, depth + 1));
+      if (hints.titleNodes !== undefined && hints.titleNodes.length > 0) {
+        const title: CNode[] = [];
+        for (const part of hints.titleNodes) evalNode(ctx, scope, part, depth + 1, title);
+        if (title.some((part) => part.t !== "text")) invalid("A page title contains text only.");
+        ctx.web.title = title.map((part) => (part.t === "text" ? part.v : "")).join("");
+      }
+      if (hints.lang !== undefined)
+        ctx.web.lang = textOf(evalValue(ctx, scope, hints.lang, depth + 1));
+      const dir = hints.dir === undefined ? undefined : evalValue(ctx, scope, hints.dir, depth + 1);
+      if (dir !== undefined && dir !== "ltr" && dir !== "rtl" && dir !== "auto")
+        invalid("Page direction must be ltr, rtl or auto.");
+      if (dir === "ltr" || dir === "rtl" || dir === "auto") ctx.web.dir = dir;
+    }
+    if (spec.content === "raw" || ["html", "head", "body", "meta", "link", "title"].includes(tag))
+      return invalid("Web output is a body fragment without shell metadata or raw CSS.");
   }
   const children: CNode[] = [];
   for (const child of node.children ?? []) evalNode(ctx, scope, child, depth + 1, children);
@@ -838,6 +934,13 @@ const evalNode = (
   if (!isRecord(node)) {
     invalid("An array cannot be rendered as a node.");
     return;
+  }
+  if (ctx.web !== undefined) {
+    const css = ctx.web.stylesheets.get(node);
+    if (css !== undefined) {
+      ctx.web.authoredCss.push(webCss(ctx, css, depth, scope));
+      return;
+    }
   }
   if (has(node, "el"))
     return evalElement(ctx, scope, node as unknown as CompiledElement, depth, out);
@@ -1179,7 +1282,7 @@ const settle = (ctx: Ctx): void => {
  * Render the email channel against one validated input. `positions` also returns where each
  * element landed in the HTML, which compatibility findings and editor selections map back to source.
  */
-export const renderEmail = (
+const renderEmailBody = (
   template: CompiledTemplate,
   input: unknown,
   options: RenderSettings & { readonly positions?: boolean } = {},
@@ -1201,7 +1304,21 @@ export const renderEmail = (
 
   let tree: readonly CNode[] = [];
   const nodes: CNode[] = [];
-  evalNode(ctx, empty, email.body, 0, nodes);
+  validateEmailIr(email.body, email.presentation, (message, code) =>
+    fail(code ?? "invalid-value", message),
+  );
+  const expanded = lowerEmailNodes(
+    [email.body],
+    email.presentation?.brandPlugin ?? ctx.brandPlugin,
+    (diagnostic) => {
+      if (diagnostic.severity === "error") report(ctx, diagnostic.code, diagnostic.message);
+    },
+  );
+  const lowered =
+    email.presentation === undefined
+      ? expanded
+      : applyEmailPresentation(expanded, email.presentation);
+  for (const node of lowered) evalNode(ctx, empty, node, 0, nodes);
   tree = nodes;
   if (preheader !== undefined && !ctx.markerUsed) {
     const block = preheaderBlock(ctx, preheader);
@@ -1228,6 +1345,170 @@ export const renderEmail = (
   const serialized = tree.map(serialize).join("");
   const html = serialized.startsWith("<html") ? `${EMAIL_DOCTYPE}${serialized}` : serialized;
   return { subject, preheader, html, text };
+};
+
+/** Render malformed artifacts through the same typed boundary as unsafe bound values. */
+export const renderEmail = (
+  template: CompiledTemplate,
+  input: unknown,
+  options: RenderSettings & { readonly positions?: boolean } = {},
+): PositionedEmail => {
+  try {
+    return renderEmailBody(template, input, options);
+  } catch (error) {
+    if (RenderError.is(error)) throw error;
+    return fail("invalid-ir", "Malformed compiled email.");
+  }
+};
+
+/** Serialize parsed CSS through the same declaration and URL boundary as bound element styles. */
+const webCss = (
+  ctx: Ctx,
+  rules: readonly WebCssRule[],
+  depth = 0,
+  scope: Scope = new Map(),
+): string => {
+  checkDepth(depth);
+  if (!Array.isArray(rules)) invalid("Web CSS rules must be an array.");
+  return rules
+    .map((rule) => {
+      if (!isRecord(rule) || (rule.selector === undefined) === (rule.at === undefined))
+        invalid("A web CSS rule has one selector or at-rule.");
+      const header = rule.selector ?? rule.at;
+      if (
+        typeof header !== "string" ||
+        header === "" ||
+        /[{};\u0000-\u001f\u007f]|<[/!]|\/\*|\*\//.test(header) ||
+        /\\$/.test(header)
+      )
+        return invalid("Unsafe web CSS rule header.");
+      if (rule.selector !== undefined && header.includes("@"))
+        invalid("A CSS selector cannot contain an at-rule.");
+      if (
+        rule.at !== undefined &&
+        !/^(?:layer [\w.,-]+|(?:media|supports|container) [^{};\\]+|font-face|(?:keyframes|counter-style) [\w-]+|page(?: [\w :(),-]+)?)$/.test(
+          header,
+        )
+      )
+        invalid("Unsupported web CSS at-rule.");
+      const entries = rule.style ?? [];
+      if (
+        !Array.isArray(entries) ||
+        entries.some(
+          (entry) => !Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string",
+        )
+      )
+        invalid("Web CSS declarations are property and value pairs.");
+      const css = declarations(ctx, scope, entries, depth + 1);
+      const children =
+        rule.children === undefined ? "" : webCss(ctx, rule.children, depth + 1, scope);
+      const prefix = rule.at === undefined ? header : `@${header}`;
+      if (rule.at?.startsWith("layer ") && rule.children === undefined && rule.style === undefined)
+        return `${prefix};`;
+      return `${prefix}{${css}${css === "" || children === "" ? "" : ";"}${children}}`;
+    })
+    .join("");
+};
+
+const renderWeb = (
+  template: CompiledTemplate,
+  input: unknown,
+  options: RenderSettings,
+): RenderedPage => {
+  try {
+    const initial = createContext(template, input, options, false);
+    const email = template.email;
+    if (email === undefined)
+      return fail("missing-channel", "The web target requires an email channel.");
+    validateEmailIr(email.body, undefined, (message, code) =>
+      fail(code ?? "invalid-value", message),
+    );
+    // Bound CSS structure before walking it, including malicious cycles and oversized lists.
+    validateEmailIr({ lit: email.web }, undefined, (message, code) =>
+      fail(code ?? "invalid-value", message),
+    );
+    if (email.web !== undefined && (!isRecord(email.web) || !Array.isArray(email.web.rules)))
+      invalid("Invalid web presentation plan.");
+    // The compiled plugin supplies the same footer marker and placeholder semantics on both targets.
+    const plugin = options.brandPlugin ?? email.presentation?.brandPlugin ?? initial.brandPlugin;
+    if (
+      !isRecord(plugin) ||
+      typeof plugin.specifier !== "string" ||
+      ![plugin.footerAttribute, plugin.unsubscribeRowAttribute, plugin.noTrackAttribute].every(
+        (name) => typeof name === "string" && /^data-[a-z0-9-]+$/.test(name),
+      ) ||
+      typeof plugin.unsubscribeUrlPlaceholder !== "string" ||
+      CONTROL_CHARACTERS.test(plugin.unsubscribeUrlPlaceholder) ||
+      (/^[a-z][a-z0-9+.-]*:/i.test(plugin.unsubscribeUrlPlaceholder) &&
+        !isSafeUrl(plugin.unsubscribeUrlPlaceholder))
+    )
+      invalid("Invalid web brand plugin.");
+    const lowered = lowerWebNodes([email.body], plugin, invalid, email.web);
+    const web: NonNullable<Ctx["web"]> = {
+      styles: new Map(),
+      hints: lowered.headHints,
+      stylesheets: lowered.stylesheets,
+      gridTracks: lowered.gridTracks,
+      authoredCss: [],
+      hinted: false,
+    };
+    const webCtx: Ctx = {
+      ...initial,
+      web,
+      brandPlugin: plugin,
+      reservedAttributes: reservedBrandAttributes(plugin),
+    };
+    const nodes: CNode[] = [];
+    for (const node of lowered.nodes) evalNode(webCtx, new Map(), node, 0, nodes);
+    const title = web.title ?? textOf(evalValue(webCtx, new Map(), email.subject, 0));
+    const componentLayer = email.web?.componentLayer;
+    const specificity = email.web?.inlineSpecificity ?? 1;
+    if (
+      componentLayer !== undefined &&
+      (!Number.isSafeInteger(componentLayer) || componentLayer < 0)
+    )
+      invalid("Invalid web component layer.");
+    if (!Number.isInteger(specificity) || specificity < 1 || specificity > 100_000)
+      invalid("Invalid web style specificity.");
+    const projectRules = email.web?.rules ?? [];
+    const baseRules =
+      componentLayer === undefined
+        ? WEB_BASE_STYLES
+        : WEB_BASE_STYLES.map((rule) => ({ ...rule, at: `layer sml-web-${componentLayer}` }));
+    const css = webCss(webCtx, [
+      ...projectRules.filter(
+        (rule) =>
+          rule.at?.startsWith("layer ") && rule.children === undefined && rule.style === undefined,
+      ),
+      ...baseRules,
+      ...projectRules.filter(
+        (rule) =>
+          !(
+            rule.at?.startsWith("layer ") &&
+            rule.children === undefined &&
+            rule.style === undefined
+          ),
+      ),
+    ]);
+    // :is gives the class branch inline-style precedence without changing !important semantics.
+    const ids = "#sml-web-inline".repeat(specificity);
+    const styles = `${css}${web.authoredCss.join("")}${[...web.styles].map(([style, name]) => `:is(${ids},.${name}){${style}}`).join("")}`;
+    settle(webCtx);
+    const serialized = serializeWithPositions(nodes, 0);
+    return {
+      html: serialized.html,
+      positions: serialized.positions,
+      headHints: {
+        title,
+        ...(web.lang === undefined ? {} : { lang: web.lang }),
+        ...(web.dir === undefined ? {} : { dir: web.dir }),
+        styles,
+      },
+    };
+  } catch (error) {
+    if (RenderError.is(error)) throw error;
+    return fail("invalid-ir", "Malformed compiled web document.");
+  }
 };
 
 const plainText = (ctx: Ctx, nodes: readonly CompiledNode[]): string => {
@@ -1328,27 +1609,32 @@ const renderWhatsApp = (
   };
 };
 
-type ChannelRenderers = {
-  readonly [C in Channel]: (
+type TargetRenderers = {
+  readonly [C in Target]: (
     template: CompiledTemplate,
     input: unknown,
     options: RenderSettings,
   ) => RenderedMessage[C];
 };
 
-const CHANNEL_RENDERERS: ChannelRenderers = {
+const TARGET_RENDERERS: TargetRenderers = {
   email: (template, input, options) => renderEmail(template, input, options),
+  web: renderWeb,
   sms: renderSms,
   whatsapp: renderWhatsApp,
 };
 
 /**
- * Render one channel of a compiled template against one validated input. It throws only
- * `RenderError`: a template compiled by another version, a channel the template does not declare,
+ * Render one target of a compiled template against one validated input. It throws only
+ * `RenderError`: a template compiled by another version, a target the template does not support,
  * or input or markup the renderer refuses.
  */
-export const render = <C extends Channel>(
+export const render = <C extends Target>(
   template: CompiledTemplate,
   input: unknown,
-  options: RenderSettings & { readonly channel: C },
-): RenderedMessage[C] => CHANNEL_RENDERERS[options.channel](template, input, options);
+  options: RenderSettings & { readonly target: C },
+): RenderedMessage[C] => {
+  if (!Object.hasOwn(TARGET_RENDERERS, options.target))
+    return fail("unsupported-target", "Unknown render target.");
+  return TARGET_RENDERERS[options.target](template, input, options);
+};

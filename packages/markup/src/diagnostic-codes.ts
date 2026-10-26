@@ -397,6 +397,10 @@ export const DIAGNOSTIC_CODES = codes({
   },
 
   // Client compatibility
+  "email-component-degradation": {
+    summary: "A component loses content or behavior when lowered to email.",
+    fix: "Compare the email and web previews; provide an email-safe equivalent for content readers need.",
+  },
   "caniemail/unknown-coverage": {
     summary: "A feature has no client-support data.",
     fix: "Verify it in the target clients.",

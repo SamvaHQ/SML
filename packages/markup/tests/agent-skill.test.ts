@@ -25,7 +25,7 @@ describe("sml skill", () => {
     expect(compiled.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
     expect(compiled.template).toBeDefined();
     for (const fixture of Object.values(compiled.fixtures)) {
-      const rendered = render(compiled.template!, fixture, { channel: "email" });
+      const rendered = render(compiled.template!, fixture, { target: "email" });
       expect(rendered.subject).toContain("your order shipped");
       expect(rendered.html).toContain("it shipped");
     }
