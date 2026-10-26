@@ -17,6 +17,8 @@ import {
 } from "./compile";
 import {
   discoverEntries,
+  discoverIssues,
+  projectPath,
   readProjectFiles,
   SAMVA_DIR,
   templateDirectories,
@@ -38,6 +40,7 @@ export type { BrandResolution, BrandResolver, BrandWarning, ResolvedBrand } from
 export {
   DEFAULT_TEMPLATE_DIRS,
   discoverEntries,
+  discoverIssues,
   readProjectFiles,
   SAMVA_DIR,
   templateDirectories,
@@ -52,6 +55,8 @@ export interface ProjectOptions {
    * scanned; otherwise `templates/` and `emails/` are, whichever exist.
    */
   readonly dir?: string | undefined;
+  /** TSX layout for issues/*.md; default layout.tsx at the project root. */
+  readonly issueLayout?: string | undefined;
   /** Host-owned brand resolution. Brand imports fail when no resolver is supplied. */
   readonly brandResolver?: BrandResolver | undefined;
   /** Brand import specifier and footer markers passed to the compiler. */
@@ -91,12 +96,17 @@ export const loadProject = async (
 ): Promise<LoadedProject> => {
   const root = projectRoot(options);
   const dirs = await templateDirectories(root, options.dir);
-  const [discovered, files] = await Promise.all([
+  const [discovered, issuePaths, files] = await Promise.all([
     discoverEntries(root, dirs),
+    discoverIssues(root),
     readProjectFiles(root),
   ]);
-  const entries =
-    only === undefined ? discovered : discovered.filter((path) => only.includes(path));
+  const issueLayout = projectPath(root, resolve(root, options.issueLayout ?? "layout.tsx"));
+  const hasIssueLayout = options.issueLayout !== undefined || issuePaths.length > 0;
+  const entries = discovered.filter(
+    (path) =>
+      (!hasIssueLayout || path !== issueLayout) && (only === undefined || only.includes(path)),
+  );
   const themeFile = resolveThemePath(root, options.theme);
   const themeCss = await readProjectThemeCss(themeFile);
   const themePath =
@@ -107,6 +117,8 @@ export const loadProject = async (
   const catalog = await compileProject({
     files,
     entries,
+    issues: only === undefined ? issuePaths : issuePaths.filter((path) => only.includes(path)),
+    issueLayout,
     assetBase: options.assetBase ?? "",
     brandPlugin: options.brandPlugin,
     ...(themeCss === undefined || themePath === undefined
@@ -241,12 +253,16 @@ export const exportProject = async (
   const diagnostics: EmailDiagnostic[] = [
     ...project.diagnostics,
     ...catalog.failures.flatMap((failure) => failure.diagnostics),
-    ...catalog.templates.flatMap((entry) => entry.diagnostics),
+    ...[...catalog.templates, ...catalog.issues].flatMap((entry) => entry.diagnostics),
   ];
   const templates: ProjectExportReceipt["templates"][number][] = [];
   // oxlint-disable no-await-in-loop -- A few small writes per template; sequential keeps the receipt in catalog order.
-  for (const entry of catalog.templates) {
-    const directory = exportPath(out, "templates", entry.id);
+  for (const entry of [...catalog.templates, ...catalog.issues]) {
+    const directory = exportPath(
+      out,
+      entry.entryPath.endsWith(".md") ? "issues" : "templates",
+      entry.id,
+    );
     if (directory === undefined) {
       diagnostics.push(unsafeExportName("Template id", entry.id));
       continue;
@@ -256,7 +272,12 @@ export const exportProject = async (
     const exported: ExportedFixture[] = [];
     for (const fixture of Object.keys(entry.fixtures)) {
       const write = async (name: string, content: string): Promise<string | undefined> => {
-        const path = exportPath(out, "templates", entry.id, name);
+        const path = exportPath(
+          out,
+          entry.entryPath.endsWith(".md") ? "issues" : "templates",
+          entry.id,
+          name,
+        );
         if (path === undefined) {
           diagnostics.push(unsafeExportName("Fixture name", fixture));
           return undefined;

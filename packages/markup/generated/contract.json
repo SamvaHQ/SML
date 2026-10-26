@@ -1723,10 +1723,45 @@
       "fix": "Return a string."
     },
     {
+      "code": "issue-layout",
+      "summary": "A newsletter issue layout does not declare only an email channel.",
+      "fix": "Use an email-only defineTemplate layout with one IssueContent slot."
+    },
+    {
+      "code": "issue-slot",
+      "summary": "An issue layout does not contain exactly one unconditional content slot.",
+      "fix": "Import IssueContent from @samva/markup/email and place one <IssueContent /> outside loops and conditions."
+    },
+    {
       "code": "legacy-definition",
       "summary": "The entry default-exports something other than defineTemplate.",
       "fix": "Import { defineTemplate } from \"@samva/markup\" and default-export defineTemplate({ ... }).",
       "upgrade": "Read the entry and its imports without executing them. For a default-exported defineEmail definition, import defineTemplate from \"@samva/markup\" and replace the definition call.\n\nPreserve the entry path, template id, schema, named fixtures, content, design, bindings, conditions, project partials, assets, theme and brand imports. Replace render(input) returning { subject, preheader?, body } with email: { subject: (input) => ..., preheader: (input) => ..., body: (input) => ... }, retaining its parameter bindings and each returned expression; omit preheader when absent.\n\nInline module constants only when they are literal strings, numbers or booleans and their bindings are unambiguous; never substitute a fixture value for an input binding. Keep each channel function a single static-profile expression, and keep subject and preheader off <Email>.\n\nHelper calls, `Math.*`, general arithmetic, render statements, spreads, computed properties and runtime clock or seed have no direct conversion. Rewrite with static-profile bindings, conditions, .map, .filter, project partials or `fmt.*` where equivalent; arithmetic is allowed only in formatter arguments and conditions. Otherwise compute the value in the sender, declare a payload field in the schema and every fixture, and explain the required sender change. Never guess time, randomness or computed data.\n\nExplicit text has no email-channel field: plain text is derived from the body. If deriving it changes intended content, or another construct cannot be preserved, explain the tradeoff and ask rather than silently discard it. Do not drop fixtures, weaken validation or hide diagnostics.\n\nConvert every affected entry in the project at its existing path, including emails/ entries. Compile each entry, render every declared fixture and inspect the affected output. Resolve errors before requesting one saved version for the whole project, approved by the user; do not publish."
+    },
+    {
+      "code": "markdown-expression",
+      "summary": "An issue contains an expression or spread, which is never evaluated.",
+      "fix": "Replace expressions with literal prose or quoted static component attributes."
+    },
+    {
+      "code": "markdown-frontmatter",
+      "summary": "Issue frontmatter is missing or does not match the typed contract.",
+      "fix": "Provide title, slug and topic strings; use only the documented preheader, seo and gate fields."
+    },
+    {
+      "code": "markdown-html",
+      "summary": "An issue contains raw HTML rather than a supported SML component.",
+      "fix": "Use Markdown syntax or a component from the closed SML component set."
+    },
+    {
+      "code": "markdown-prop",
+      "summary": "A Markdown component has an unknown, missing or invalid literal prop.",
+      "fix": "Use the component's documented props with quoted static values or bare boolean flags."
+    },
+    {
+      "code": "markdown-syntax",
+      "summary": "An issue contains syntax outside SML Markdown.",
+      "fix": "Write Markdown prose and supported SML component tags."
     },
     {
       "code": "missing-attribute",

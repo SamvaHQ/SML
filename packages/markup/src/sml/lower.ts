@@ -21,6 +21,7 @@ import { child, children, keyName, text, unwrap, type Node } from "./ast";
 import { bindingValue, joinPath, type Binding, type Env } from "./bindings";
 import { runBuiltinComponent, type ChannelLowering } from "./components";
 import type { Findings } from "./diagnostics";
+import { ISSUE_SLOT_TAG, type IssueContentInput } from "./issue-content";
 import type { Project, ProjectModule } from "./project";
 import { didYouMean } from "./suggest";
 import { readStatic, type StaticContext } from "./values";
@@ -30,6 +31,7 @@ import { readStatic, type StaticContext } from "./values";
 // anything else is a diagnostic that names the fix.
 
 export interface LowerOptions {
+  readonly issueContent?: IssueContentInput | undefined;
   readonly project: Project;
   readonly findings: Findings;
   readonly staticContext: StaticContext;
@@ -1344,6 +1346,51 @@ export class Lowerer {
     const imported = ctx.module.imports.get(head);
     const local = ctx.module.declarations.get(head);
     const attributes = children(opening, "attributes");
+    if (
+      imported?.kind === "markup" &&
+      imported.specifier === "@samva/markup/email" &&
+      imported.imported === "IssueContent"
+    ) {
+      const issue = this.options.issueContent;
+      if (
+        issue === undefined ||
+        ctx.semantic !== true ||
+        attributes.length > 0 ||
+        children(node, "children").some(
+          (item) => item.type !== "JSXText" || (text(item, "value") ?? "").trim() !== "",
+        )
+      ) {
+        this.error(
+          ctx,
+          node,
+          "issue-slot",
+          "IssueContent needs parsed issue content and takes no props or children; its layout position must be unconditional.",
+          "Place one <IssueContent /> outside loops and conditions in the email layout.",
+        );
+        return [];
+      }
+      const needsBrand = (nodes: readonly CompiledNode[]): boolean =>
+        nodes.some(
+          (item) =>
+            typeof item === "object" &&
+            item !== null &&
+            "type" in item &&
+            ((item.type === "component" &&
+              (item.name === "BrandLogo" || item.name === "BrandFooter")) ||
+              needsBrand(item.children ?? [])),
+        );
+      if (this.options.brand === undefined && needsBrand(issue.nodes)) {
+        this.error(
+          ctx,
+          node,
+          "brand-unavailable",
+          "This issue uses brand components but no brand was resolved.",
+          "Supply the host-resolved brand when compiling the issue.",
+        );
+        return [];
+      }
+      return [{ type: "block", tag: ISSUE_SLOT_TAG, src: this.src(ctx.module, node) }];
+    }
     if (imported?.kind === "markup" || imported?.kind === "brand") {
       return runBuiltinComponent({
         lowerer: this,

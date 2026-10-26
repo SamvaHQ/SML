@@ -49,6 +49,13 @@ Tooling entries are what a host (Vite, the CLI, the editor, the API, the templat
   compiled and rendered as a template that imports the brand. It imports no
   Vite, esbuild, Node builtins or caniemail, so it runs in Node, Bun, Workers and the browser
   (`tests/browser-entries.test.ts` loads it without `process`).
+- `@samva/markup/markdown` — `parseIssue(source, file)` reads typed YAML frontmatter and static
+  Markdown/SML component tags into semantic nodes with exact source ranges; `compileIssue` inserts
+  them into an email-only TSX layout (default `layout.tsx`) at one `IssueContent` directive imported
+  from `@samva/markup/email`, before CSS is applied. The issue slug/title/preheader set its compiled
+  identity/subject/preview; the layout supplies schema and fixtures. `inspectMarkdownNode` in
+  `./edit` resolves its origins; `applySourceReplacements` takes `{ markdown: { file } }` to validate
+  Markdown edits. Expressions, raw HTML, unknown tags and invalid metadata are diagnostics.
 - `@samva/markup/compatibility` — `checkCompatibility`, which checks each fixture against
   the client matrix and locates findings at source; `checkHtmlCompatibility` for HTML a host
   already has; `hasBlockingCompatibility` and the matrix. It is the only entry that loads

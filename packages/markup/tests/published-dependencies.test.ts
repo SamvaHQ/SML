@@ -24,6 +24,7 @@ const PUBLIC_ENTRIES = [
   "./email/jsx-runtime",
   "./fmt",
   "./input-schema",
+  "./markdown",
   "./package.json",
   "./reference.md",
   "./render",

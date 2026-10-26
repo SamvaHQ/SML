@@ -26,7 +26,8 @@ const isProjectText = (name: string): boolean =>
   SCRIPT.test(name) || name.endsWith(".css") || name.endsWith(".json");
 
 /** True for a file a compile can read: scripts, stylesheets, JSON and importable assets. */
-export const isProjectFile = (path: string): boolean => isProjectText(path) || isAssetPath(path);
+export const isProjectFile = (path: string): boolean =>
+  isProjectText(path) || isAssetPath(path) || (path.startsWith("issues/") && path.endsWith(".md"));
 
 const skipped = (name: string): boolean => name.startsWith(".") || name === "node_modules";
 
@@ -75,6 +76,7 @@ export const projectPath = (root: string, path: string): string => toPosix(relat
 export const discoverEntries = async (
   root: string,
   dirs: readonly string[],
+  extension = ".tsx",
 ): Promise<readonly string[]> => {
   const found: string[] = [];
   const walk = async (current: string): Promise<void> => {
@@ -85,7 +87,7 @@ export const discoverEntries = async (
         .map(async (entry) => {
           const full = join(current, entry.name);
           if (entry.isDirectory()) return walk(full);
-          if (entry.isFile() && entry.name.endsWith(".tsx")) found.push(projectPath(root, full));
+          if (entry.isFile() && entry.name.endsWith(extension)) found.push(projectPath(root, full));
         }),
     );
   };
@@ -112,7 +114,10 @@ export const readProjectFiles = async (root: string): Promise<ProjectFiles> => {
           const path = projectPath(root, full);
           if (isAssetPath(path)) {
             files[path] = new Uint8Array(await readFile(full));
-          } else if (isProjectText(entry.name)) {
+          } else if (
+            isProjectText(entry.name) ||
+            (path.startsWith("issues/") && path.endsWith(".md"))
+          ) {
             files[path] = await readFile(full, "utf8");
           }
         }),
@@ -121,3 +126,7 @@ export const readProjectFiles = async (root: string): Promise<ProjectFiles> => {
   await walk(root);
   return files;
 };
+
+/** Issue documents are discovered independently of registered TSX template entries. */
+export const discoverIssues = async (root: string): Promise<readonly string[]> =>
+  discoverEntries(root, [join(root, "issues")], ".md");

@@ -240,3 +240,44 @@ those channels, content-addressed files under `assets/`, and `catalog.json` with
 and findings. The default `../../assets` base resolves from each exported page. For delivery,
 supply the actual HTTPS `assetBase` and serve those bytes there; relative URLs are for local
 export. External HTTPS images stay external references.
+
+## Markdown issues
+
+Place newsletter issues in `issues/*.md` (nested directories are supported) beside an email-only
+`layout.tsx`. Issues are discovered by path independently of registered TSX template entries.
+A layout uses one static content slot:
+
+```tsx
+import { defineTemplate } from "@samva/markup";
+import { jsonSchema } from "@samva/markup/input-schema";
+import { Email, Section, IssueContent } from "@samva/markup/email";
+
+export default defineTemplate({
+  id: "newsletter-layout",
+  schema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
+  fixtures: { default: {} },
+  email: {
+    subject: () => "Layout",
+    body: () => (
+      <Email>
+        <Section>
+          <IssueContent />
+        </Section>
+      </Email>
+    ),
+  },
+});
+```
+
+Issue frontmatter requires `title`, `slug`, and `topic`; optional fields are `preheader`, `seo`, and
+`gate`. See [markup's Markdown contract](../markup/README.md#markdown-newsletter-issues) for the
+closed grammar. The issue title and preheader set its email subject and inbox preview. Its slug
+must be unique among issues in the project. A broken issue is retained in `catalog.failures` while
+other issues continue compiling; a missing layout is an error.
+
+Programmatic project, build, render, and export options accept `issueLayout` to select a different
+root-relative layout. `loadProject` returns issues under `catalog.issues`, with their frontmatter
+and compiled documents, separately from `catalog.templates`. `renderTemplate` accepts an issue's
+`.md` path and a layout fixture; builds label the source `kind: "md"`, and exports write issue
+fixtures under `issues/<slug>/`. Layout CSS and literal classes used only in Markdown are compiled
+with the combined document.

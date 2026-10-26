@@ -2,6 +2,7 @@ import { parse } from "@babel/parser";
 
 import { buildLineMap } from "./diagnostic-model";
 import { isObject } from "./internal/guards";
+import { parseIssue } from "./markdown/index";
 import { checkTemplate, introducedErrors } from "./sml/profile";
 import type { JsxSourceLocation } from "./source-locations";
 
@@ -22,7 +23,13 @@ export interface SourceProperty {
   readonly literalType: "string" | "number" | "boolean";
   readonly start: number;
   readonly end: number;
-  readonly syntax: "attribute" | "child" | "value";
+  readonly syntax:
+    | "attribute"
+    | "child"
+    | "value"
+    | "markdown"
+    | "markdown-attribute"
+    | "markdown-boolean";
 }
 export interface SourceElement {
   readonly start: number;
@@ -251,7 +258,91 @@ export const inspectSourceElement = (
   return found;
 };
 
+/**
+ * Resolve a Markdown render origin to authored prose or component attributes. A tag distinguishes
+ * nodes sharing an origin; without one, prefer an editable authored element over its wrapper.
+ */
+export const inspectMarkdownNode = (
+  source: string,
+  file: string,
+  origin: JsxSourceLocation,
+  options: { readonly tag?: string | undefined } = {},
+): SourceElement | null => {
+  if (file !== origin.fileName) return null;
+  const issue = parseIssue(source, file);
+  if (issue.diagnostics.some((item) => item.severity === "error")) return null;
+  const candidates = issue.sourceNodes.filter(
+    (item) =>
+      item.src[0] === origin.lineNumber &&
+      item.src[1] === origin.columnNumber &&
+      item.kind !== "text",
+  );
+  const found =
+    options.tag === undefined
+      ? (candidates.find((item) => item.properties.length > 0) ?? candidates[0])
+      : candidates.find((item) => item.tag === options.tag);
+  if (found === undefined) return null;
+  return {
+    start: found.start,
+    end: found.end,
+    contentStart: found.contentStart,
+    contentEnd: found.contentEnd,
+    tag: found.tag,
+    attributeInsertion: found.contentStart ?? found.end,
+    hasSpread: false,
+    structural: false,
+    previous: null,
+    next: null,
+    properties: found.properties.map((field) => ({
+      ...field,
+      value: String(field.value),
+      kind: "literal",
+      syntax:
+        field.syntax === "quoted"
+          ? "markdown-attribute"
+          : field.syntax === "boolean"
+            ? "markdown-boolean"
+            : "markdown",
+    })),
+  };
+};
+
 const PLAIN_JSX_TEXT = /^[^\s{}<>&](?:[^{}<>&\r\n\u2028\u2029]*[^\s{}<>&])?$/;
+
+/** Keep prose readable while protecting inline syntax and the surrounding block's delimiters. */
+const escapeMarkdownProse = (source: string, field: SourceProperty, value: string): string => {
+  let escaped = value
+    .replace(/[\\`*_[\]<{]/g, "\\$&")
+    .replace(/&(?=(?:[a-z][a-z\d]{1,31}|#\d{1,7}|#x[\da-f]{1,6});)/gi, "\\&")
+    // Literal line breaks and edge whitespace must not create blocks, indentation or hard breaks.
+    .replace(/[\r\n\t]|^ +| +$/g, (whitespace) =>
+      [...whitespace].map((character) => `&#${character.charCodeAt(0)};`).join(""),
+    );
+  // The parsed owner retains list-continuation indentation that a physical line cannot explain.
+  const block = parseIssue(source, "source.md").sourceNodes.find(
+    (authored) =>
+      authored.kind === "block" &&
+      authored.properties.some(
+        (candidate) =>
+          candidate.name === "children" &&
+          candidate.start === field.start &&
+          candidate.end === field.end,
+      ),
+  );
+  const prefix = block === undefined ? undefined : source.slice(block.start, field.start);
+  if (prefix !== undefined && /^ {0,3}$/.test(prefix)) {
+    escaped = escaped
+      .replace(/^(?:#{1,6}(?=[ \t]|$)|>|[-+](?=[ \t]|$)|(?:-+|=+)(?=[ \t]*$)|~{3,})/, "\\$&")
+      .replace(/^(\d{1,9})([.)])(?=[ \t]|$)/, "$1\\$2");
+  }
+  const lineEnd = source.slice(field.end).search(/[\r\n]/);
+  const suffix = source.slice(field.end, lineEnd < 0 ? source.length : field.end + lineEnd);
+  if (prefix !== undefined && /^ {0,3}#{1,6}[ \t]+$/.test(prefix) && /^[ \t]*$/.test(suffix)) {
+    // A trailing hash run otherwise becomes an ATX heading's closing marker and loses text.
+    escaped = escaped.replace(/(^|[ \t])(#+)$/, "$1\\$2");
+  }
+  return escaped;
+};
 
 /** Literal controls cannot overwrite a binding or computed expression. */
 export const literalReplacement = (
@@ -263,6 +354,40 @@ export const literalReplacement = (
   if (field.literalType === "number" && (value.trim() === "" || !Number.isFinite(Number(value))))
     return null;
   if (field.literalType === "boolean" && value !== "true" && value !== "false") return null;
+  if (
+    field.syntax === "markdown" ||
+    field.syntax === "markdown-attribute" ||
+    field.syntax === "markdown-boolean"
+  ) {
+    const encoded = value
+      .replaceAll("&", "&amp;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("<", "&lt;")
+      .replaceAll("{", "&#123;")
+      .replaceAll("}", "&#125;")
+      .replace(/[\r\n\t]/g, (character) => `&#${character.charCodeAt(0)};`);
+    const markdown =
+      field.name === "children"
+        ? escapeMarkdownProse(source, field, value)
+        : value
+            .replace(/[!-/:-@[-`{-~]/g, "\\$&")
+            .replace(
+              field.name === "href" || field.name === "src" ? /\s/g : /[\r\n\t]|^ +| +$/g,
+              (whitespace) =>
+                [...whitespace].map((character) => `&#${character.charCodeAt(0)};`).join(""),
+            );
+    return {
+      start: field.start,
+      end: field.end,
+      before: source.slice(field.start, field.end),
+      after:
+        field.syntax === "markdown"
+          ? markdown
+          : field.syntax === "markdown-boolean"
+            ? `${field.name}="${encoded}"`
+            : `"${encoded}"`,
+    };
+  }
   const literal =
     field.literalType === "string"
       ? JSON.stringify(value)
@@ -311,6 +436,8 @@ export interface ProfileGuard {
   readonly files?: Readonly<Record<string, string>> | undefined;
 }
 export interface ApplyOptions {
+  /** Validate edits as an issue, including its closed grammar and frontmatter. */
+  readonly markdown?: { readonly file: string } | undefined;
   readonly profile?: ProfileGuard | undefined;
 }
 
@@ -350,6 +477,14 @@ export const applySourceReplacements = (
     }
     result = result.slice(0, edit.start) + edit.after + result.slice(edit.end);
     boundary = edit.start;
+  }
+  if (options.markdown !== undefined) {
+    const finding = parseIssue(result, options.markdown.file).diagnostics.find(
+      (item) => item.severity === "error",
+    );
+    return finding === undefined
+      ? { ok: true, source: result }
+      : { ok: false, reason: `This change is not valid SML Markdown: ${finding.message}` };
   }
   if (parsed(result) === null)
     return { ok: false, reason: "This change is not valid TSX. Review it in Source." };

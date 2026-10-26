@@ -14,6 +14,7 @@ export default defineConfig({
     whatsapp: "src/whatsapp.ts",
     "input-schema": "src/input-schema.ts",
     compiler: "src/compiler.ts",
+    markdown: "src/markdown.ts",
     compatibility: "src/compatibility.ts",
     diagnostics: "src/diagnostics.ts",
     render: "src/render.ts",

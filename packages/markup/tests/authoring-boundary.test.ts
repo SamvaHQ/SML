@@ -37,7 +37,15 @@ const TREES = [
     name: markup.name,
     directory: "packages/markup",
     source: "src",
-    dependencies: markup.dependencies ?? {},
+    dependencies: {
+      ...markup.dependencies,
+      // Type-only source imports resolve through declared DefinitelyTyped packages.
+      ...Object.fromEntries(
+        Object.entries(markup.devDependencies ?? {})
+          .filter(([name]) => name.startsWith("@types/"))
+          .map(([name, version]) => [name.slice("@types/".length).replace("__", "/"), version]),
+      ),
+    },
   },
   {
     name: vite.name,

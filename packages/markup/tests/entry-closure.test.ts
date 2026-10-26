@@ -14,7 +14,21 @@ import { describe, expect, it } from "@effect/vitest";
 // reads Node's `process` when it loads, so caniemail lives behind `./compatibility` alone
 // (`browser-entries.test.ts` evaluates `./compiler` without `process`).
 
-const COMPILER_LIBRARIES = ["@babel/parser", "caniemail", "css-tree", "tailwindcss"];
+const MARKDOWN_LIBRARIES = [
+  "mdast-util-from-markdown",
+  "mdast-util-mdx-expression",
+  "mdast-util-mdx-jsx",
+  "micromark-extension-mdx-expression",
+  "micromark-extension-mdx-jsx",
+  "yaml",
+];
+const COMPILER_LIBRARIES = [
+  "@babel/parser",
+  "caniemail",
+  "css-tree",
+  "tailwindcss",
+  ...MARKDOWN_LIBRARIES,
+];
 const SOURCE = resolve(import.meta.dirname, "../src");
 // Type-only statements are erased at compile time, so they are not edges of the runtime closure.
 const SPECIFIER = /(?:import|export)\s(?!type\b)[^;]*?from\s+"([^"]+)"|import\(\s*"([^"]+)"\s*\)/g;
@@ -45,7 +59,11 @@ const closure = (entry: string) => {
 describe("entry import closure", () => {
   it.each([
     { entry: "render.ts", allowed: [] },
-    { entry: "edit.ts", allowed: ["@babel/parser", "css-tree"] },
+    { entry: "edit.ts", allowed: ["@babel/parser", "css-tree", ...MARKDOWN_LIBRARIES] },
+    {
+      entry: "markdown.ts",
+      allowed: ["@babel/parser", "css-tree", "tailwindcss", ...MARKDOWN_LIBRARIES],
+    },
     { entry: "brand.ts", allowed: ["css-tree"] },
     { entry: "compiler.ts", allowed: ["@babel/parser", "css-tree", "tailwindcss"] },
   ])("keeps $entry free of the compiler's libraries", ({ entry, allowed }) => {

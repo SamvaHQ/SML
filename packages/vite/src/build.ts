@@ -54,7 +54,7 @@ export interface TemplateBuild {
 export interface BuildFile {
   /** Project-relative path of the entry. */
   readonly id: string;
-  readonly kind: "tsx";
+  readonly kind: "tsx" | "md";
   readonly ok: boolean;
   readonly template?: TemplateBuild | undefined;
   readonly diagnostics: readonly EmailDiagnostic[];
@@ -162,14 +162,22 @@ const buildEntry = (entry: CompiledEntry, assetBase: string | undefined): BuildF
     diagnostics,
     compatibility,
   };
-  return { id: entry.entryPath, kind: "tsx", ok, template, diagnostics };
+  return {
+    id: entry.entryPath,
+    kind: entry.entryPath.endsWith(".md") ? "md" : "tsx",
+    ok,
+    template,
+    diagnostics,
+  };
 };
 
 const summarize = (project: LoadedProject, assetBase: string | undefined): BuildTemplatesResult => {
-  const built = project.catalog.templates.map((entry) => buildEntry(entry, assetBase));
+  const built = [...project.catalog.templates, ...project.catalog.issues].map((entry) =>
+    buildEntry(entry, assetBase),
+  );
   const failed = project.catalog.failures.map((entry): BuildFile => ({
     id: entry.entryPath,
-    kind: "tsx",
+    kind: entry.entryPath.endsWith(".md") ? "md" : "tsx",
     ok: false,
     diagnostics: entry.diagnostics,
   }));

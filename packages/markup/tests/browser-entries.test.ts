@@ -72,6 +72,25 @@ describe("browser entries without process", () => {
     expect(html).toContain("Acme Inc.");
   });
 
+  it("parses Markdown and resolves editable spans without process", async () => {
+    const result = await withoutProcess(async () => {
+      const [{ parseIssue }, { inspectMarkdownNode }] = await Promise.all([
+        import("../src/markdown"),
+        import("../src/edit"),
+      ]);
+      const source = "---\ntitle: Browser\nslug: browser\ntopic: product\n---\n# Browser prose";
+      const issue = parseIssue(source, "issues/browser.md");
+      const target = inspectMarkdownNode(source, "issues/browser.md", {
+        fileName: "issues/browser.md",
+        lineNumber: 6,
+        columnNumber: 1,
+      });
+      return { issue, target };
+    });
+    expect(result.issue.diagnostics).toEqual([]);
+    expect(result.target?.properties[0]?.value).toBe("Browser prose");
+  });
+
   it("fails for ./compatibility, so the case above can fail", async () => {
     await expect(withoutProcess(() => import("../src/compatibility"))).rejects.toThrow(/platform/);
   });

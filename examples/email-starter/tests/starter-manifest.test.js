@@ -99,7 +99,7 @@ test("@samva/markup keeps a template project's dependency graph to rendering and
   // is what a template author installs, and Samva's hosted editor ships the resolved lockfile
   // verbatim into every hosted project. The package carries what
   // rendering needs and what `samva templates check` needs to compile a template (Babel, the
-  // Tailwind compiler, css-tree, the client matrix) and nothing more. The lockfile carries the
+  // Tailwind compiler, css-tree, the client matrix, and static Markdown/YAML parsing) and nothing more. The lockfile carries the
   // dependency block of the release on npm; the workspace package is the source
   // scripts/refresh-starter.ts resolves it against after the next authoring publish.
   const markup = await readFile(resolve(root, "../../packages/markup/package.json"), "utf8").then(
@@ -115,7 +115,13 @@ test("@samva/markup keeps a template project's dependency graph to rendering and
       "better-result",
       "caniemail",
       "css-tree",
+      "mdast-util-from-markdown",
+      "mdast-util-mdx-expression",
+      "mdast-util-mdx-jsx",
+      "micromark-extension-mdx-expression",
+      "micromark-extension-mdx-jsx",
       "tailwindcss",
+      "yaml",
     ],
     "@samva/markup installs its dependencies into every template project; keep them to rendering and checking",
   );
