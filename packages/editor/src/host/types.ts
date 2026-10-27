@@ -421,10 +421,11 @@ export interface AsyncFixtureApi {
 
 export interface AsyncLifecycleApi {
   inspect(): Promise<ProjectLifecycleState>;
-  publish(input: {
+  /** Omit when the document has saved versions but no publication step. */
+  readonly publish?: (input: {
     readonly baseRev: RevisionToken;
     readonly commit: string;
-  }): Promise<PublishedProjectCommit>;
+  }) => Promise<PublishedProjectCommit>;
   restore(input: { readonly commit: string; readonly baseRev: RevisionToken }): Promise<{
     readonly rev: RevisionToken;
     readonly authoredSource: string;

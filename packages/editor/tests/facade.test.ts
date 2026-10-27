@@ -329,7 +329,7 @@ describe("toAsyncHost fixtures", () => {
 });
 
 describe("toAsyncHost lifecycle", () => {
-  it("mechanically maps the Git project lifecycle", async () => {
+  it.each([true, false])("maps the lifecycle with publish available: %s", async (publishing) => {
     const publishedAt = new Date("2026-07-10T00:00:00.000Z");
     const restoredSource = "export default function Initial() {}";
     const host: EditableEditorHost = {
@@ -346,12 +346,16 @@ describe("toAsyncHost lifecycle", () => {
             conflicts: [],
             commits: [],
           }),
-          publish: () =>
-            Effect.succeed({
-              publicationId: "publication_2",
-              commit: "a".repeat(40),
-              publishedAt,
-            }),
+          ...(publishing
+            ? {
+                publish: () =>
+                  Effect.succeed({
+                    publicationId: "publication_2",
+                    commit: "a".repeat(40),
+                    publishedAt,
+                  }),
+              }
+            : {}),
           // Restoring stages a commit: it answers with the revision and the
           // authored entry the editor must now show, never with emitted output.
           restore: () => Effect.succeed({ rev: "rev_3", authoredSource: restoredSource }),
@@ -394,9 +398,13 @@ describe("toAsyncHost lifecycle", () => {
     expect(lifecycle?.status).toBe("ready");
     if (lifecycle?.status !== "ready") return;
     expect(await lifecycle.api.inspect()).toMatchObject({ rev: "rev_1" });
-    expect(await lifecycle.api.publish({ baseRev: "rev_1", commit: "a".repeat(40) })).toMatchObject(
-      { publicationId: "publication_2" },
-    );
+    if (publishing) {
+      expect(
+        await lifecycle.api.publish!({ baseRev: "rev_1", commit: "a".repeat(40) }),
+      ).toMatchObject({ publicationId: "publication_2" });
+    } else {
+      expect(Object.hasOwn(lifecycle.api, "publish")).toBe(false);
+    }
     expect(await lifecycle.api.restore({ commit: "9".repeat(40), baseRev: "rev_2" })).toStrictEqual(
       {
         rev: "rev_3",

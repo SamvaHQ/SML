@@ -355,7 +355,7 @@ function OpenLifecycleSheet({
           <Dialog.Viewport className="fixed inset-0 z-[111] grid place-items-center p-4">
             <Dialog.Popup className="border-border bg-popover w-full max-w-lg rounded-xl border p-5 shadow-[var(--shadow-floating)]">
               <Dialog.Title className="text-base font-semibold">
-                Publishing is unavailable
+                Saved versions are unavailable
               </Dialog.Title>
               <Dialog.Description
                 className="text-muted-foreground mt-2 text-sm"
@@ -413,13 +413,14 @@ function OpenLifecycleSheet({
   const publishable = clean && loaded?.baseCommit === loaded.remoteHead;
   const refresh = async () => setLoaded(await lifecycleCapability.api.inspect());
 
+  const publishApi = lifecycleCapability.api.publish;
+  const canPublish = publishApi !== undefined;
   const publish = () => {
-    if (loaded === null || !publishable || busy !== null) return;
+    if (publishApi === undefined || loaded === null || !publishable || busy !== null) return;
     if (!beginLifecycle()) return;
     setBusy("publish");
     setError(null);
-    void lifecycleCapability.api
-      .publish({ baseRev: loaded.rev, commit: loaded.baseCommit })
+    void publishApi({ baseRev: loaded.rev, commit: loaded.baseCommit })
       .then(async () => {
         await refresh();
         setNotice("Published the current saved version.");
@@ -557,7 +558,7 @@ function OpenLifecycleSheet({
             <header className="border-border flex items-center justify-between border-b px-5 py-4">
               <div>
                 <Drawer.Title className="text-base font-semibold">
-                  Publish and saved versions
+                  {canPublish ? "Publish and saved versions" : "Saved versions"}
                 </Drawer.Title>
                 <Drawer.Description className="text-muted-foreground mt-0.5 text-xs">
                   Save keeps a named version. Restore brings an older version into your draft.
@@ -598,18 +599,20 @@ function OpenLifecycleSheet({
                           {current?.message ?? "Current saved version"}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={publish}
-                        disabled={!publishable || busy !== null}
-                        data-testid="lifecycle-sheet.confirm-publish"
-                        className={cn(
-                          "bg-primary text-primary-foreground rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50",
-                          focusRing,
-                        )}
-                      >
-                        {busy === "publish" ? "Publishing…" : CONFIRM_PUBLISH_LABEL}
-                      </button>
+                      {canPublish && (
+                        <button
+                          type="button"
+                          onClick={publish}
+                          disabled={!publishable || busy !== null}
+                          data-testid="lifecycle-sheet.confirm-publish"
+                          className={cn(
+                            "bg-primary text-primary-foreground rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50",
+                            focusRing,
+                          )}
+                        >
+                          {busy === "publish" ? "Publishing…" : CONFIRM_PUBLISH_LABEL}
+                        </button>
+                      )}
                     </div>
                     {!clean && (
                       <p
@@ -617,11 +620,13 @@ function OpenLifecycleSheet({
                         data-testid="lifecycle-sheet.cleanliness-warning"
                       >
                         {loaded.conflicts.length > 0
-                          ? "Resolve workspace conflicts before Save or Publish."
-                          : "The draft has unsaved changes. Save a version before publishing or restoring."}
+                          ? "Resolve workspace conflicts before saving a version."
+                          : canPublish
+                            ? "The draft has unsaved changes. Save a version before publishing or restoring."
+                            : "The draft has unsaved changes. Save a version before restoring."}
                       </p>
                     )}
-                    {clean && loaded.baseCommit !== loaded.remoteHead && (
+                    {canPublish && clean && loaded.baseCommit !== loaded.remoteHead && (
                       <p className="text-muted-foreground text-xs">
                         The saved version changed elsewhere. Refresh before publishing.
                       </p>

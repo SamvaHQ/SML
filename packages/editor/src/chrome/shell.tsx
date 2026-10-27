@@ -60,7 +60,7 @@ export interface EditorShellProps {
   readonly exportable?: boolean | undefined;
   /** Hide metadata rename when the host exposes source editing without metadata writes. */
   readonly renameEnabled?: boolean | undefined;
-  /** Host continuation for a locked Publish capability after its explanation is shown. */
+  /** Host continuation for a locked lifecycle capability after its explanation is shown. */
   readonly onLockedLifecycle?: (() => void) | undefined;
   /**
    * The host is producing a change to the email the author will see, such as an assistant turn
