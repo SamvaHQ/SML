@@ -219,13 +219,14 @@ describe("LifecycleSheet", () => {
 
   it("publishes the exact clean saved commit", async () => {
     const inspect = vi.fn(() => Promise.resolve(state()));
-    const publish = vi.fn(() =>
-      Promise.resolve({
+    const publish = vi.fn(async function (this: AsyncLifecycleApi) {
+      const project = await this.inspect();
+      return {
         publicationId: "tpub_1",
-        commit: HEAD,
+        commit: project.baseCommit,
         publishedAt: new Date("2026-09-01T13:00:00.000Z"),
-      }),
-    );
+      };
+    });
     const view = mount({
       inspect,
       publish,

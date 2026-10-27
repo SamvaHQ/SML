@@ -309,7 +309,7 @@ export function toAsyncHost(host: EditorHost): AsyncEditorHost {
             ? {}
             : {
                 publish: (input: { readonly baseRev: RevisionToken; readonly commit: string }) =>
-                  Effect.runPromise(publish(input)),
+                  Effect.runPromise(publish.call(api, input)),
               }),
           restore: (input: { readonly commit: string; readonly baseRev: RevisionToken }) =>
             Effect.runPromise(api.restore(input)),

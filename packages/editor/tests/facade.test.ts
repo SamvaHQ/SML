@@ -348,12 +348,15 @@ describe("toAsyncHost lifecycle", () => {
           }),
           ...(publishing
             ? {
-                publish: () =>
-                  Effect.succeed({
-                    publicationId: "publication_2",
-                    commit: "a".repeat(40),
-                    publishedAt,
-                  }),
+                publish() {
+                  return this.inspect.pipe(
+                    Effect.map((project) => ({
+                      publicationId: "publication_2",
+                      commit: project.baseCommit,
+                      publishedAt,
+                    })),
+                  );
+                },
               }
             : {}),
           // Restoring stages a commit: it answers with the revision and the

@@ -420,7 +420,8 @@ function OpenLifecycleSheet({
     if (!beginLifecycle()) return;
     setBusy("publish");
     setError(null);
-    void publishApi({ baseRev: loaded.rev, commit: loaded.baseCommit })
+    void publishApi
+      .call(lifecycleCapability.api, { baseRev: loaded.rev, commit: loaded.baseCommit })
       .then(async () => {
         await refresh();
         setNotice("Published the current saved version.");
