@@ -1,21 +1,26 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## Calmer checks, a clearer brand menu, and toolbar buttons hosts can match\n\nThe Checks panel no longer shows \"Needs attention\" above \"No known risks found.\" When nothing is actionable it shows a settled \"No issues found\", and the note about email clients now counts \"tips\", the same word as the status bar.\n\nThe brand menu lists your brands by name with their swatches, under \"Apply a brand\" when the template has none. The organization default carries a muted \"Default\" tag, left off when the brand is already named Default.\n\nThe Publish sheet shows placeholder rows shaped like saved versions while they load, so the list does not jump when it arrives.\n\n`@samva/editor/shell` exports `EditorToolbarButton`. Contribute it to `toolbar.actions` and it matches the top bar's buttons in size, radius and type, folds to its icon with a tooltip when the top bar folds its own labels, and works as a Base UI `render` target such as a popover trigger.\n"
-    filename: editor-chrome-polish.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## `useEditorPortalContainer` returns the portal element\n\n`useEditorPortalContainer()` returns the mounted portal element (`HTMLDivElement | null`) instead of a ref. `null` means the shell is up and the element is not yet; `undefined` still means there is no shell, and popups use `document.body`. Pass the element to a Base UI portal `container`. Reading `.current` on the return value no longer typechecks.\n\nBase UI 1.9 reads a ref's `.current` from `useLayoutEffect` before React attaches a later sibling's ref, so a ref that is still empty sends every popup to `document.body` and does not try again. The shell still paints the portal root after the frame.\n"
+    filename: editor-portal-element.md
     v: 0.0.0
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## Open Markdown issues in Source\n\nEmail documents accept a `markdown` origin with the complete issue source, including frontmatter,\nand `layout: { file }` identifying the host-owned TSX layout. The Source tab edits the issue through\nthe existing revision-fenced writer. Prose edits from either preview update the same source and\nparticipate in undo/redo without requiring a project lifecycle capability. Layout spans are\nread-only, and TSX-only structural, expression, fixture-data and class-name edits are hidden.\n\nThe host contract version is now `2026-10-26.1`: hosts must handle the email origin union and\nwrite `origin.file` for source saves. SMS and WhatsApp remain TSX-only. The TSX editing behavior\nand compiled email output are unchanged.\n"
-    filename: editor-markdown-source.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## Use saved versions without publishing\n\nHosts can omit `lifecycle.api.publish` from both the Promise and Effect APIs. The editor then shows Saved versions instead of Publish and keeps history, restore, and project-file editing available. Issue editors can schedule or send without a publish stub or a failing Publish button.\n\nUse `EditorToolbarButton` with `variant=\"default\"` for a primary host action such as Schedule; it shares the editor's primary button styling. The default remains `ghost`.\n"
+    filename: editor-optional-publish.md
+    v: 0.0.0
+  - content: "---\npackages:\n  npm:@samva/markup:\n    type: minor\n---\n\n## Let a publication shell supply the web background\n\nPass `rootBackground: \"transparent\"` to `render(template, input, { target: \"web\", ... })` to omit the web root's default theme background. Existing web renders retain it by default. Authored background styles and email output are unchanged.\n"
+    filename: web-root-background.md
     v: 0.0.0
 core:packages:
-  - id: npm:@samva/vite
-    updated: true
-  - id: npm:@samva/markup
-    updated: true
   - changelogIds:
-      - editor-chrome-polish.md
-      - editor-markdown-source.md
+      - editor-portal-element.md
+      - editor-optional-publish.md
     id: npm:@samva/editor
     updated: true
-npm:packages:
+  - changelogIds:
+      - web-root-background.md
+    id: npm:@samva/markup
+    updated: true
   - id: npm:@samva/vite
-  - id: npm:@samva/markup
+    updated: true
+npm:packages:
   - id: npm:@samva/editor
+  - id: npm:@samva/markup
+  - id: npm:@samva/vite
