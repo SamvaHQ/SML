@@ -70,7 +70,7 @@ export const compileIssue = async (options: CompileIssueOptions): Promise<IssueC
   const compiled = await compileTemplate({
     ...options,
     entry: layout,
-    issueContent: { file: options.entry, nodes: issue.nodes },
+    issueContent: { file: options.entry, nodes: issue.nodes, frontmatter: issue.frontmatter },
   });
   const diagnostics: readonly TemplateDiagnostic[] = [
     ...issue.diagnostics,

@@ -23,8 +23,9 @@ export const DIAGNOSTIC_CODES = codes({
     fix: "Use an email-only defineTemplate layout with one IssueContent slot.",
   },
   "issue-slot": {
-    summary: "An issue layout does not contain exactly one unconditional content slot.",
-    fix: "Import IssueContent from @samva/markup/email and place one <IssueContent /> outside loops and conditions.",
+    summary:
+      "An issue directive is invalid, or a layout does not contain exactly one unconditional content slot.",
+    fix: "Import IssueContent, IssueTitle or IssueDate from @samva/markup/email in an issue layout; use documented literal props, no children, and place directives outside loops and conditions with exactly one IssueContent.",
   },
   "markdown-syntax": {
     summary: "An issue contains syntax outside SML Markdown.",
@@ -40,7 +41,7 @@ export const DIAGNOSTIC_CODES = codes({
   },
   "markdown-frontmatter": {
     summary: "Issue frontmatter is missing or does not match the typed contract.",
-    fix: "Provide title, slug and topic strings; use only the documented preheader, seo and gate fields.",
+    fix: "Provide title, slug and topic strings; use only the documented date (valid YYYY-MM-DD), preheader, seo and gate fields.",
   },
   "markdown-prop": {
     summary: "A Markdown component has an unknown, missing or invalid literal prop.",

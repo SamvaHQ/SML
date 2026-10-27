@@ -65,8 +65,24 @@ export const readFrontmatter = (
     return value.value;
   };
   const root = document.contents;
-  keys(root, ["title", "slug", "topic", "preheader", "seo", "gate"]);
+  keys(root, ["title", "date", "slug", "topic", "preheader", "seo", "gate"]);
   const title = string(root, "title", true);
+  const dateNode = root.get("date", true);
+  let date: string | undefined;
+  if (dateNode !== undefined) {
+    const value = isScalar(dateNode) ? dateNode.value : undefined;
+    if (
+      !isScalar(dateNode) ||
+      typeof value !== "string" ||
+      dateNode.tag !== undefined ||
+      dateNode.anchor !== undefined ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+      !Number.isFinite(Date.parse(`${value}T00:00:00Z`)) ||
+      new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value
+    )
+      fail("date must be a valid ISO calendar date (YYYY-MM-DD).", dateNode.range?.[0]);
+    else date = value;
+  }
   const slug = string(root, "slug", true);
   const topic = string(root, "topic", true);
   const preheader = string(root, "preheader");
@@ -123,6 +139,7 @@ export const readFrontmatter = (
         ? undefined
         : {
             title,
+            ...(date === undefined ? {} : { date }),
             slug,
             topic,
             ...(preheader === undefined ? {} : { preheader }),

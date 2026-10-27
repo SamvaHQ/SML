@@ -21,7 +21,7 @@ import { child, children, keyName, text, unwrap, type Node } from "./ast";
 import { bindingValue, joinPath, type Binding, type Env } from "./bindings";
 import { runBuiltinComponent, type ChannelLowering } from "./components";
 import type { Findings } from "./diagnostics";
-import { ISSUE_SLOT_TAG, type IssueContentInput } from "./issue-content";
+import { ISSUE_SLOT_TAG, issueMetadataSlot, type IssueContentInput } from "./issue-content";
 import type { Project, ProjectModule } from "./project";
 import { didYouMean } from "./suggest";
 import { readStatic, type StaticContext } from "./values";
@@ -1349,13 +1349,15 @@ export class Lowerer {
     if (
       imported?.kind === "markup" &&
       imported.specifier === "@samva/markup/email" &&
-      imported.imported === "IssueContent"
+      (imported.imported === "IssueContent" ||
+        imported.imported === "IssueTitle" ||
+        imported.imported === "IssueDate")
     ) {
       const issue = this.options.issueContent;
       if (
         issue === undefined ||
         ctx.semantic !== true ||
-        attributes.length > 0 ||
+        (imported.imported === "IssueContent" && attributes.length > 0) ||
         children(node, "children").some(
           (item) => item.type !== "JSXText" || (text(item, "value") ?? "").trim() !== "",
         )
@@ -1364,10 +1366,23 @@ export class Lowerer {
           ctx,
           node,
           "issue-slot",
-          "IssueContent needs parsed issue content and takes no props or children; its layout position must be unconditional.",
-          "Place one <IssueContent /> outside loops and conditions in the email layout.",
+          `${imported.imported} needs parsed issue content and takes no children; its layout position must be unconditional.`,
+          "Place issue directives outside loops and conditions in an issue's email layout.",
         );
         return [];
+      }
+      if (imported.imported !== "IssueContent") {
+        if (issue.frontmatter === undefined) {
+          this.error(
+            ctx,
+            node,
+            "issue-slot",
+            `${imported.imported} requires parsed issue frontmatter.`,
+            "Compile the issue with compileIssue.",
+          );
+          return [];
+        }
+        return issueMetadataSlot(this, ctx, node, attributes, imported.imported, issue.frontmatter);
       }
       const needsBrand = (nodes: readonly CompiledNode[]): boolean =>
         nodes.some(

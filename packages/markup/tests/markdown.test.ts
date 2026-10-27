@@ -23,6 +23,59 @@ const find = (nodes: readonly CompiledNode[], tag: string): CompiledNode | undef
 };
 
 describe("static SML Markdown", () => {
+  it.each([
+    "2026-02-29",
+    "2024-02-30",
+    "2026-04-31",
+    "2026-00-10",
+    "2026-13-10",
+    "2026-01-00",
+    "2026-01-32",
+    "2026-1-01",
+    "2026-10-28T00:00:00Z",
+    "not-a-date",
+    "null",
+    "123",
+    "true",
+    "[]",
+    "{}",
+    "!!str 2026-10-28",
+    "&day 2026-10-28",
+    '""',
+  ])("reports a positioned diagnostic for invalid frontmatter date %s", (value) => {
+    const parsed = parseIssue(
+      metadata.replace("topic: product", `topic: product\ndate: ${value}`) + "Hello",
+      "issues/weekly.md",
+    );
+    expect(parsed.frontmatter).toBeUndefined();
+    expect(parsed.nodes).toEqual([]);
+    expect(parsed.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "markdown-frontmatter",
+        severity: "error",
+        message: "date must be a valid ISO calendar date (YYYY-MM-DD).",
+        origins: [
+          expect.objectContaining({
+            fileName: "issues/weekly.md",
+            lineNumber: 5,
+            columnNumber: value.startsWith("!!str ") ? 13 : value.startsWith("&day ") ? 12 : 7,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it.each(["2024-02-29", "2026-10-28", "2000-02-29", "'0099-01-01'"])(
+    "accepts valid frontmatter date %s",
+    (value) => {
+      const parsed = parseIssue(
+        metadata.replace("topic: product", `topic: product\ndate: ${value}`),
+        "issue.md",
+      );
+      expect(parsed.diagnostics).toEqual([]);
+      expect(parsed.frontmatter?.date).toBe(value.replaceAll("'", ""));
+    },
+  );
   it("lowers headings, lists and inline semantics with source locations", () => {
     const parsed = issue(
       "# Hello\n\nA **bold** and *gentle* `code` paragraph.\n\n3. First\n4. Second\n\n- One\n- Two\n\n> Quoted\n\n---\n\n```ts\nconst x = '<Script />';\n```\n",

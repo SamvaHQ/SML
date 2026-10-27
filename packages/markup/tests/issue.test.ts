@@ -14,7 +14,7 @@ const issue = (body: string, slug = "october") =>
 const layout = (body = "<IssueContent />") => `
 import { defineTemplate } from "@samva/markup";
 import { jsonSchema } from "@samva/markup/input-schema";
-import { Email, Section, IssueContent, IssueContent as Content } from "@samva/markup/email";
+import { Email, Section, IssueContent, IssueContent as Content, IssueTitle, IssueTitle as Title, IssueDate, IssueDate as Date } from "@samva/markup/email";
 export default defineTemplate({
   id: "newsletter-layout",
   schema: jsonSchema({ type: "object", properties: { show: { type: "boolean" }, items: { type: "array", items: { type: "string" } } }, required: ["show", "items"] }),
@@ -61,6 +61,115 @@ describe("issue layout compilation", () => {
   it("recognizes the imported slot identity through an alias", async () => {
     expect((await compile("Hello", layout("<Content />"))).template).toBeDefined();
   });
+
+  it("inlines escaped title and date text in email and web before styling", async () => {
+    const source = issue("Hello")
+      .replace("October news", "News <&> 🦊")
+      .replace("preheader:", "date: 2026-10-28\npreheader:");
+    const result = await compileIssue({
+      entry: "issues/october.md",
+      files: {
+        "issues/october.md": source,
+        "layout.tsx": layout("<h1><Title /></h1><p><Date /></p><IssueContent />"),
+      },
+      assetBase: "",
+      tailwind: { css: "h1 { color: #123456; }" },
+    });
+    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(result.frontmatter?.date).toBe("2026-10-28");
+    expect(result.template!.email!.subject).toBe("News <&> 🦊");
+    for (const target of ["email", "web"] as const) {
+      const rendered = render(result.template!, result.fixtures.default, {
+        target,
+        locale: "fr-FR",
+        timeZone: "America/Los_Angeles",
+      });
+      expect(rendered.html).toContain("News &lt;&amp;&gt; 🦊</h1>");
+      expect(rendered.html).toContain("Oct 28, 2026</p>");
+      expect(rendered.html).not.toContain("sml-issue-");
+      expect(rendered.html).not.toContain('format="date"');
+    }
+    expect(render(result.template!, result.fixtures.default, { target: "email" }).html).toContain(
+      "color:#123456",
+    );
+  });
+
+  it("omits an absent date without omitting the title", async () => {
+    const result = await compile(
+      "Hello",
+      layout("<h1><IssueTitle /></h1><p>Before<IssueDate />After</p><IssueContent />"),
+    );
+    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    for (const target of ["email", "web"] as const) {
+      const rendered = render(result.template!, result.fixtures.default, { target });
+      expect(rendered.html).toContain("October news</h1>");
+      expect(rendered.html).toContain("BeforeAfter</p>");
+    }
+  });
+
+  it("uses literal fmt.date style and locale options at compile time", async () => {
+    const result = await compileIssue({
+      entry: "issue.md",
+      files: {
+        "issue.md": issue("Hello").replace("preheader:", "date: '2024-02-29'\npreheader:"),
+        "layout.tsx": layout('<p><IssueDate style="long" locale={"en-GB"} /></p><IssueContent />'),
+      },
+      assetBase: "",
+      tailwind: false,
+    });
+    expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    for (const target of ["email", "web"] as const)
+      expect(render(result.template!, result.fixtures.default, { target }).html).toContain(
+        "29 February 2024</p>",
+      );
+  });
+
+  it.each(["IssueTitle", "IssueDate"])("refuses %s outside an issue layout", async (name) => {
+    const result = await compileTemplate({
+      files: { "layout.tsx": layout(`<${name} />`) },
+      entry: "layout.tsx",
+      assetBase: "",
+      tailwind: false,
+    });
+    expect(result.template).toBeUndefined();
+    expect(
+      result.diagnostics.some(
+        (item) => item.code === "issue-slot" && item.origins?.[0]?.fileName === "layout.tsx",
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    '<IssueTitle className="extra" />',
+    '<IssueDate format="long" />',
+    '<IssueDate style="invalid" />',
+    '<IssueDate locale="invalid_locale" />',
+    "<IssueDate style={input.show} />",
+    "<IssueDate {...input} />",
+    '<IssueDate locale="en-US" locale="en-GB" />',
+    "<IssueTitle>extra</IssueTitle>",
+    "<IssueDate>extra</IssueDate>",
+    "{input.show && <IssueTitle />}",
+    "{input.show ? <IssueDate /> : null}",
+    "{input.items.map((item) => <p><IssueDate /></p>)}",
+  ])("refuses invalid metadata directive %s even without a date", async (directive) => {
+    const result = await compile("Hello", layout(`${directive}<IssueContent />`));
+    expect(result.template).toBeUndefined();
+    expect(result.diagnostics.some((item) => item.code === "issue-slot")).toBe(true);
+  });
+
+  it.each(["IssueTitle", "IssueDate"])(
+    "checks %s placement after partial expansion",
+    async (name) => {
+      const shell = layout(`<Wrap show={input.show}><${name} /></Wrap><IssueContent />`).replace(
+        "export default",
+        "const Wrap = ({ children, show }) => <p>{show && children}</p>;\nexport default",
+      );
+      const result = await compile("Hello", shell);
+      expect(result.template).toBeUndefined();
+      expect(result.diagnostics.some((item) => item.code === "issue-slot")).toBe(true);
+    },
+  );
 
   it.each([
     "<p>No slot</p>",

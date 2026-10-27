@@ -574,6 +574,82 @@
       ]
     }
   ],
+  "issue": {
+    "frontmatter": [
+      {
+        "name": "title",
+        "type": "string",
+        "optional": false
+      },
+      {
+        "name": "date",
+        "type": "string",
+        "optional": true,
+        "description": "Calendar date in YYYY-MM-DD form, formatted in UTC by IssueDate."
+      },
+      {
+        "name": "slug",
+        "type": "string",
+        "optional": false
+      },
+      {
+        "name": "topic",
+        "type": "string",
+        "optional": false
+      },
+      {
+        "name": "preheader",
+        "type": "string",
+        "optional": true
+      },
+      {
+        "name": "seo",
+        "type": "{ readonly title?: string; readonly description?: string; readonly image?: string; }",
+        "optional": true
+      },
+      {
+        "name": "gate",
+        "type": "{ readonly leadIn: number }",
+        "optional": true,
+        "description": "Number of leading top-level blocks visible before the subscription gate."
+      }
+    ],
+    "layout": "compileIssue inserts static Markdown and metadata into an email-only TSX layout before styling. Directives render as escaped text or content in both email and web; they are invalid in ordinary templates or Markdown prose. Exactly one unconditional IssueContent is required. IssueTitle and IssueDate are optional and may repeat, outside loops and conditions, including after partial expansion. Directives take no children.",
+    "date": "Optional valid ISO calendar date (YYYY-MM-DD). IssueDate uses fmt.date conventions: medium style, en-US locale, UTC. Literal style (short, medium, long or full) and locale props override the format at compile time; layout and render locale/time zone options do not change it. Without date, the directive renders nothing.",
+    "directives": [
+      {
+        "name": "IssueContent",
+        "import": "@samva/markup/email",
+        "props": [],
+        "renders": "The parsed issue body."
+      },
+      {
+        "name": "IssueTitle",
+        "import": "@samva/markup/email",
+        "props": [],
+        "renders": "The frontmatter title as escaped text."
+      },
+      {
+        "name": "IssueDate",
+        "import": "@samva/markup/email",
+        "props": [
+          {
+            "name": "style",
+            "type": "DateStyle",
+            "optional": true,
+            "description": "Same date styles as fmt.date; defaults to medium."
+          },
+          {
+            "name": "locale",
+            "type": "string",
+            "optional": true,
+            "description": "Literal locale, default en-US. Formatting happens at compile time in UTC."
+          }
+        ],
+        "renders": "The formatted frontmatter date as escaped text, or nothing when absent."
+      }
+    ]
+  },
   "channelComponents": [
     {
       "name": "Sms",
@@ -1729,8 +1805,8 @@
     },
     {
       "code": "issue-slot",
-      "summary": "An issue layout does not contain exactly one unconditional content slot.",
-      "fix": "Import IssueContent from @samva/markup/email and place one <IssueContent /> outside loops and conditions."
+      "summary": "An issue directive is invalid, or a layout does not contain exactly one unconditional content slot.",
+      "fix": "Import IssueContent, IssueTitle or IssueDate from @samva/markup/email in an issue layout; use documented literal props, no children, and place directives outside loops and conditions with exactly one IssueContent."
     },
     {
       "code": "legacy-definition",
@@ -1746,7 +1822,7 @@
     {
       "code": "markdown-frontmatter",
       "summary": "Issue frontmatter is missing or does not match the typed contract.",
-      "fix": "Provide title, slug and topic strings; use only the documented preheader, seo and gate fields."
+      "fix": "Provide title, slug and topic strings; use only the documented date (valid YYYY-MM-DD), preheader, seo and gate fields."
     },
     {
       "code": "markdown-html",
