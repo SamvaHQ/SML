@@ -1,10 +1,12 @@
 /** @vitest-environment happy-dom
  * @jsxImportSource react */
+import { Select } from "@base-ui/react/select";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
 
 import { EditorPortalProvider } from "../src/chrome/portal-context";
+import { useEditorPortalContainer } from "../src/chrome/use-editor-portal";
 import { cn } from "../src/lib/utils";
 import {
   AlertDialog,
@@ -71,6 +73,26 @@ function Portaled({ children }: { readonly children: ReactNode }) {
       {children}
       <div ref={setContainer} data-testid={PORTAL_ID} />
     </EditorPortalProvider>
+  );
+}
+
+function PortalSelect() {
+  const container = useEditorPortalContainer();
+  return (
+    <Select.Root open defaultValue="transactional">
+      <Select.Trigger>
+        <Select.Value />
+      </Select.Trigger>
+      <Select.Portal container={container}>
+        <Select.Positioner>
+          <Select.Popup>
+            <Select.Item value="transactional">
+              <Select.ItemText>Transactional</Select.ItemText>
+            </Select.Item>
+          </Select.Popup>
+        </Select.Positioner>
+      </Select.Portal>
+    </Select.Root>
   );
 }
 
@@ -259,6 +281,16 @@ describe("ScrollArea", () => {
 });
 
 describe("popups render into the editor portal container", () => {
+  it("Select waits for the shell portal element", async () => {
+    const view = render(
+      <Portaled>
+        <PortalSelect />
+      </Portaled>,
+    );
+    await waitFor(() =>
+      expect(view.getByTestId(PORTAL_ID).querySelector('[role="listbox"]')).not.toBeNull(),
+    );
+  });
   it("Tooltip", async () => {
     const view = render(
       <Portaled>
