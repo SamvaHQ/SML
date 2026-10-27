@@ -177,8 +177,8 @@ resolver or credentials. A brand import without a resolver reports `brand-unavai
 For example, supply a brand from your own configuration:
 
 ```ts
-import { samvaEditor } from "@samva/vite";
 import { samvaBrandPlugin } from "@samva/markup/brand";
+import { samvaEditor } from "@samva/vite";
 
 samvaEditor({
   brandPlugin: samvaBrandPlugin,
@@ -249,8 +249,8 @@ A layout uses one static content slot:
 
 ```tsx
 import { defineTemplate } from "@samva/markup";
-import { jsonSchema } from "@samva/markup/input-schema";
 import { Email, Section, IssueContent } from "@samva/markup/email";
+import { jsonSchema } from "@samva/markup/input-schema";
 
 export default defineTemplate({
   id: "newsletter-layout",
