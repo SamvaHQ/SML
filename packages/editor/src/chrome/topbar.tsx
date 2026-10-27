@@ -138,17 +138,27 @@ export function TopBar({
   const narrow = layoutMode === "narrow";
   // Undo, Redo, Preview and Export fold into one menu once the bar cannot hold them as buttons.
   const folded = compact;
-  const publish =
+  const canPublish =
+    lifecycleCapability?.status === "ready" && lifecycleCapability.api.publish !== undefined;
+  const lifecycle =
     editable && lifecycleCapability !== undefined ? (
       <Tip
         label={
           lifecycleCapability.status === "locked"
             ? lifecycleCapability.upsell.reason
-            : "Publish and view history"
+            : canPublish
+              ? "Publish and view history"
+              : "View saved versions"
         }
       >
-        <Button size="sm" onClick={onLifecycle} data-testid="topbar.publish" data-editor-control="">
-          Publish
+        <Button
+          variant={canPublish ? "default" : "ghost"}
+          size="sm"
+          onClick={onLifecycle}
+          data-testid={canPublish ? "topbar.publish" : "topbar.history"}
+          data-editor-control=""
+        >
+          {canPublish ? "Publish" : "Saved versions"}
         </Button>
       </Tip>
     ) : null;
@@ -389,7 +399,7 @@ export function TopBar({
                 </DropdownMenu>
               )}
               {narrow && extraActions}
-              {publish}
+              {lifecycle}
             </div>
           </>
         ),

@@ -95,7 +95,8 @@ export interface FixtureApi {
  */
 export interface LifecycleApi {
   readonly inspect: Effect.Effect<ProjectLifecycleState, LifecycleUnavailable>;
-  readonly publish: (input: {
+  /** Omit when the document has saved versions but no publication step. */
+  readonly publish?: (input: {
     readonly baseRev: RevisionToken;
     readonly commit: string;
   }) => Effect.Effect<PublishedProjectCommit, LifecycleUnavailable | DocumentConflict>;
@@ -300,16 +301,23 @@ export function toAsyncHost(host: EditorHost): AsyncEditorHost {
       })),
     lifecycle:
       host.lifecycle &&
-      mapCapability<LifecycleApi, AsyncLifecycleApi>(host.lifecycle, (api) => ({
-        inspect: () => Effect.runPromise(api.inspect),
-        publish: (input: { readonly baseRev: RevisionToken; readonly commit: string }) =>
-          Effect.runPromise(api.publish(input)),
-        restore: (input: { readonly commit: string; readonly baseRev: RevisionToken }) =>
-          Effect.runPromise(api.restore(input)),
-        resolveConflict: (input) => Effect.runPromise(api.resolveConflict(input)),
-        updateFile: (input) => Effect.runPromise(api.updateFile(input)),
-        putAsset: (input) => Effect.runPromise(api.putAsset(input)),
-      })),
+      mapCapability<LifecycleApi, AsyncLifecycleApi>(host.lifecycle, (api) => {
+        const publish = api.publish;
+        return {
+          inspect: () => Effect.runPromise(api.inspect),
+          ...(publish === undefined
+            ? {}
+            : {
+                publish: (input: { readonly baseRev: RevisionToken; readonly commit: string }) =>
+                  Effect.runPromise(publish.call(api, input)),
+              }),
+          restore: (input: { readonly commit: string; readonly baseRev: RevisionToken }) =>
+            Effect.runPromise(api.restore(input)),
+          resolveConflict: (input) => Effect.runPromise(api.resolveConflict(input)),
+          updateFile: (input) => Effect.runPromise(api.updateFile(input)),
+          putAsset: (input) => Effect.runPromise(api.putAsset(input)),
+        };
+      }),
     render:
       host.render &&
       ((entry: string, fixture: FixtureName, target: RenderTarget) =>

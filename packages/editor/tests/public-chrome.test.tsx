@@ -430,7 +430,7 @@ describe("public editor chrome", () => {
     expect(view.container.querySelector("[data-samva-canvas-status]")).toBeNull();
   });
 
-  it("shows a host's locked action and the locked Publish, and hands both continuations to the host", async () => {
+  it("shows a host's locked action and the locked saved versions, and hands both continuations to the host", async () => {
     stubWideShell();
     const accountGate = {
       status: "locked" as const,
@@ -474,7 +474,7 @@ describe("public editor chrome", () => {
     expect(onLockedSend).toHaveBeenCalledTimes(1);
     fireEvent.click(view.getByTestId("test.send.close"));
 
-    fireEvent.click(view.getByTestId("topbar.publish"));
+    fireEvent.click(view.getByTestId("topbar.history"));
     expect((await view.findByTestId("lifecycle-sheet.locked-reason")).textContent).toBe(
       "Sign in and keep this draft.",
     );

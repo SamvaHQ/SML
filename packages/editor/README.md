@@ -201,8 +201,10 @@ A host targets any of them with Tailwind's arbitrary variants, for example
 `icons` replaces any of the editor's icons by name (`EditorIconName`); the rest keep the
 defaults, the Hugeicons free set (Stroke Rounded, MIT). `<EditorGlyph name="moon" />` draws one
 of those glyphs in host chrome beside the editor, so a host's own navigation follows the same
-set. Publish, persisted history, and restore appear when the host supplies the optional
-`lifecycle` capability, and Save version when it supplies `versions`; a draft can be saved where
+set. Persisted history and restore appear when the host supplies the optional `lifecycle`
+capability. Publish appears only when its ready API includes `publish`; omit that method for
+documents that are scheduled or sent without publication. The top bar then offers a secondary
+Saved versions control. Save version appears when the host supplies `versions`; a draft can be saved where
 nothing is published. The editor reports what a person does (`preview`, `export`) through the
 host's `telemetry`. None of these are shell callbacks.
 
@@ -212,6 +214,19 @@ authored TSX (`@samva/markup/edit`) and preview the host's render; a form change
 exact source replacement saved like any other edit. Expressions, conditionals and elements
 inside a body are locked segments, so a form edit cannot rewrite them, and an edit that would
 leave the static profile is refused with its reason.
+
+A host's primary toolbar action uses the same button style as Publish:
+
+```tsx
+<EditorToolbarButton
+  variant="default"
+  icon={<CalendarIcon />}
+  label="Schedule"
+  onClick={schedule}
+/>
+```
+
+The default variant remains `ghost` for secondary actions.
 
 ## Preparing preview documents
 

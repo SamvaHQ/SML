@@ -177,7 +177,6 @@ export const createIssueHost = async (): Promise<{
       await writeFile(path, baseRev, next, "external");
       return state();
     },
-    publish: refused,
     restore: refused,
     resolveConflict: refused,
     putAsset: refused,

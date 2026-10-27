@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 
 import { CONFIRM_PUBLISH_LABEL, LifecycleSheet } from "../src/chrome/lifecycle-sheet";
+import { EditorToolbarButton } from "../src/chrome/toolbar-button";
+import { TopBar } from "../src/chrome/topbar";
 import type { AsyncDocumentWriter, AsyncEditorHost, AsyncLifecycleApi } from "../src/host/types";
 import {
   contractVersion,
@@ -135,6 +137,60 @@ const mount = (overrides: LifecycleOverrides) =>
   );
 
 describe("LifecycleSheet", () => {
+  it("keeps history and restore without a publish capability", async () => {
+    const restore = vi.fn(() => Promise.resolve({ rev: "rev_2", authoredSource: "restored" }));
+    const { publish, ...api } = lifecycleApi({ inspect: () => Promise.resolve(state()), restore });
+    expect(publish).toBeDefined();
+    const view = render(
+      <EditorProvider host={hostFor(api)}>
+        <LifecycleSheet open onClose={() => {}} />
+      </EditorProvider>,
+    );
+    fireEvent.click(await view.findByTestId(`lifecycle-sheet.commit.${PARENT}`));
+    expect(view.queryByTestId("lifecycle-sheet.confirm-publish")).toBeNull();
+    expect(view.baseElement.textContent).not.toContain("Publish and saved versions");
+    fireEvent.click(view.getByTestId("lifecycle-sheet.restore"));
+    await waitFor(() => expect(restore).toHaveBeenCalledWith({ baseRev: "rev_1", commit: PARENT }));
+  });
+
+  it.each([true, false])(
+    "renders top bar actions with publish available: %s",
+    async (publishing) => {
+      const { publish, ...history } = lifecycleApi({ inspect: () => Promise.resolve(state()) });
+      const onLifecycle = vi.fn();
+      const view = render(
+        <EditorProvider
+          host={hostFor(publishing && publish !== undefined ? { ...history, publish } : history)}
+        >
+          <TopBar
+            onLifecycle={onLifecycle}
+            extraActions={
+              <EditorToolbarButton
+                variant="default"
+                label="Schedule"
+                data-testid="test.schedule"
+                icon={<span />}
+              />
+            }
+          />
+        </EditorProvider>,
+      );
+      const action = await view.findByTestId(publishing ? "topbar.publish" : "topbar.history");
+      fireEvent.click(action);
+      expect(onLifecycle).toHaveBeenCalledTimes(1);
+      const schedule = view.getByTestId("test.schedule");
+      expect(schedule.classList.contains("bg-primary")).toBe(true);
+      expect(schedule.classList.contains("h-7")).toBe(true);
+      if (publishing) {
+        expect(schedule.className).toBe(action.className);
+      } else {
+        expect(view.queryByTestId("topbar.publish")).toBeNull();
+        expect(action.textContent).toBe("Saved versions");
+        expect(view.container.querySelectorAll("button.bg-primary")).toHaveLength(1);
+      }
+    },
+  );
+
   it("holds the saved versions' place with a skeleton while they load", async () => {
     let finish: (value: ReturnType<typeof state>) => void = () => {};
     const inspect = vi.fn(
@@ -163,13 +219,14 @@ describe("LifecycleSheet", () => {
 
   it("publishes the exact clean saved commit", async () => {
     const inspect = vi.fn(() => Promise.resolve(state()));
-    const publish = vi.fn(() =>
-      Promise.resolve({
+    const publish = vi.fn(async function (this: AsyncLifecycleApi) {
+      const project = await this.inspect();
+      return {
         publicationId: "tpub_1",
-        commit: HEAD,
+        commit: project.baseCommit,
         publishedAt: new Date("2026-09-01T13:00:00.000Z"),
-      }),
-    );
+      };
+    });
     const view = mount({
       inspect,
       publish,

@@ -45,6 +45,26 @@ const digest = (page: RenderedPage) =>
     .digest("hex");
 
 describe("web target lowerings", () => {
+  it("lets a publication shell omit the generated root background without changing email or authored styles", async () => {
+    const project = BUILTIN_BASELINES.find(({ name }) => name === "primitive-styles")!;
+    const compiled = await compileTemplate(project.options);
+    const template = compiled.template!;
+    const input = compiled.fixtures.basic;
+    const email = render(template, input, { target: "email" });
+    const page = render(template, input, { target: "web" });
+    const transparent = render(template, input, { target: "web", rootBackground: "transparent" });
+    expect(page.headHints.styles).toContain("background-color:var(--color-background)");
+    expect(transparent.html).toBe(page.html);
+    expect(transparent.headHints.styles).toBe(
+      page.headHints.styles.replace("background-color:var(--color-background);", ""),
+    );
+    expect(transparent.headHints.styles).toContain(".bg-card{background-color:var(--color-card)}");
+    expect(render(template, input, { target: "web", rootBackground: "template" })).toEqual(page);
+    expect(render(template, input, { target: "email", rootBackground: "transparent" })).toEqual(
+      email,
+    );
+  });
+
   for (const project of projects)
     it(`pins semantic HTML and CSS for ${project.name}`, async () => {
       const compiled = await compileTemplate(project.options);
