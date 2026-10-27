@@ -16,7 +16,9 @@ import {
 } from "../ir/nodes";
 
 /** Web-only defaults live below project utilities; explicit props are emitted separately. */
-export const WEB_BASE_STYLES: readonly WebCssRule[] = [
+export const webBaseStyles = (
+  rootBackground: "template" | "transparent",
+): readonly WebCssRule[] => [
   {
     at: "layer sml-web-components",
     children: [
@@ -29,7 +31,9 @@ export const WEB_BASE_STYLES: readonly WebCssRule[] = [
         style: [
           ["color", "var(--color-foreground)"],
           ["font-family", "var(--font-sans)"],
-          ["background-color", "var(--color-background)"],
+          ...(rootBackground === "transparent"
+            ? []
+            : ([["background-color", "var(--color-background)"]] as const)),
           ["padding-inline", "16px"],
         ],
       },

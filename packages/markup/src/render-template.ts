@@ -37,7 +37,7 @@ import { applyEmailPresentation } from "./ir/email-presentation";
 import type { WebCssRule } from "./ir/nodes";
 import { validateEmailIr } from "./ir/validate";
 import { lowerEmailNodes } from "./lower/email";
-import { lowerWebNodes, WEB_BASE_STYLES, webElement, type WebHeadValues } from "./lower/web";
+import { lowerWebNodes, webBaseStyles, webElement, type WebHeadValues } from "./lower/web";
 import { smsSegmentInfo } from "./sms-segments";
 
 // Rendering a compiled template is a pure function of the template and the input. Untrusted data
@@ -73,6 +73,8 @@ interface RenderSettings {
   readonly locale?: string | undefined;
   /** IANA time zone; defaults to UTC. */
   readonly timeZone?: string | undefined;
+  /** Web only: omit the generated root background so the host supplies it. Authored styles remain. */
+  readonly rootBackground?: "template" | "transparent" | undefined;
   /**
    * The brand plugin the template compiled against: its unsubscribe placeholder gets the
    * no-track marker, and only the elements `BrandFooter` wrote may carry its footer markers.
@@ -1471,10 +1473,11 @@ const renderWeb = (
     if (!Number.isInteger(specificity) || specificity < 1 || specificity > 100_000)
       invalid("Invalid web style specificity.");
     const projectRules = email.web?.rules ?? [];
+    const componentRules = webBaseStyles(options.rootBackground ?? "template");
     const baseRules =
       componentLayer === undefined
-        ? WEB_BASE_STYLES
-        : WEB_BASE_STYLES.map((rule) => ({ ...rule, at: `layer sml-web-${componentLayer}` }));
+        ? componentRules
+        : componentRules.map((rule) => ({ ...rule, at: `layer sml-web-${componentLayer}` }));
     const css = webCss(webCtx, [
       ...projectRules.filter(
         (rule) =>

@@ -139,6 +139,17 @@ const page = render(compiled.template, compiled.fixtures.default, { target: "web
 // page.html is semantic HTML; page.headHints carries the styles and document hints.
 ```
 
+Web renders retain the template background by default. A publication shell that supplies its own
+page background can omit the generated root background:
+
+```ts
+const page = render(template, input, { target: "web", rootBackground: "transparent" });
+```
+
+This omits the web root's default `--color-background` fill. Authored background styles, nested
+components, theme tokens, and email rendering are unchanged. `rootBackground: "template"` is the
+default.
+
 Email lowering preserves email layout, Outlook fallbacks, subject, preheader, and plain text.
 Web lowering uses semantic elements and supplies styles separately from the HTML body. Both read
 the same authored components and source positions. `COMPONENT_DEGRADATIONS` from
