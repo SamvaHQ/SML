@@ -1,3 +1,9 @@
+## @samva/markup@0.21.0
+
+### Let a publication shell supply the web background
+
+Pass `rootBackground: "transparent"` to `render(template, input, { target: "web", ... })` to omit the web root's default theme background. Existing web renders retain it by default. Authored background styles and email output are unchanged.
+
 ## @samva/markup@0.19.0
 
 ### Author newsletter issues in SML Markdown

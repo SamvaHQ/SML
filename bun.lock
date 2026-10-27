@@ -14,7 +14,7 @@
     },
     "packages/editor": {
       "name": "@samva/editor",
-      "version": "0.20.0",
+      "version": "0.21.0",
       "dependencies": {
         "@babel/parser": "^8.0.4",
         "@hugeicons/core-free-icons": "^4.3.5",
@@ -55,7 +55,7 @@
     },
     "packages/markup": {
       "name": "@samva/markup",
-      "version": "0.20.0",
+      "version": "0.21.0",
       "dependencies": {
         "@babel/parser": "^8.0.4",
         "@cfworker/json-schema": "4.1.1",
@@ -86,7 +86,7 @@
     },
     "packages/vite": {
       "name": "@samva/vite",
-      "version": "0.20.0",
+      "version": "0.21.0",
       "dependencies": {
         "@samva/markup": "workspace:^",
       },
