@@ -4,4 +4,6 @@ packages:
     type: patch
 ---
 
-Keep editor menus, popovers, selects, tooltips, and dialogs inside the shell portal with Base UI 1.9. Explicit menu portal compositions also inherit the shell container.
+## Keep editor popups inside the shell portal
+
+Menus, popovers, selects, tooltips, and dialogs render inside the editor shell's portal with Base UI 1.9, and explicit menu portal compositions inherit the shell container.
