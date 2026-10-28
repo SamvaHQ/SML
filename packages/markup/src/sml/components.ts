@@ -20,6 +20,7 @@ import type { SemanticComponent, SemanticComponentName, SemanticProp } from "../
 import { emailNodeToIr, propFor, Tokens } from "../ir/tokens";
 import { child, children, text, unwrap, type Node } from "./ast";
 import { bindingValue, isValueNode, type Binding } from "./bindings";
+import { issueMetadataChildren } from "./issue-content";
 import type { Ctx, Lowerer } from "./lower";
 import type { ImportBinding } from "./project";
 
@@ -100,7 +101,8 @@ const bindingToProp = (
 };
 
 /** Content between the tags, the way a primitive would have received it. */
-const childrenProp = (tokens: Tokens, nodes: readonly CompiledNode[]): EmailChild => {
+const childrenProp = (tokens: Tokens, authored: readonly CompiledNode[]): EmailChild => {
+  const nodes = authored.flatMap((node) => [...(issueMetadataChildren(node) ?? [node])]);
   const only = nodes.length === 1 ? nodes[0] : undefined;
   // A single text child arrives as a string, exactly as React hands it to a component.
   if (only !== undefined && isValueNode(only) && only !== null && typeof only !== "boolean") {

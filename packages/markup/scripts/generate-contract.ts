@@ -87,6 +87,8 @@ const brandInterfaces = interfacesOf(await read("src/email/brand.ts"));
 const smsInterfaces = interfacesOf(await read("src/sms.ts"));
 const whatsappInterfaces = interfacesOf(await read("src/whatsapp.ts"));
 const fmtSource = await read("src/fmt.ts");
+const issueInterfaces = interfacesOf(await read("src/issue-content.ts"));
+const frontmatterInterfaces = interfacesOf(await read("src/markdown/types.ts"));
 
 const propsOf = (interfaces: Map<string, Prop[]>, name: string): Prop[] => {
   const props = interfaces.get(name);
@@ -195,6 +197,30 @@ const contract = {
   profile: { forms: PROFILE_FORMS, rejected: PROFILE_REJECTED },
   formatters,
   components,
+  issue: {
+    frontmatter: propsOf(frontmatterInterfaces, "IssueFrontmatter"),
+    layout:
+      "compileIssue inserts static Markdown and metadata into an email-only TSX layout before styling. Directives render as escaped text or content in both email and web; they are invalid in ordinary templates or Markdown prose. Exactly one unconditional IssueContent is required. IssueTitle and IssueDate are optional and may repeat, outside loops and conditions, including after partial expansion. Directives take no children.",
+    date: "Optional valid ISO calendar date (YYYY-MM-DD). IssueDate uses fmt.date conventions: medium style, en-US locale, UTC. Literal style (short, medium, long or full) and locale props override the format at compile time; layout and render locale/time zone options do not change it. Without date, the directive renders nothing.",
+    directives: [
+      {
+        name: "IssueContent",
+        import: "@samva/markup/email",
+        props: [],
+        renders: "The parsed issue body.",
+      },
+      {
+        name: "IssueTitle",
+        import: "@samva/markup/email",
+        props: [],
+        renders: "The frontmatter title as escaped text.",
+      },
+      {
+        ...component("IssueDate", "@samva/markup/email", issueInterfaces, "IssueDateProps"),
+        renders: "The formatted frontmatter date as escaped text, or nothing when absent.",
+      },
+    ],
+  },
   channelComponents,
   elements: EMAIL_ELEMENTS,
   globalAttributes: EMAIL_GLOBAL_ATTRIBUTES,
@@ -304,6 +330,41 @@ ${components
           prop.description ?? "",
         ]),
       )}`,
+  )
+  .join("\n\n")}
+
+## Markdown issues and layout directives
+
+${contract.issue.layout}
+
+Frontmatter fields:
+
+${table(
+  ["Field", "Type", "Notes"],
+  contract.issue.frontmatter.map((prop) => [
+    code(`${prop.name}${prop.optional ? "?" : ""}`),
+    code(prop.type),
+    prop.description ?? "",
+  ]),
+)}
+
+${contract.issue.date}
+
+${contract.issue.directives
+  .map(
+    (entry) =>
+      `### ${entry.name}\n\nImport from \`${entry.import}\`. ${entry.renders}\n\n${
+        entry.props.length === 0
+          ? "Takes no props."
+          : table(
+              ["Prop", "Type", "Notes"],
+              entry.props.map((prop) => [
+                code(`${prop.name}${prop.optional ? "?" : ""}`),
+                code(prop.type),
+                prop.description ?? "",
+              ]),
+            )
+      }`,
   )
   .join("\n\n")}
 

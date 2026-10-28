@@ -553,7 +553,8 @@ export const lowerProject = (
             findings.report({
               code: "issue-slot",
               severity: "error",
-              message: "IssueContent must render unconditionally, outside loops and conditions.",
+              message:
+                "Issue directives must render unconditionally, outside loops and conditions.",
               origins: [
                 { fileName: file, lineNumber: source?.[0] ?? 1, columnNumber: source?.[1] ?? 1 },
               ],

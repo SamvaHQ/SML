@@ -289,6 +289,7 @@ carry YAML frontmatter and CommonMark prose, with static tags from SML's email c
 ```md
 ---
 title: October product news
+date: 2026-10-28
 slug: october-product-news
 topic: product
 preheader: What shipped this month
@@ -307,7 +308,8 @@ Read the **latest updates**.
 ```
 
 `title`, `slug`, and `topic` are required nonempty strings. The slug is lowercase kebab-case.
-`preheader` is optional text; `seo` accepts optional `title`, `description`, and an absolute HTTPS
+`date` is an optional valid ISO calendar date (`YYYY-MM-DD`); invalid dates such as `2026-02-29`
+are diagnosed at the YAML value. `preheader` is optional text; `seo` accepts optional `title`, `description`, and an absolute HTTPS
 `image`; `gate.leadIn` counts leading top-level content blocks before a host-owned subscription
 wall. SML preserves this metadata; the host owns SEO tags, gating, and publication. Unknown fields,
 invalid YAML, raw HTML, unknown components, expressions, spreads, and nonliteral props are errors.
@@ -318,6 +320,25 @@ mean true. Fenced code is literal content, including any HTML or braces inside i
 A layout is an ordinary email-only `defineTemplate` entry containing one static `<IssueContent />`
 imported from `@samva/markup/email`. The directive takes no props or children and must sit outside
 conditions and loops. It disappears during compilation before styles are applied.
+
+The same import provides `<IssueTitle />` and `<IssueDate />` to insert the issue's own metadata:
+
+```tsx
+<h1><IssueTitle /></h1>
+<p><IssueDate /></p>
+<IssueContent />
+```
+
+`IssueTitle` inserts frontmatter `title` as escaped text and takes no props. `IssueDate` inserts
+frontmatter `date` as escaped text, or nothing when it is absent. It follows `fmt.date` conventions:
+medium style, `en-US` locale, UTC (`2026-10-28` becomes `Oct 28, 2026`). Optional literal `style`
+(`short`, `medium`, `long`, `full`) and `locale` props select another format, for example
+`<IssueDate style="long" locale="en-GB" />` produces `28 October 2026`.
+Formatting happens during compilation; the layout's locale and render-time locale/time zone do not
+change this text. Both directives work in email and web output, may repeat, take no children, and
+must stay outside conditions and loops, including inside partials. They are valid only in issue
+layouts compiled with `compileIssue`, never in ordinary templates or Markdown prose. Style their
+surrounding HTML elements rather than passing classes to the directives.
 
 ```ts
 import { compileIssue, parseIssue } from "@samva/markup/markdown";

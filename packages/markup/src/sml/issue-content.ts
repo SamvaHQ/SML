@@ -1,11 +1,16 @@
 import type { CompiledNode } from "../compiled-template";
 import type { EmailBrand } from "../email/brand";
+import { callFormatter, createFmt } from "../fmt";
 import { isValueNode } from "../ir/nodes";
+import type { IssueFrontmatter } from "../markdown/types";
+import { child, text, type Node } from "./ast";
+import type { Ctx, Lowerer } from "./lower";
 
 /** Static content inserted by the compiler at the layout's IssueContent directive. */
 export interface IssueContentInput {
   readonly file: string;
   readonly nodes: readonly CompiledNode[];
+  readonly frontmatter?: IssueFrontmatter;
 }
 
 /** Copy parser nodes into the layout's source table and resolve its host-owned brand. */
@@ -50,6 +55,79 @@ export const issueClasses = (nodes: readonly CompiledNode[]): readonly string[] 
 
 /** Internal marker: authored intrinsic tags cannot use this compiler-owned name. */
 export const ISSUE_SLOT_TAG = "sml-issue-content";
+const ISSUE_TITLE_TAG = "sml-issue-title";
+const ISSUE_DATE_TAG = "sml-issue-date";
+
+/** Metadata already holds text; component checks can read it without consuming placement markers. */
+export const issueMetadataChildren = (node: CompiledNode): readonly CompiledNode[] | undefined =>
+  !isValueNode(node) &&
+  "type" in node &&
+  node.type !== "component" &&
+  (node.tag === ISSUE_TITLE_TAG || node.tag === ISSUE_DATE_TAG)
+    ? (node.children ?? [])
+    : undefined;
+
+/** Retain metadata markers until partial expansion has made their placement visible. */
+export const issueMetadataSlot = (
+  lowerer: Lowerer,
+  ctx: Ctx,
+  node: Node,
+  attributes: readonly Node[],
+  name: "IssueTitle" | "IssueDate",
+  frontmatter: IssueFrontmatter,
+): CompiledNode[] => {
+  const props = new Map<string, string>();
+  for (const attribute of attributes) {
+    const key = text(child(attribute, "name") ?? attribute, "name");
+    const valueNode = child(attribute, "value");
+    const literal =
+      valueNode?.type === "JSXExpressionContainer" ? child(valueNode, "expression") : valueNode;
+    const value = literal?.type === "StringLiteral" ? text(literal, "value") : undefined;
+    if (
+      name !== "IssueDate" ||
+      (key !== "style" && key !== "locale") ||
+      value === undefined ||
+      props.has(key)
+    ) {
+      lowerer.error(
+        ctx,
+        attribute,
+        "issue-slot",
+        `${name} accepts only its documented literal props.`,
+      );
+      return [];
+    }
+    props.set(key, value);
+  }
+  let value = frontmatter.title;
+  if (name === "IssueDate") {
+    // Validate formatting props even when this particular issue has no date.
+    // oxlint-disable-next-line samva/no-try-catch-or-throw -- Intl and fmt reject invalid literal options; surface those failures as positioned compiler diagnostics.
+    try {
+      value = callFormatter(createFmt(), "date", [
+        frontmatter.date ?? "1970-01-01",
+        props.get("style"),
+        props.get("locale"),
+      ]);
+    } catch (error) {
+      lowerer.error(
+        ctx,
+        node,
+        "issue-slot",
+        error instanceof Error ? error.message : "Invalid IssueDate formatting options.",
+      );
+      return [];
+    }
+  }
+  return [
+    {
+      type: "inline",
+      tag: name === "IssueTitle" ? ISSUE_TITLE_TAG : ISSUE_DATE_TAG,
+      children: name === "IssueDate" && frontmatter.date === undefined ? [] : [value],
+      src: lowerer.src(ctx.module, node),
+    },
+  ];
+};
 
 /** Resolve the final expanded layout, where partials have already used or discarded children. */
 export const replaceIssueSlots = (
@@ -61,10 +139,15 @@ export const replaceIssueSlots = (
   const walk = (items: readonly CompiledNode[], conditional: boolean): CompiledNode[] =>
     items.flatMap((node): CompiledNode[] => {
       if (isValueNode(node)) return [node];
-      if ("type" in node && node.type !== "component" && node.tag === ISSUE_SLOT_TAG) {
-        count++;
+      const metadata = issueMetadataChildren(node);
+      if (
+        "type" in node &&
+        node.type !== "component" &&
+        (metadata !== undefined || node.tag === ISSUE_SLOT_TAG)
+      ) {
+        if (metadata === undefined) count++;
         if (conditional) report(node.src);
-        return [...content];
+        return [...(metadata ?? content)];
       }
       if ("if" in node)
         return [

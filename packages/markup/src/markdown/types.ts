@@ -3,6 +3,8 @@ import type { EmailDiagnostic } from "../email/diagnostics";
 
 export interface IssueFrontmatter {
   readonly title: string;
+  /** Calendar date in YYYY-MM-DD form, formatted in UTC by IssueDate. */
+  readonly date?: string;
   readonly slug: string;
   readonly topic: string;
   readonly preheader?: string;

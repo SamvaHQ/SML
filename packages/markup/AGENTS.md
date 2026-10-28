@@ -53,7 +53,9 @@ Tooling entries are what a host (Vite, the CLI, the editor, the API, the templat
   Markdown/SML component tags into semantic nodes with exact source ranges; `compileIssue` inserts
   them into an email-only TSX layout (default `layout.tsx`) at one `IssueContent` directive imported
   from `@samva/markup/email`, before CSS is applied. The issue slug/title/preheader set its compiled
-  identity/subject/preview; the layout supplies schema and fixtures. `inspectMarkdownNode` in
+  identity/subject/preview; `IssueTitle` and `IssueDate` insert escaped title and optional date text
+  at compile time, with literal `style`/`locale` options following `fmt.date` (medium, en-US, UTC).
+  All issue directives are unconditional; the layout supplies schema and fixtures. `inspectMarkdownNode` in
   `./edit` resolves its origins; `applySourceReplacements` takes `{ markdown: { file } }` to validate
   Markdown edits. Expressions, raw HTML, unknown tags and invalid metadata are diagnostics.
 - `@samva/markup/compatibility` — `checkCompatibility`, which checks each fixture against
