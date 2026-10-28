@@ -1,26 +1,22 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## `useEditorPortalContainer` returns the portal element\n\n`useEditorPortalContainer()` returns the mounted portal element (`HTMLDivElement | null`) instead of a ref. `null` means the shell is up and the element is not yet; `undefined` still means there is no shell, and popups use `document.body`. Pass the element to a Base UI portal `container`. Reading `.current` on the return value no longer typechecks.\n\nBase UI 1.9 reads a ref's `.current` from `useLayoutEffect` before React attaches a later sibling's ref, so a ref that is still empty sends every popup to `document.body` and does not try again. The shell still paints the portal root after the frame.\n"
-    filename: editor-portal-element.md
+  - content: "---\npackages:\n  npm:@samva/markup:\n    type: minor\n---\n\n## Render an issue's title and date in its layout\n\nIssue layouts can place the issue's title and date with the static `IssueTitle` and `IssueDate` directives from `@samva/markup/email`, in email and web output:\n\n```tsx\n<h1><IssueTitle /></h1>\n<p><IssueDate /></p>\n<IssueContent />\n```\n\n`IssueDate` reads an optional `date: YYYY-MM-DD` frontmatter field and formats it at compile time like `fmt.date` (medium, en-US, UTC); literal `style` and `locale` props override that. A missing date renders nothing. Both directives are refused outside issue layouts and inside loops or conditions. Output for existing templates is unchanged.\n"
+    filename: issue-title-date.md
     v: 0.0.0
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## Use saved versions without publishing\n\nHosts can omit `lifecycle.api.publish` from both the Promise and Effect APIs. The editor then shows Saved versions instead of Publish and keeps history, restore, and project-file editing available. Issue editors can schedule or send without a publish stub or a failing Publish button.\n\nUse `EditorToolbarButton` with `variant=\"default\"` for a primary host action such as Schedule; it shares the editor's primary button styling. The default remains `ghost`.\n"
-    filename: editor-optional-publish.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@samva/markup:\n    type: minor\n---\n\n## Let a publication shell supply the web background\n\nPass `rootBackground: \"transparent\"` to `render(template, input, { target: \"web\", ... })` to omit the web root's default theme background. Existing web renders retain it by default. Authored background styles and email output are unchanged.\n"
-    filename: web-root-background.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## Keep editor popups inside the shell portal\n\nMenus, popovers, selects, tooltips, and dialogs render inside the editor shell's portal with Base UI 1.9, and explicit menu portal compositions inherit the shell container.\n"
+    filename: editor-shell-popups.md
     v: 0.0.0
 core:packages:
-  - changelogIds:
-      - editor-portal-element.md
-      - editor-optional-publish.md
-    id: npm:@samva/editor
+  - id: npm:@samva/vite
     updated: true
   - changelogIds:
-      - web-root-background.md
+      - issue-title-date.md
     id: npm:@samva/markup
     updated: true
-  - id: npm:@samva/vite
+  - changelogIds:
+      - editor-shell-popups.md
+    id: npm:@samva/editor
     updated: true
 npm:packages:
-  - id: npm:@samva/editor
-  - id: npm:@samva/markup
   - id: npm:@samva/vite
+  - id: npm:@samva/markup
+  - id: npm:@samva/editor
