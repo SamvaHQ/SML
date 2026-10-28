@@ -58,6 +58,15 @@ export const ISSUE_SLOT_TAG = "sml-issue-content";
 const ISSUE_TITLE_TAG = "sml-issue-title";
 const ISSUE_DATE_TAG = "sml-issue-date";
 
+/** Metadata already holds text; component checks can read it without consuming placement markers. */
+export const issueMetadataChildren = (node: CompiledNode): readonly CompiledNode[] | undefined =>
+  !isValueNode(node) &&
+  "type" in node &&
+  node.type !== "component" &&
+  (node.tag === ISSUE_TITLE_TAG || node.tag === ISSUE_DATE_TAG)
+    ? (node.children ?? [])
+    : undefined;
+
 /** Retain metadata markers until partial expansion has made their placement visible. */
 export const issueMetadataSlot = (
   lowerer: Lowerer,
@@ -130,14 +139,15 @@ export const replaceIssueSlots = (
   const walk = (items: readonly CompiledNode[], conditional: boolean): CompiledNode[] =>
     items.flatMap((node): CompiledNode[] => {
       if (isValueNode(node)) return [node];
+      const metadata = issueMetadataChildren(node);
       if (
         "type" in node &&
         node.type !== "component" &&
-        (node.tag === ISSUE_SLOT_TAG || node.tag === ISSUE_TITLE_TAG || node.tag === ISSUE_DATE_TAG)
+        (metadata !== undefined || node.tag === ISSUE_SLOT_TAG)
       ) {
-        if (node.tag === ISSUE_SLOT_TAG) count++;
+        if (metadata === undefined) count++;
         if (conditional) report(node.src);
-        return node.tag === ISSUE_SLOT_TAG ? [...content] : [...(node.children ?? [])];
+        return [...(metadata ?? content)];
       }
       if ("if" in node)
         return [

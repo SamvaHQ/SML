@@ -14,7 +14,7 @@ const issue = (body: string, slug = "october") =>
 const layout = (body = "<IssueContent />") => `
 import { defineTemplate } from "@samva/markup";
 import { jsonSchema } from "@samva/markup/input-schema";
-import { Email, Section, IssueContent, IssueContent as Content, IssueTitle, IssueTitle as Title, IssueDate, IssueDate as Date } from "@samva/markup/email";
+import { Button, Email, Section, IssueContent, IssueContent as Content, IssueTitle, IssueTitle as Title, IssueDate, IssueDate as Date } from "@samva/markup/email";
 export default defineTemplate({
   id: "newsletter-layout",
   schema: jsonSchema({ type: "object", properties: { show: { type: "boolean" }, items: { type: "array", items: { type: "string" } } }, required: ["show", "items"] }),
@@ -105,6 +105,45 @@ describe("issue layout compilation", () => {
       expect(rendered.html).toContain("October news</h1>");
       expect(rendered.html).toContain("BeforeAfter</p>");
     }
+  });
+
+  it.each([
+    ["<IssueTitle />", "October news"],
+    ["<IssueDate />", "Oct 28, 2026"],
+  ])("checks a Button's %s child as static text", async (directive, label) => {
+    const result = await compileIssue({
+      entry: "issue.md",
+      files: {
+        "issue.md": issue("Hello").replace("preheader:", "date: 2026-10-28\npreheader:"),
+        "layout.tsx": layout(
+          `<Button height={44} href="https://example.com">${directive}</Button><IssueContent />`,
+        ),
+      },
+      assetBase: "",
+      tailwind: false,
+    });
+    expect(
+      result.diagnostics.filter(
+        (item) => item.severity === "error" || item.code === "button-outlook-fallback",
+      ),
+    ).toEqual([]);
+    const email = render(result.template!, result.fixtures.default, { target: "email" });
+    expect(email.html).toContain("<!--[if mso]><v:roundrect");
+    expect(email.html).toContain(`>${label}</center></v:roundrect>`);
+  });
+
+  it.each([
+    '<Button href="https://example.com"><IssueTitle /></Button>',
+    '<Button height={44} href="https://example.com"><IssueDate /></Button>',
+  ])("retains genuine Outlook fallback warnings for %s", async (button) => {
+    const result = await compile("Hello", layout(`${button}<IssueContent />`));
+    expect(result.template).toBeDefined();
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "button-outlook-fallback", severity: "warning" }),
+    );
+    expect(
+      render(result.template!, result.fixtures.default, { target: "email" }).html,
+    ).not.toContain("<v:roundrect");
   });
 
   it("uses literal fmt.date style and locale options at compile time", async () => {
