@@ -1,22 +1,19 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/markup:\n    type: minor\n---\n\n## Render an issue's title and date in its layout\n\nIssue layouts can place the issue's title and date with the static `IssueTitle` and `IssueDate` directives from `@samva/markup/email`, in email and web output:\n\n```tsx\n<h1><IssueTitle /></h1>\n<p><IssueDate /></p>\n<IssueContent />\n```\n\n`IssueDate` reads an optional `date: YYYY-MM-DD` frontmatter field and formats it at compile time like `fmt.date` (medium, en-US, UTC); literal `style` and `locale` props override that. A missing date renders nothing. Both directives are refused outside issue layouts and inside loops or conditions. Output for existing templates is unchanged.\n"
-    filename: issue-title-date.md
-    v: 0.0.0
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: patch\n---\n\n## Keep editor popups inside the shell portal\n\nMenus, popovers, selects, tooltips, and dialogs render inside the editor shell's portal with Base UI 1.9, and explicit menu portal compositions inherit the shell container.\n"
-    filename: editor-shell-popups.md
+  - content: "---\npackages:\n  \"@samva/editor\":\n    type: patch\n  \"@samva/vite\":\n    type: patch\n---\n\n### Update editor Effect runtime\n\nUpdate the editor and embedded local editor to Effect 4.1.2, with matching Effect test tooling. Markup and Vite continue to require no Effect runtime dependency from template authors.\n"
+    filename: effect41.md
     v: 0.0.0
 core:packages:
-  - id: npm:@samva/vite
+  - id: npm:@samva/markup
     updated: true
   - changelogIds:
-      - issue-title-date.md
-    id: npm:@samva/markup
+      - effect41.md
+    id: npm:@samva/vite
     updated: true
   - changelogIds:
-      - editor-shell-popups.md
+      - effect41.md
     id: npm:@samva/editor
     updated: true
 npm:packages:
-  - id: npm:@samva/vite
   - id: npm:@samva/markup
+  - id: npm:@samva/vite
   - id: npm:@samva/editor
