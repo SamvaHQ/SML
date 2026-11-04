@@ -56,8 +56,9 @@ missing export or a build-order slip shows up before release:
   `file:` specifier. Use it where the consuming project declares the package (a dependency or a
   catalog entry) and again under `overrides`, since `@samva/vite` depends on `@samva/markup` by
   range.
-- Every pull request and `main` commit publishes preview packages to
-  [pkg.pr.new](https://pkg.pr.new); the pull request comment lists their install URLs.
+- Every pull request from this repository and every `main` commit publishes preview packages to
+  [pkg.pr.new](https://pkg.pr.new); the pull request comment lists their install URLs. The workflow
+  skips fork pull requests, which would publish unreviewed code under these package names.
 
 ## Releases
 

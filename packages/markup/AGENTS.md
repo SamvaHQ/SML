@@ -23,7 +23,8 @@ Authoring entries are what a template file imports:
   functions a body may call.
 - `@samva/markup/sms` and `@samva/markup/whatsapp` — the channel components (`Sms`; `WhatsApp` with
   `WhatsApp.Header`, `Body`, `Footer`, `Buttons`, `UrlButton`, `QuickReplyButton`, `PhoneButton`,
-  `CopyCodeButton`, `FlowButton`). `whatsappTemplate` derives Meta's positional `{{n}}` text.
+  `CopyCodeButton`, `FlowButton`). A WhatsApp text part compiles to bind nodes; Meta's positional
+  `{{n}}` text is derived from them, not stored in the compiled template.
 - `@samva/markup/input-schema` — `inputSchema`, which turns any Standard JSON Schema into the
   portable JSON Schema and validator a template's input is checked against.
 - `samva:brand` — `BrandLogo` (light logo, swapped for the dark one where the client honors dark
@@ -130,10 +131,10 @@ Read the contract before authoring. Import only subpaths declared in `package.js
 - **Using an element or attribute the serializer does not allow.** `@samva/markup/render` is
   the one table behind both the JSX intrinsic prop types and the serializer's allowlist, so an
   unsupported element or attribute fails at typecheck and again at compile with a source location.
-- **Naming a template or fixture like a path.** A template id and a fixture key are both written
-  into file paths, so each must match `TEMPLATE_NAME_PATTERN`, one plain path segment.
-  `defineTemplate` throws a `TypeError` where the name is declared. Code that builds a path from these
-  names imports the pattern instead of restating it.
+- **Naming a template or fixture like a path.** A template id must match `TEMPLATE_ID_PATTERN`
+  (lowercase kebab-case) and a fixture key `TEMPLATE_NAME_PATTERN` (one plain path segment), because
+  both are written into file paths. `defineTemplate` throws a `TypeError` where either name is
+  declared. Code that builds a path from these names imports the pattern instead of restating it.
 - **Naming a second set of tokens for dark mode.** A theme states dark mode once, in
   `@media (prefers-color-scheme: dark) { @theme { --color-card: … } }`, with the same names as its
   light `@theme`. The cascade gives every element whose inlined styles read one of those colors a

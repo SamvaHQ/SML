@@ -59,8 +59,9 @@ what pins the compiler version your previews, checks, and builds use.
 - **Expecting the editor to overwrite concurrent edits.** The editor writes back to the entry's
   `.tsx` source after checking that the file on disk is still the revision it read, so a change you
   saved elsewhere is not overwritten; reload the entry and retry.
-- **Committing or hand-editing `.samva/`.** `.samva/` holds files this package generates. It is
-  gitignored, like `.next/` and `.tanstack/`, and changes inside it never recompile templates.
+- **Committing or hand-editing `.samva/`.** `.samva/` holds files the Samva CLI generates, such as
+  the brand snapshot `samva brands pull` writes. It is gitignored, like `.next/` and `.tanstack/`,
+  and this package's watcher ignores it, so changes inside it never recompile templates.
 
 ## Rules
 
@@ -74,9 +75,10 @@ what pins the compiler version your previews, checks, and builds use.
   `issueLayout` option (default root `layout.tsx`), an email-only definition with one static
   `IssueContent` slot. Build, render and export include issues; duplicate issue slugs fail the
   project. Discovery ignores hidden folders and `node_modules`.
-- **Template ids and fixture keys match `TEMPLATE_NAME_PATTERN`** from `@samva/markup/compiler`,
-  because both are written into export paths. Code that builds a path from them imports that
-  pattern instead of restating it.
+- **Template ids are `TEMPLATE_ID_PATTERN` and fixture keys are `TEMPLATE_NAME_PATTERN`** (both from
+  `@samva/markup` / `@samva/markup/compiler` respectively), because both are written into export
+  paths. A template id is lowercase kebab-case; a fixture key is one plain path segment. Code that
+  builds a path from them imports the pattern instead of restating it.
 - **Fixtures are validated against the template's own schema before they render.** A bad fixture is
   a finding on that template, not a runtime surprise at send time.
 - **One failure stays with its template.** A refused render reports against its fixture, and an

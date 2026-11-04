@@ -200,9 +200,10 @@ CLI; the standalone Vite plugin does not read them.
 
 ## The `.samva/` folder
 
-`.samva/` holds files this package generates in your project, the way `.next/` and `.tanstack/`
-do. Keep it in `.gitignore`. It is not part of the project's source, so changes inside it never
-recompile templates.
+`.samva/` holds files the Samva CLI generates in your project, such as the brand snapshot
+`samva brands pull` writes, the way `.next/` and `.tanstack/` hold generated output. Keep it in
+`.gitignore`. It is not part of the project's source: this package's watcher ignores it, so changes
+inside it never recompile templates.
 
 ## Publish
 
@@ -269,11 +270,12 @@ export default defineTemplate({
 });
 ```
 
-Issue frontmatter requires `title`, `slug`, and `topic`; optional fields are `preheader`, `seo`, and
-`gate`. See [markup's Markdown contract](../markup/README.md#markdown-newsletter-issues) for the
-closed grammar. The issue title and preheader set its email subject and inbox preview. Its slug
-must be unique among issues in the project. A broken issue is retained in `catalog.failures` while
-other issues continue compiling; a missing layout is an error.
+Issue frontmatter requires `title`, `slug` and `topic`; optional fields are `date`, `preheader`,
+`seo` and `gate`. See [markup's Markdown contract](../markup/README.md#markdown-newsletter-issues)
+for the closed grammar. The issue title and preheader set its email subject and inbox preview, and
+a layout can place the title and the formatted `date` with the static `IssueTitle` and `IssueDate`
+directives. Its slug must be unique among issues in the project. A broken issue is retained in
+`catalog.failures` while other issues continue compiling; a missing layout is an error.
 
 Programmatic project, build, render, and export options accept `issueLayout` to select a different
 root-relative layout. `loadProject` returns issues under `catalog.issues`, with their frontmatter

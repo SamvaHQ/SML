@@ -223,9 +223,10 @@ One template carries one schema and a body for each channel it supports. `@samva
 `@samva/markup/whatsapp` export the channel components (`Sms`; `WhatsApp` with `WhatsApp.Header`,
 `.Body`, `.Footer`, `.Buttons`, `.UrlButton`, `.QuickReplyButton`, `.PhoneButton` and
 `.CopyCodeButton` and `.FlowButton`). Their names are distinct per channel, so a wrong prop fails in the type checker.
-WhatsApp bindings compile to Meta's positional `{{1}}` placeholders (`whatsappTemplate`), and a
-conditional in a WhatsApp text part is refused because Meta templates cannot branch. The platform
-gates these channels.
+A WhatsApp binding compiles to a bind node in the compiled template, from which Meta's positional
+`{{1}}` placeholders and their values are derived when the template is registered; a conditional in
+a WhatsApp text part is refused because Meta templates cannot branch. The platform gates these
+channels.
 
 ### Explicit template inputs
 
@@ -278,8 +279,9 @@ edit the source at that span. A delivered message never carries the attribute.
 
 Portable validation uses `@cfworker/json-schema` without runtime code generation. The
 2020-12 meta-schema is checked at every supported schema position, and the explicit profile rejects
-keywords outside its contract before interpretation. The AJV dependency supplies static meta-schema
-JSON; its code generator is not invoked in a loaded template.
+keywords outside its contract before interpretation. The dialect ships inside the package as the
+vendored files under `src/json-schema/2020-12`, so no validator generator is invoked in a loaded
+template.
 
 ## Markdown newsletter issues
 
