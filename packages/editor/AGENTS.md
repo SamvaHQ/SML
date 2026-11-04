@@ -51,8 +51,10 @@ boundaries—not compiler transforms—provide render isolation.
   through actions such as save flushing, retry, and reload.
 - Do not add zustand middleware. Persistence remains explicit and limited to layout preferences:
   rail and chat widths, whether the chat is collapsed, and the work pane's open and shown tabs.
-- Effect Atom owns host application and server state; zustand owns editor-internal state. Do not
-  cross that boundary.
+- The host owns application and server state; the store owns editor-internal state. Do not cross
+  that boundary: the editor reads host data through the `AsyncEditorHost` it is mounted with and
+  keeps the current document snapshot and its projections (`outline`, `size`, `checks`) beside
+  selection, history, draft and layout in its own store.
 
 ## Layout
 

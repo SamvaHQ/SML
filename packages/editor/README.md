@@ -367,8 +367,8 @@ example of a host theme.
 
 - the **editor-specific tokens** — `--accent-email` and the selection tints
   (`--sel-soft`, `--sel-mid`) — registered in `@theme` and defined for light +
-  `.dark`; variable chips use the host's semantic `accent-teal` and `foreground`
-  palette instead of maintaining a parallel color pair;
+  `.dark`; variable chips use the shadcn `outline` badge on the host's `foreground`
+  and `border` tokens instead of maintaining a parallel color pair;
 - `--editor-well-*`, the source panel's recessed field, defined on `.samva-editor-shell` with
   light and `.dark` values;
 - the **chrome component CSS** — the workspace grid backdrop, scoped scrollbars, the preview
@@ -409,7 +409,7 @@ A host with its own base tokens imports:
 The editor stylesheet import covers both concerns (and a shadcn host that already has
 `@import "tw-animate-css";` gets the popup animations). The `@import` (resolved through the package exports, after
 `@import "tailwindcss"`) registers the `@theme` block **and** the package-owned `@source`
-glob so chrome utilities (`bg-accent-email`, `sel-*`, `chip-*`, `samva-editor-*`) generate —
+glob so chrome utilities (`bg-accent-email`, `sel-*`, `samva-editor-*`) generate —
 hosts do not hand-write content paths into `node_modules`.
 
 Failure mode: importing `@samva/editor/styles.css` from a React component makes Vite
