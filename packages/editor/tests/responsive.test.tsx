@@ -379,13 +379,16 @@ describe("container-responsive rail policy", () => {
     await waitFor(() => expect(view.getByTestId("agent-workspace.tab.assistant")).toBeTruthy());
     const zoom = storeOf().getState().canvasZoom;
     const chord = () => {
+      const composer = view.getByTestId("test.composer");
+      composer.focus();
       const event = new KeyboardEvent("keydown", {
         key: "=",
+        code: "Equal",
         ctrlKey: true,
         bubbles: true,
         cancelable: true,
       });
-      view.getByTestId("test.composer").dispatchEvent(event);
+      composer.dispatchEvent(event);
       return event;
     };
 

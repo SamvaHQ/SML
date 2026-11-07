@@ -5,20 +5,10 @@ import {
   isZoomWheel,
   zoomFromWheel,
   zoomInFrom,
-  zoomKeyOf,
+  zoomDirectionOf,
   zoomOutFrom,
 } from "../src/canvas/zoom";
 import { ZOOM_MAX, ZOOM_MIN } from "../src/state/store";
-
-const key = (
-  name: string,
-  modifiers: { meta?: boolean; ctrl?: boolean; alt?: boolean } = {},
-): Parameters<typeof zoomKeyOf>[0] => ({
-  key: name,
-  metaKey: modifiers.meta ?? false,
-  ctrlKey: modifiers.ctrl ?? false,
-  altKey: modifiers.alt ?? false,
-});
 
 describe("zoom steps", () => {
   it("run from the minimum to the maximum zoom", () => {
@@ -91,37 +81,22 @@ describe("zoom wheel", () => {
 });
 
 describe("zoom keys", () => {
-  it("reads ⌘ and Ctrl with = or + as zoom in", () => {
-    expect(zoomKeyOf(key("=", { meta: true }))).toBe("in");
-    expect(zoomKeyOf(key("+", { meta: true }))).toBe("in");
-    expect(zoomKeyOf(key("=", { ctrl: true }))).toBe("in");
+  it("reads = and the keypad + as zoom in", () => {
+    expect(zoomDirectionOf({ keys: ["equal"] })).toBe("in");
+    expect(zoomDirectionOf({ keys: ["add"] })).toBe("in");
   });
 
-  it("reads ⌘ and Ctrl with - or _ as zoom out", () => {
-    expect(zoomKeyOf(key("-", { ctrl: true }))).toBe("out");
-    expect(zoomKeyOf(key("-", { meta: true }))).toBe("out");
-    expect(zoomKeyOf(key("_", { ctrl: true }))).toBe("out");
+  it("reads - and the keypad − as zoom out", () => {
+    expect(zoomDirectionOf({ keys: ["minus"] })).toBe("out");
+    expect(zoomDirectionOf({ keys: ["subtract"] })).toBe("out");
   });
 
-  it("reads ⌘0 and Ctrl+0 as reset", () => {
-    expect(zoomKeyOf(key("0", { meta: true }))).toBe("reset");
-    expect(zoomKeyOf(key("0", { ctrl: true }))).toBe("reset");
+  it("reads 0 as reset", () => {
+    expect(zoomDirectionOf({ keys: ["0"] })).toBe("reset");
   });
 
-  it("ignores the same keys without ⌘ or Ctrl", () => {
-    expect(zoomKeyOf(key("="))).toBeNull();
-    expect(zoomKeyOf(key("-"))).toBeNull();
-    expect(zoomKeyOf(key("0"))).toBeNull();
-  });
-
-  it("ignores any chord with Alt held", () => {
-    expect(zoomKeyOf(key("=", { meta: true, alt: true }))).toBeNull();
-    expect(zoomKeyOf(key("-", { ctrl: true, alt: true }))).toBeNull();
-    expect(zoomKeyOf(key("0", { meta: true, ctrl: true, alt: true }))).toBeNull();
-  });
-
-  it("ignores other keys under ⌘ or Ctrl", () => {
-    expect(zoomKeyOf(key("a", { meta: true }))).toBeNull();
-    expect(zoomKeyOf(key("1", { ctrl: true }))).toBeNull();
+  it("reads any other key as no zoom", () => {
+    expect(zoomDirectionOf({ keys: ["a"] })).toBeNull();
+    expect(zoomDirectionOf({})).toBeNull();
   });
 });

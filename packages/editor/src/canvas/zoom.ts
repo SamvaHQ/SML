@@ -23,17 +23,21 @@ export type ZoomGesture =
   | { readonly kind: "wheel"; readonly deltaY: number }
   | { readonly kind: "key"; readonly direction: "in" | "out" | "reset" };
 
-/** The zoom a key chord asks for: ⌘/Ctrl with +, − or 0. Anything else is not a zoom. */
-export const zoomKeyOf = (event: {
-  readonly key: string;
-  readonly metaKey: boolean;
-  readonly ctrlKey: boolean;
-  readonly altKey: boolean;
+/**
+ * The zoom chords: ⌘ on macOS, Ctrl elsewhere, with +, − or 0, on the main row or the keypad.
+ * Keys are physical (`event.code`), so `+` on the main row is Shift with `=`.
+ */
+export const ZOOM_HOTKEYS =
+  "mod+equal, mod+shift+equal, mod+add, mod+minus, mod+shift+minus, mod+subtract, mod+0";
+
+/** The zoom one of `ZOOM_HOTKEYS` asks for, from the key the hotkey matched. */
+export const zoomDirectionOf = (hotkey: {
+  readonly keys?: ReadonlyArray<string> | undefined;
 }): "in" | "out" | "reset" | null => {
-  if (!(event.metaKey || event.ctrlKey) || event.altKey) return null;
-  if (event.key === "=" || event.key === "+") return "in";
-  if (event.key === "-" || event.key === "_") return "out";
-  if (event.key === "0") return "reset";
+  const key = hotkey.keys?.[0];
+  if (key === "equal" || key === "add") return "in";
+  if (key === "minus" || key === "subtract") return "out";
+  if (key === "0") return "reset";
   return null;
 };
 

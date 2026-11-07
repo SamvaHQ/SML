@@ -90,7 +90,7 @@ canvas and inspector around a Visual | Source switch.
 Above the canvas, the preview bar holds the version picker (with the `lifecycle` capability; an
 older version is restored only after the author confirms), the desktop/phone width, the fixture
 picker, the size readout, open in a new tab and refresh. The canvas zooms from 50% to 200% or
-fits its pane, by its floating control, a pinch, or ⌘/Ctrl with +, − and 0.
+fits its pane, by its floating control, a pinch, or ⌘ (Ctrl off macOS) with +, − and 0.
 
 ### Design mode and pins
 

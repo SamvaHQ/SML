@@ -1,10 +1,11 @@
 import { INSTANCE_PATH_ATTRIBUTE } from "@samva/markup/edit";
 import { type ReactNode, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useHotkeys } from "react-hotkeys-hook";
 
 import { isCanvasActivationTarget, resolveInstancePath } from "./instance-dom";
 import { PreviewDocumentContext, type PreparedPreviewDocument } from "./preview-document";
-import { isZoomWheel, zoomKeyOf, type ZoomGesture } from "./zoom";
+import { isZoomWheel, ZOOM_HOTKEYS, zoomDirectionOf, type ZoomGesture } from "./zoom";
 
 /**
  * The rendered email, mounted in a same-origin iframe.
@@ -335,20 +336,13 @@ const FrameDocument = ({
       });
     };
 
-    // Events inside the email never reach the page, so a pinch or a zoom chord over it would
-    // zoom the whole page. Take those here and hand them to the canvas.
+    // Events inside the email never reach the page, so a pinch over it would zoom the whole page.
+    // Take it here and hand it to the canvas. Zoom chords are bound on the frame's document below.
     const onWheel = (event: WheelEvent) => {
       const report = handlers.current.onZoomGesture;
       if (report === undefined || !isZoomWheel(event)) return;
       event.preventDefault();
       report({ kind: "wheel", deltaY: event.deltaY });
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      const report = handlers.current.onZoomGesture;
-      const direction = zoomKeyOf(event);
-      if (report === undefined || direction === null) return;
-      event.preventDefault();
-      report({ kind: "key", direction });
     };
 
     const attach = () => {
@@ -358,7 +352,6 @@ const FrameDocument = ({
       idoc.addEventListener("mouseleave", onLeave);
       idoc.addEventListener("contextmenu", onContext);
       idoc.addEventListener("wheel", onWheel, { passive: false });
-      idoc.addEventListener("keydown", onKeyDown);
     };
     const detach = () => {
       idoc.removeEventListener("click", onClick);
@@ -367,7 +360,6 @@ const FrameDocument = ({
       idoc.removeEventListener("mouseleave", onLeave);
       idoc.removeEventListener("contextmenu", onContext);
       idoc.removeEventListener("wheel", onWheel);
-      idoc.removeEventListener("keydown", onKeyDown);
     };
 
     // Writing the document is what installs it, and `close()` fires the frame's
@@ -394,6 +386,23 @@ const FrameDocument = ({
     // The frame key includes source, scheme, and preparation identity so a live
     // portal never survives replacement of its document.
   }, [document_, mount]);
+
+  // A zoom chord typed inside the email zooms the canvas, not the page. This frame writes its
+  // document once, so the document the body belongs to is the one to listen on.
+  useHotkeys(
+    ZOOM_HOTKEYS,
+    (_, hotkey) => {
+      const direction = zoomDirectionOf(hotkey);
+      if (direction !== null) onZoomGesture?.({ kind: "key", direction });
+    },
+    {
+      ...(body !== null && { document: body.ownerDocument }),
+      enabled: body !== null && onZoomGesture !== undefined,
+      preventDefault: true,
+      enableOnFormTags: true,
+      enableOnContentEditable: true,
+    },
+  );
 
   return (
     <iframe
