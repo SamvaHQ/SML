@@ -1,19 +1,17 @@
 core:changelogs:
-  - content: "---\npackages:\n  \"@samva/editor\":\n    type: patch\n  \"@samva/vite\":\n    type: patch\n---\n\n### Update editor Effect runtime\n\nUpdate the editor and embedded local editor to Effect 4.1.2, with matching Effect test tooling. Markup and Vite continue to require no Effect runtime dependency from template authors.\n"
-    filename: effect41.md
+  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## Bind the editor's keyboard shortcuts through react-hotkeys-hook\n\nSave version (⌘S / Ctrl+S), canvas zoom (⌘ / Ctrl with +, − or 0, on the main row or the keypad, including inside the email) and Escape to close an overlay panel are bound with `react-hotkeys-hook`, now a dependency of `@samva/editor`. Keys match the physical key, and the zoom and save chords use ⌘ on macOS and Ctrl elsewhere, so Ctrl no longer zooms or saves on macOS.\n"
+    filename: editor-hotkeys.md
     v: 0.0.0
 core:packages:
-  - id: npm:@samva/markup
+  - id: npm:@samva/vite
     updated: true
   - changelogIds:
-      - effect41.md
-    id: npm:@samva/vite
-    updated: true
-  - changelogIds:
-      - effect41.md
+      - editor-hotkeys.md
     id: npm:@samva/editor
     updated: true
-npm:packages:
   - id: npm:@samva/markup
+    updated: true
+npm:packages:
   - id: npm:@samva/vite
   - id: npm:@samva/editor
+  - id: npm:@samva/markup
