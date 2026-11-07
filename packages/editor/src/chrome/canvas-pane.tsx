@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 import { useShallow } from "zustand/react/shallow";
 
 import { DESKTOP_WIDTH, MOBILE_WIDTH } from "../canvas/device";
@@ -17,8 +18,9 @@ import { SelectionOverlay } from "../canvas/selection-overlay";
 import {
   isZoomWheel,
   zoomFromWheel,
+  ZOOM_HOTKEYS,
+  zoomDirectionOf,
   zoomInFrom,
-  zoomKeyOf,
   zoomOutFrom,
   type ZoomGesture,
 } from "../canvas/zoom";
@@ -202,22 +204,28 @@ export function CanvasPane({
     return () => workspace.removeEventListener("wheel", onWheel);
   }, [active, onZoomGesture]);
 
-  // Zoom chords anywhere in this editor zoom its canvas while the canvas is on screen. Chords
-  // typed inside the email arrive through the frame instead.
-  useEffect(() => {
-    if (!active) return;
-    const frame = workspaceRef.current?.closest("[data-samva-editor-theme]");
-    if (frame === null || frame === undefined) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      const direction = zoomKeyOf(event);
-      if (direction === null || !(event.target instanceof Node) || !frame.contains(event.target))
-        return;
-      event.preventDefault();
-      onZoomGesture({ kind: "key", direction });
+  // Zoom chords anywhere in this editor zoom its canvas while the canvas is on screen. The editor
+  // frame is an ancestor this pane does not render, so the hotkey's region ref is handed it here.
+  // Chords typed inside the email arrive through the frame instead.
+  const zoomChords = useHotkeys(
+    ZOOM_HOTKEYS,
+    (_, hotkey) => {
+      const direction = zoomDirectionOf(hotkey);
+      if (direction !== null) onZoomGesture({ kind: "key", direction });
+    },
+    {
+      enabled: active,
+      preventDefault: true,
+      enableOnFormTags: true,
+      enableOnContentEditable: true,
+    },
+  );
+  useLayoutEffect(() => {
+    zoomChords(workspaceRef.current?.closest<HTMLElement>("[data-samva-editor-theme]") ?? null);
+    return () => {
+      zoomChords(null);
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, onZoomGesture]);
+  }, [zoomChords]);
 
   const openContextMenu = useCallback(
     (input: {

@@ -77,6 +77,7 @@
     "@samva/markup": "workspace:^",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "react-hotkeys-hook": "^5.3.3",
     "tailwind-merge": "^3.7.0",
     "zustand": "^5.0.14"
   },

@@ -54,7 +54,7 @@ const mount = async (
   const view = render(
     <EditorProvider host={options.host ?? editor.host}>
       <StoreCapture />
-      <div data-samva-editor-theme="host" data-testid="frame">
+      <div data-samva-editor-theme="host" data-testid="frame" tabIndex={-1}>
         <PreviewChromeProvider value={{ ...NO_CHROME, ...options.chrome }}>
           <CanvasPane />
         </PreviewChromeProvider>
@@ -267,12 +267,14 @@ describe("zoom", () => {
     expect(storeOf().getState().canvasZoom).toBe(100);
   });
 
-  it("zooms with ⌘= typed inside the editor and ignores one typed outside it", async () => {
+  it("zooms with Ctrl+= typed inside the editor and ignores one typed outside it", async () => {
     const view = await mount();
     const frame = view.getByTestId("frame");
+    frame.focus();
     const inside = new KeyboardEvent("keydown", {
       key: "=",
-      metaKey: true,
+      code: "Equal",
+      ctrlKey: true,
       bubbles: true,
       cancelable: true,
     });
@@ -284,7 +286,8 @@ describe("zoom", () => {
 
     const outside = new KeyboardEvent("keydown", {
       key: "=",
-      metaKey: true,
+      code: "Equal",
+      ctrlKey: true,
       bubbles: true,
       cancelable: true,
     });
@@ -296,7 +299,13 @@ describe("zoom", () => {
 
     act(() => {
       frame.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "0", metaKey: true, bubbles: true, cancelable: true }),
+        new KeyboardEvent("keydown", {
+          key: "0",
+          code: "Digit0",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
       );
     });
     await waitFor(() => expect(storeOf().getState().canvasZoom).toBe(100));

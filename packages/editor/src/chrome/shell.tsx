@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -9,6 +10,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 
 import { SmsWorkspace } from "../channels/sms-workspace";
 import { WhatsAppWorkspace } from "../channels/whatsapp-workspace";
@@ -258,7 +260,6 @@ export function EditorRoot({
   // lock outside that render cycle so a click and Cmd/Ctrl+S in the same tick
   // cannot each flush and materialize the same draft revision.
   const saveVersionInFlight = useRef<Promise<void> | null>(null);
-  const saveVersionRef = useRef<() => void>(() => {});
   const frameRef = useRef<HTMLDivElement>(null);
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
 
@@ -321,9 +322,6 @@ export function EditorRoot({
       });
     return inFlight;
   };
-  useEffect(() => {
-    saveVersionRef.current = saveVersion;
-  });
 
   // Choosing a brand writes its import into the theme, and into every script that imports brand
   // components, through the lifecycle file write (a project compiles against one brand), then
@@ -422,22 +420,28 @@ export function EditorRoot({
     ));
   const renderedChannelSwitcher = slots.one("document.switcher")?.render(lifecycleControls);
 
-  useEffect(() => {
-    if (onSaveVersion === undefined) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") return;
-      if (!(event.target instanceof HTMLElement)) return;
-      if (
-        event.target.closest("[data-samva-editor-theme]") === null ||
-        event.target.closest('[role="menu"], [role="dialog"], [data-base-ui-portal]') !== null
-      )
-        return;
-      event.preventDefault();
-      saveVersionRef.current();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onSaveVersion]);
+  // ⌘S / Ctrl+S saves a version from anywhere in the editor frame, fields and the code editor
+  // included, but not from a menu or dialog that holds focus over it.
+  const saveVersionKeys = useHotkeys<HTMLDivElement>("mod+s", () => void saveVersion(), {
+    enabled: onSaveVersion !== undefined,
+    preventDefault: true,
+    enableOnFormTags: true,
+    enableOnContentEditable: true,
+    ignoreEventWhen: (event) =>
+      event.target instanceof Element &&
+      event.target.closest('[role="menu"], [role="dialog"], [data-base-ui-portal]') !== null,
+  });
+  const frameRefs = useCallback(
+    (element: HTMLDivElement | null) => {
+      frameRef.current = element;
+      saveVersionKeys(element);
+      return () => {
+        frameRef.current = null;
+        saveVersionKeys(null);
+      };
+    },
+    [saveVersionKeys],
+  );
 
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -462,16 +466,14 @@ export function EditorRoot({
   const overlayPanels = layoutMode === "compact" || layoutMode === "narrow";
   const overlayOpen = overlayPanels && (!leftCollapsed || !rightCollapsed);
 
-  useEffect(() => {
-    if (!overlayOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+  useHotkeys(
+    "escape",
+    () => {
       if (!leftCollapsed) toggleLeft();
       if (!rightCollapsed) toggleRight();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [leftCollapsed, overlayOpen, rightCollapsed, toggleLeft, toggleRight]);
+    },
+    { enabled: overlayOpen, enableOnFormTags: true, enableOnContentEditable: true },
+  );
 
   const topBar: TopBarActions = {
     leading: toolbarLeading.length === 0 ? undefined : toolbarLeading,
@@ -530,7 +532,7 @@ export function EditorRoot({
         <PreviewChromeProvider value={previewChrome}>
           <ShellChromeProvider value={{ topBar, statusBar, overlayOpen, idBase }}>
             <EditorPortalProvider container={portalContainer}>
-              <div ref={frameRef} className="samva-editor-frame flex" style={{ height }}>
+              <div ref={frameRefs} className="samva-editor-frame flex" style={{ height }}>
                 {frameStart?.render()}
                 {root}
                 <PreviewOverlay open={previewOpen} onClose={() => setPreviewOpen(false)} />
