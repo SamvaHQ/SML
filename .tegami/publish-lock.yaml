@@ -1,17 +1,17 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@samva/editor:\n    type: minor\n---\n\n## Bind the editor's keyboard shortcuts through react-hotkeys-hook\n\nSave version (⌘S / Ctrl+S), canvas zoom (⌘ / Ctrl with +, − or 0, on the main row or the keypad, including inside the email) and Escape to close an overlay panel are bound with `react-hotkeys-hook`, now a dependency of `@samva/editor`. Keys match the physical key, and the zoom and save chords use ⌘ on macOS and Ctrl elsewhere, so Ctrl no longer zooms or saves on macOS.\n"
-    filename: editor-hotkeys.md
+  - content: "---\npackages:\n  npm:@samva/markup:\n    type: patch\n---\n\n## Report a client caniemail has no data for as unknown coverage\n\nThe email compatibility check no longer fails when a declaration names a feature the pinned caniemail data covers for some clients but not others, such as `word-wrap`, which has no Gmail iOS entry. That client gets a `caniemail/unknown-coverage` info finding located at the source, and every other finding for it is still reported. Compiled output is unchanged.\n"
+    filename: compat-unknown-client-coverage.md
     v: 0.0.0
 core:packages:
-  - id: npm:@samva/vite
+  - id: npm:@samva/editor
     updated: true
   - changelogIds:
-      - editor-hotkeys.md
-    id: npm:@samva/editor
+      - compat-unknown-client-coverage.md
+    id: npm:@samva/markup
     updated: true
-  - id: npm:@samva/markup
+  - id: npm:@samva/vite
     updated: true
 npm:packages:
-  - id: npm:@samva/vite
   - id: npm:@samva/editor
   - id: npm:@samva/markup
+  - id: npm:@samva/vite
