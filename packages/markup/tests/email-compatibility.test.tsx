@@ -5,6 +5,7 @@ import {
   checkHtmlCompatibility,
   COMPATIBILITY_PROVENANCE,
   EMAIL_CLIENT_MATRIX,
+  hasBlockingCompatibility,
   unknownCoverage,
 } from "../src/email/compatibility";
 import { serializeEmailHtml } from "../src/email/html";
@@ -88,6 +89,43 @@ describe("severity policy", () => {
     expect(finding?.severity).toBe("info");
     expect(finding?.message).toContain("no client claim is made");
     expect(unknownCoverage(["border-radius"])).toEqual([]);
+  });
+
+  it("reports a client the pinned rules have no data for as unknown instead of failing", () => {
+    // caniemail 2.0.2 has word-wrap data for Gmail web and Android but not Gmail iOS, and
+    // throws when asked about the missing client.
+    const { findings } = check(<div style={{ wordWrap: "break-word" }}>Hello</div>);
+    const unknown = findings.find((finding) => finding.code === "caniemail/unknown-coverage");
+    expect(unknown?.severity).toBe("info");
+    expect(unknown?.clients).toEqual(["Gmail iOS"]);
+    expect(unknown?.message).toContain("word-wrap");
+    expect(unknown?.origins.length).toBeGreaterThan(0);
+    const wordWrap = findings
+      .filter((finding) => finding.code === "caniemail/word-wrap")
+      .flatMap((finding) => finding.clients ?? []);
+    expect(wordWrap).toContain("Gmail Android");
+    expect(wordWrap).not.toContain("Gmail iOS");
+  });
+
+  it("keeps every other finding for a client with a coverage gap", () => {
+    const html = '<div style="word-wrap: break-word; position: absolute">Hello</div>';
+    const css = ".note { word-wrap: break-word; }";
+    const findings = checkHtmlCompatibility({ html, css });
+    const gmailIos = (code: string) =>
+      findings.find((finding) => finding.code === code)?.clients?.includes("Gmail iOS");
+    expect(gmailIos("caniemail/unknown-coverage")).toBe(true);
+    // Gmail iOS has position data, so its finding survives the word-wrap gap.
+    expect(gmailIos("caniemail/position")).toBe(true);
+    expect(
+      findings.filter((finding) => finding.code === "caniemail/unknown-coverage"),
+    ).toHaveLength(1);
+    expect(hasBlockingCompatibility(findings)).toBe(false);
+    expect(
+      checkHtmlCompatibility({
+        html: '<div style="border-radius: 8px">Hello</div>',
+        clients: [{ id: "gmail.ios", label: "Gmail iOS" }],
+      }).some((finding) => finding.code === "caniemail/unknown-coverage"),
+    ).toBe(false);
   });
 });
 
