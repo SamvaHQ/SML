@@ -108,12 +108,14 @@ describe("severity policy", () => {
   });
 
   it("keeps every other finding for a client with a coverage gap", () => {
-    const html = '<div style="word-wrap: break-word; border-radius: 8px">Hello</div>';
+    const html = '<div style="word-wrap: break-word; position: absolute">Hello</div>';
     const css = ".note { word-wrap: break-word; }";
     const findings = checkHtmlCompatibility({ html, css });
     const gmailIos = (code: string) =>
       findings.find((finding) => finding.code === code)?.clients?.includes("Gmail iOS");
     expect(gmailIos("caniemail/unknown-coverage")).toBe(true);
+    // Gmail iOS has position data, so its finding survives the word-wrap gap.
+    expect(gmailIos("caniemail/position")).toBe(true);
     expect(
       findings.filter((finding) => finding.code === "caniemail/unknown-coverage"),
     ).toHaveLength(1);
