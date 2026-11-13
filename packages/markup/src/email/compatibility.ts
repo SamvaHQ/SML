@@ -95,6 +95,38 @@ export const ESSENTIAL_CONSTRUCTS: ReadonlySet<string> = new Set([
 
 const KNOWN_TITLES: ReadonlySet<string> = new Set(rawData.data.map((feature) => feature.title));
 
+type ClientStats = Record<string, Record<string, Record<string, string> | undefined> | undefined>;
+
+const coverageGaps = new Map<CaniemailClient, ReadonlySet<string>>();
+
+/**
+ * The features the pinned data has no entry for on a client, after filling each
+ * gap with `u`, the data's own unknown marker.
+ *
+ * caniemail throws a `RangeError` for a feature it has data for on some clients
+ * but not the one asked about (2.0.2 has `word-wrap` for Gmail web and Android but
+ * not Gmail iOS), and that one throw would discard the whole document's report.
+ * Its checks offer no per-client hook, so the gap is closed in its data before it
+ * is asked, and the answer it then gives for a filled pair is reported as unknown
+ * coverage rather than as a client claim. Other readers of that data see the same
+ * unknown marker it already carries for untested pairs.
+ */
+const coverageGapsFor = (client: CaniemailClient): ReadonlySet<string> => {
+  const known = coverageGaps.get(client);
+  if (known !== undefined) return known;
+  const [family = client, platform = client] = client.split(".");
+  const gaps = new Set<string>();
+  for (const feature of rawData.data) {
+    const stats = feature.stats as ClientStats;
+    const familyStats = (stats[family] ??= {});
+    if (familyStats[platform] !== undefined) continue;
+    familyStats[platform] = { [rawData.last_update_date]: "u" };
+    gaps.add(feature.title);
+  }
+  coverageGaps.set(client, gaps);
+  return gaps;
+};
+
 export interface CompatibilityInput {
   /** The document the recipient receives. */
   readonly html: string;
@@ -143,6 +175,7 @@ export const checkHtmlCompatibility = (input: CompatibilityInput): readonly Emai
   const targets = input.clients ?? EMAIL_CLIENT_MATRIX;
   const context = compatibilityContext(input.html, input.css);
   const targetClients = targets.map((target) => target.id);
+  const gaps = new Map(targetClients.map((client) => [client, coverageGapsFor(client)]));
   // The pinned engine replaces its standalone CSS input when HTML is supplied.
   // Check both documents explicitly so retained external rules are not skipped.
   const reports = [
@@ -162,6 +195,7 @@ export const checkHtmlCompatibility = (input: CompatibilityInput): readonly Emai
       offsets: readonly number[];
     }
   >();
+  const uncovered = new Map<string, Set<string>>();
   for (const bucket of reports.flatMap((report) => [
     report.issues.errors,
     report.issues.warnings,
@@ -169,6 +203,11 @@ export const checkHtmlCompatibility = (input: CompatibilityInput): readonly Emai
     for (const [client, issues] of bucket) {
       const label = LABELS.get(client) ?? client;
       for (const raw of issues as readonly RawIssue[]) {
+        if (gaps.get(client)?.has(raw.title) === true) {
+          const clients = uncovered.get(raw.title) ?? new Set<string>();
+          uncovered.set(raw.title, clients.add(label));
+          continue;
+        }
         const hiddenContentFailure =
           client === "outlook.windows" &&
           raw.support === "partial" &&
@@ -208,16 +247,36 @@ export const checkHtmlCompatibility = (input: CompatibilityInput): readonly Emai
     }
   }
 
+  const provenance = `${COMPATIBILITY_PROVENANCE.rules} (caniemail data ${COMPATIBILITY_PROVENANCE.apiVersion}, updated ${COMPATIBILITY_PROVENANCE.lastUpdate})`;
+  const locate = (offsets: readonly number[]) => {
+    const occurrences = offsets
+      .map((offset) => originsAt(input.positions ?? [], offset))
+      .filter((origins) => origins.length > 0);
+    return {
+      origins: occurrences[0] ?? [],
+      ...(occurrences.length === 0 ? {} : { occurrences }),
+      ...(input.fixture === undefined ? {} : { fixtures: [input.fixture] }),
+    };
+  };
+
   const findings: EmailDiagnostic[] = [];
+  for (const [title, labels] of uncovered) {
+    const clients = [...labels].sort();
+    findings.push({
+      code: "caniemail/unknown-coverage",
+      severity: "info",
+      message: `The pinned rules say nothing about ${title} on ${clients.join(", ")}, so no claim is made about it there. Verify it in that client before relying on it.`,
+      ...locate(context.offsets(title)),
+      clients,
+      provenance,
+    });
+  }
   for (const entry of grouped.values()) {
     const severity = entry.blocking
       ? "error"
       : entry.compatibility.assessment === "risk"
         ? "warning"
         : "info";
-    const occurrences = entry.offsets
-      .map((offset) => originsAt(input.positions ?? [], offset))
-      .filter((origins) => origins.length > 0);
     const clients = [...entry.clients].sort();
     const dropped =
       entry.support === "partial"
@@ -232,12 +291,10 @@ export const checkHtmlCompatibility = (input: CompatibilityInput): readonly Emai
       severity,
       message: `${clients.join(", ")} ${dropped} ${entry.title}. ${entry.explanation}`,
       compatibility: entry.compatibility,
-      origins: occurrences[0] ?? [],
-      ...(occurrences.length === 0 ? {} : { occurrences }),
-      ...(input.fixture === undefined ? {} : { fixtures: [input.fixture] }),
+      ...locate(entry.offsets),
       clients,
       ...(entry.notes.size === 0 ? {} : { notes: [...entry.notes].join(" ") }),
-      provenance: `${COMPATIBILITY_PROVENANCE.rules} (caniemail data ${COMPATIBILITY_PROVENANCE.apiVersion}, updated ${COMPATIBILITY_PROVENANCE.lastUpdate})`,
+      provenance,
     });
   }
   findings.push(...checkEmailContrast(input));
