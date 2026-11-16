@@ -86,6 +86,18 @@ const pinch = async (page: Page, target: Locator, deltaY: number) => {
   await page.keyboard.up("Control");
 };
 
+/**
+ * The zoom chord is ⌘ on a Mac and Ctrl anywhere else, and the editor takes that from the user
+ * agent it sees. A device profile's user agent is the emulated one, so `ControlOrMeta` — which
+ * follows the machine running the test — presses the wrong modifier wherever the two disagree.
+ */
+const pressZoomChord = async (page: Page, key: "=" | "0") => {
+  const modifier = await page.evaluate(() =>
+    /mac/i.test(navigator.userAgent) ? "Meta" : "Control",
+  );
+  await page.keyboard.press(`${modifier}+${key}`);
+};
+
 test.describe("zoom control", () => {
   test("zoom in and out step between 100 and 110", async ({ page }) => {
     await openStandalone(page);
@@ -160,15 +172,15 @@ test.describe("zoom gestures", () => {
     expect(await pageNotZoomed(page)).toEqual(pageBefore);
   });
 
-  test("Ctrl with = and 0 zooms the canvas from any editor control", async ({ page }) => {
+  test("the zoom chord with = and 0 zooms the canvas from any editor control", async ({ page }) => {
     await openStandalone(page);
     await actualSize(page);
     await page.getByTestId("canvas.zoom-control").getByTestId("canvas.zoom-out").focus();
     await page.getByTestId("canvas.zoom-in").focus();
 
-    await page.keyboard.press("Control+=");
+    await pressZoomChord(page, "=");
     await expect(zoomOf(page)).toHaveAttribute("data-canvas-zoom", "110");
-    await page.keyboard.press("Control+0");
+    await pressZoomChord(page, "0");
     await expect(zoomOf(page)).toHaveAttribute("data-canvas-zoom", "100");
     expect((await pageNotZoomed(page)).scale).toBe(1);
   });
