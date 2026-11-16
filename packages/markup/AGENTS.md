@@ -25,8 +25,9 @@ Authoring entries are what a template file imports:
   `WhatsApp.Header`, `Body`, `Footer`, `Buttons`, `UrlButton`, `QuickReplyButton`, `PhoneButton`,
   `CopyCodeButton`, `FlowButton`). A WhatsApp text part compiles to bind nodes; Meta's positional
   `{{n}}` text is derived from them, not stored in the compiled template.
-- `@samva/markup/input-schema` — `inputSchema`, which turns any Standard JSON Schema into the
-  portable JSON Schema and validator a template's input is checked against.
+- `@samva/markup/input-schema` — `jsonSchema` wraps a literal JSON Schema for template authoring;
+  `inputSchema` converts a Standard JSON Schema v1 source into the portable JSON Schema and
+  validator a template's input is checked against.
 - `samva:brand` — `BrandLogo` (light logo, swapped for the dark one where the client honors dark
   mode) and `BrandFooter` (company, postal address, social links and the unsubscribe row the send
   path fills). The compiler binds them to the brand the build resolves; add
@@ -80,7 +81,7 @@ Tooling entries are what a host (Vite, the CLI, the editor, the API, the templat
   conditional or element is a locked segment; JSX source locations; and `previewEmail(template,
   input)`, the render an editor shows, with an instance path (`INSTANCE_PATH_ATTRIBUTE`) on every
   element and the `selections` that map each one to its TSX span. Browser-safe: its closure holds
-  Babel's parser and css-tree only (`tests/entry-closure.test.ts`).
+  Babel's parser, css-tree and the Markdown libraries (`tests/entry-closure.test.ts`).
 - `@samva/markup/brand` — brand records and their CSS model (`parseBrandCss`, `printBrandCss`), the
   theme vocabulary (`THEME_COLOR_ROLES`, `THEME_TOKENS`, `DEFAULT_THEME`, `foregroundDefaults`), the
   footer markers a send reads (`renderedFooterMarkers`, `withoutUnsubscribeRow`), and project

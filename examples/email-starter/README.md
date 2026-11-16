@@ -82,14 +82,17 @@ Bun lockfile v2 or npm lockfile v3 and verifies package integrity.
 
 ## Check, build, commit, and publish
 
-Check and build the source project locally:
+Type-check the source project and run a Vite smoke build locally:
 
 ```bash
 bun run check
 bun run build
 ```
 
-The check is the no-write TypeScript gate. `samva templates check` also compiles every template and renders its declared fixtures. The browser canvas is a structural preview,
+The check is the no-write TypeScript gate. The Vite build checks the starter's browser entry;
+it does not compile templates into message artifacts. For template compilation, use
+`samva templates build` or the programmatic [`buildTemplates` API](../../packages/vite/README.md).
+`samva templates check` also compiles every template and renders its declared fixtures. The browser canvas is a structural preview,
 not an exact Gmail, Outlook, Apple Mail, or Yahoo renderer. Generated HTML and delivery artifacts are not source files in this starter.
 
 For a Samva-managed project, create or clone the Artifact repository with the CLI, then use native

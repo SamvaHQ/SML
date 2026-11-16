@@ -91,6 +91,9 @@ Above the canvas, the preview bar holds the version picker (with the `lifecycle`
 older version is restored only after the author confirms), the desktop/phone width, the fixture
 picker, the size readout, open in a new tab and refresh. The canvas zooms from 50% to 200% or
 fits its pane, by its floating control, a pinch, or ⌘ (Ctrl off macOS) with +, − and 0.
+Keypad + and − work too. With focus in the editor frame, ⌘S (Ctrl+S off macOS) saves a version
+when the host provides that action; menus, dialogs and Base UI popups do not trigger it.
+Escape closes overlay panels in compact and narrow layouts.
 
 ### Design mode and pins
 
