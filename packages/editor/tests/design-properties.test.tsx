@@ -179,6 +179,49 @@ describe("Design properties", () => {
     );
   });
 
+  it("names a data field by the title the input schema gives it", async () => {
+    const { view } = await mount("<h1>Your {input.shortName} passed inspection</h1>", {
+      after: `export default defineTemplate({
+  schema: jsonSchema<{ shortName: string }>({
+    type: "object",
+    properties: { shortName: { type: "string", title: "Product short name" } },
+  }),
+});\n`,
+    });
+    expect(view.getByTestId("design-properties.binding").textContent).toBe("Product short name");
+    expect(view.getByTestId("design-properties.binding-hint").textContent).toContain(
+      "Product short name is filled in from each send.",
+    );
+  });
+
+  it("shows the dark value where the canvas renders the email dark", async () => {
+    const tokens: ThemeTokens = {
+      colors: [
+        {
+          name: "card-foreground",
+          value: "#1c1917",
+          dark: "#f5f5f4",
+          source: { kind: "project" },
+        },
+        { name: "accent", value: "#ff7347", dark: "#ff9a78", source: { kind: "project" } },
+      ],
+      fonts: [],
+    };
+    const { view } = await mount('<p className="text-card-foreground">Hi</p>', {
+      host: (host) => withTheme(host, tokens),
+      rendered: rendered("color: #f5f5f4"),
+    });
+    const field = view.getByTestId("design-properties.color.text");
+    await waitFor(() => expect(field.textContent).toContain("#F5F5F4"));
+    expect(field.textContent).toContain("Card text");
+    expect(field.textContent).not.toContain("#1C1917");
+    expect(field.querySelector("[data-active]")?.getAttribute("data-mode")).toBe("dark");
+    fireEvent.click(field);
+    const accent = await view.findByTestId("design-properties.color.text.accent");
+    expect(accent.textContent).toContain("#FF9A78");
+    expect(accent.textContent).not.toContain("#FF7347");
+  });
+
   it("reads a data field's sample from the canvas when the fixture does not say", async () => {
     const { view } = await mount("<p>Hello {input.nickname}, welcome</p>", {
       rendered: rendered("", "Hello Maya, welcome"),

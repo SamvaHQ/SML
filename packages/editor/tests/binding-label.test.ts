@@ -4,7 +4,9 @@ import {
   bindingName,
   bindingPath,
   fixtureSample,
+  inputSchemaOf,
   renderedSamples,
+  schemaTitle,
 } from "../src/chrome/binding-label";
 
 const FIXTURE = `{
@@ -55,5 +57,50 @@ describe("binding samples", () => {
     // Two bindings side by side cannot be told apart.
     expect(renderedSamples("MayaLee", [null, null])).toEqual([null, null]);
     expect(renderedSamples("Something else", ["Your ", null, " passed"])).toEqual([null]);
+  });
+});
+
+describe("schema titles", () => {
+  const ENTRY = `import { jsonSchema } from "@samva/markup/input-schema";
+
+export default defineTemplate({
+  id: "order",
+  schema: jsonSchema<Input>({
+    type: "object",
+    properties: {
+      shortName: { type: "string", title: "Product short name" },
+      firstName: { type: "string" },
+      product: {
+        type: "object",
+        properties: { sku: { type: "string", title: "Stock code" } },
+      },
+      items: {
+        type: "array",
+        items: { type: "object", properties: { name: { type: "string", title: "Line item" } } },
+      },
+    },
+  }),
+});
+`;
+
+  it("reads the title the input schema gives a bound path", () => {
+    const schema = inputSchemaOf(ENTRY);
+    expect(schemaTitle(schema, ["input", "shortName"])).toBe("Product short name");
+    expect(schemaTitle(schema, ["input", "product", "sku"])).toBe("Stock code");
+    expect(schemaTitle(schema, ["input", "items", "0", "name"])).toBe("Line item");
+    expect(schemaTitle(schema, ["input", "firstName"])).toBeNull();
+    expect(schemaTitle(schema, ["input", "missing"])).toBeNull();
+    // A loop variable is not the input.
+    expect(schemaTitle(schema, ["item", "name"])).toBeNull();
+  });
+
+  it("follows a schema written as a named constant, and does without one", () => {
+    const named = `const schema = { type: "object", properties: { plan: { title: "Plan name" } } } as const;
+const template = defineTemplate({ schema });
+export default template;
+`;
+    expect(schemaTitle(inputSchemaOf(named), ["input", "plan"])).toBe("Plan name");
+    expect(inputSchemaOf("export default defineTemplate({ id: 'x' });")).toBeNull();
+    expect(inputSchemaOf("export default defineTemplate({")).toBeNull();
   });
 });

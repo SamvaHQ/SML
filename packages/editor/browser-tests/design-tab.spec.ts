@@ -32,8 +32,9 @@ test("a block's background is a theme color, and the change is counted", async (
   await open(page);
   await layers(page).locator('[data-layer-name="Section"]').nth(1).click();
   await expect(page.getByTestId("inspector.element-name")).toHaveText("Section");
+  await page.getByTestId("design-properties.color.bg").click();
   await expect(page.getByTestId("design-properties.color.bg.card")).toHaveAttribute(
-    "aria-pressed",
+    "aria-selected",
     "true",
   );
   await page.getByTestId("design-properties.color.bg.secondary").click();

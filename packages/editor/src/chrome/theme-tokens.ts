@@ -119,12 +119,46 @@ export const hexOf = (value: string): string => {
   return `#${[r, g, b].map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("")}`.toUpperCase();
 };
 
-/** The palette color a rendered color is, if any. */
+/** The scheme the canvas renders the email in. */
+export type ColorScheme = "light" | "dark";
+
+/** A color's value under `scheme`: its dark value in dark mode when the theme sets one. */
+export const valueIn = (color: PaletteColor, scheme: ColorScheme): string | null =>
+  scheme === "dark" ? (color.dark ?? color.value) : color.value;
+
+/** The palette color a rendered color is, if any: by its value in `scheme` first, then either. */
 export const matchColor = (
   colors: ReadonlyArray<PaletteColor>,
   rendered: string,
-): PaletteColor | undefined =>
-  colors.find((color) => color.value !== null && sameColor(color.value, rendered));
+  scheme: ColorScheme = "light",
+): PaletteColor | undefined => {
+  const is = (value: string | null | undefined) => value != null && sameColor(value, rendered);
+  return (
+    colors.find((color) => is(valueIn(color, scheme))) ??
+    colors.find((color) => is(color.value) || is(color.dark))
+  );
+};
+
+/**
+ * Which scheme the canvas renders in, told by the element's rendered colors: one that is a
+ * token's dark value and not its light one means dark, and the reverse light. Colors that do not
+ * tell leave `fallback`, the frame's own `prefers-color-scheme`.
+ */
+export const renderedScheme = (
+  colors: ReadonlyArray<PaletteColor>,
+  rendered: ReadonlyArray<string>,
+  fallback: ColorScheme,
+): ColorScheme => {
+  for (const value of rendered)
+    for (const color of colors) {
+      if (color.dark === undefined || color.value === null) continue;
+      const light = sameColor(color.value, value);
+      const dark = sameColor(color.dark, value);
+      if (dark && !light) return "dark";
+      if (light && !dark) return "light";
+    }
+  return fallback;
+};
 
 /** Whether a rendered color paints nothing. */
 export const isTransparent = (value: string): boolean =>

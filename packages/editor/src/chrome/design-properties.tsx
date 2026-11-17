@@ -14,12 +14,19 @@ import { useEditorStore } from "../state/context";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
-import { bindingName, bindingPath, fixtureSample, renderedSamples } from "./binding-label";
+import {
+  bindingName,
+  bindingPath,
+  fixtureSample,
+  inputSchemaOf,
+  renderedSamples,
+  schemaTitle,
+} from "./binding-label";
 import { ColorField, Spinner } from "./color-field";
 import { AlignCenter, AlignLeft, AlignRight, DataField } from "./editor-icons";
 import { FontField } from "./font-field";
 import { classTokens, propLabel } from "./friendly";
-import { useThemePalette } from "./theme-tokens";
+import { renderedScheme, useThemePalette } from "./theme-tokens";
 import { GroupLabel, Segmented, Tip } from "./ui";
 import { cn } from "./ui-classes";
 
@@ -321,6 +328,11 @@ export function DesignProperties({
   const rendered = useRenderedStyle(anchor, instancePath);
   const variables = useEditorStore(useShallow((state) => state.doc?.variables ?? EMPTY_VARIABLES));
   const fixtureSource = useFixtureSource(entrySource);
+  // A Babel parse of the whole entry: once per entry, not per render.
+  const schema = useMemo(() => inputSchemaOf(entrySource), [entrySource]);
+  /** The schema's title for a binding when it gives one, else the name its path says. */
+  const named = <Chip extends Extract<Segment, { kind: "chip" }>>(chip: Chip): Chip =>
+    chip.path === null ? chip : { ...chip, label: schemaTitle(schema, chip.path) ?? chip.label };
   const colors = palette.colors;
   const tag = target.tag;
   const textLike = TEXT_TAGS.has(tag);
@@ -360,7 +372,9 @@ export function DesignProperties({
     else commit([edit], label, control);
   };
 
-  const segments = contentSegments(source, target, textLike);
+  const segments = contentSegments(source, target, textLike).map((segment) =>
+    segment.kind === "chip" ? named(segment) : segment,
+  );
   const prop = (name: string) => target.properties.find((field) => field.name === name);
   const literalProps = target.properties.filter(
     (field) =>
@@ -382,14 +396,14 @@ export function DesignProperties({
   const samples = segments.map((segment, index) => {
     if (segment.kind !== "chip" || segment.path === null) return null;
     const bindingIndex = segments.slice(0, index).filter((item) => item.kind === "chip").length;
-    const named =
+    const inputPath =
       segment.path.length > 1 && ["input", "props"].includes(segment.path[0]!)
         ? segment.path.slice(1)
         : segment.path;
     return (
       (fixtureSource === null ? null : fixtureSample(fixtureSource, segment.path)) ??
-      (named.length === 1
-        ? variables.find((variable) => variable.name === named[0])?.sample
+      (inputPath.length === 1
+        ? variables.find((variable) => variable.name === inputPath[0])?.sample
         : undefined) ??
       fromRender[bindingIndex] ??
       null
@@ -413,6 +427,14 @@ export function DesignProperties({
     ?.slice(5);
   const renderedSize = rendered === null || rendered.fontSize <= 0 ? null : rendered.fontSize;
   const renderedWeight = rendered === null ? null : rendered.fontWeight;
+  const scheme =
+    rendered === null
+      ? "light"
+      : renderedScheme(
+          colors,
+          [rendered.color, rendered.backgroundColor],
+          rendered.prefersDark ? "dark" : "light",
+        );
   const sizes = sizeScale(entrySource, size, renderedSize);
   const align = tokens.find((token) => ALIGN.test(token))?.slice(5) ?? "left";
 
@@ -523,6 +545,7 @@ export function DesignProperties({
           rendered={
             rendered === null ? null : prefix === "text" ? rendered.color : rendered.backgroundColor
           }
+          scheme={scheme}
           disabled={!available}
           pending={pending(field)}
           onRefused={onRefused}
@@ -686,7 +709,9 @@ export function DesignProperties({
                     variant="secondary"
                     className="w-fit rounded-md font-mono text-[11px] font-normal"
                   >
-                    {chipOf(`{${field.value}}`)?.label ?? field.value}
+                    {((chip) => (chip === null ? field.value : named(chip).label))(
+                      chipOf(`{${field.value}}`),
+                    )}
                   </Badge>
                 </Field>
               ),

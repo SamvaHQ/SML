@@ -13,6 +13,8 @@ export interface RenderedStyle {
   /** 100–900. */
   readonly fontWeight: number;
   readonly fontFamily: string;
+  /** Whether the canvas frame prefers the dark scheme. */
+  readonly prefersDark: boolean;
   /** The element's text as rendered, whitespace collapsed. */
   readonly text: string;
 }
@@ -49,6 +51,7 @@ export const renderedStyleOf = (element: Element): RenderedStyle | null => {
     fontSize: Number.isFinite(size) ? size : 0,
     fontWeight: Number.isFinite(weight) ? weight : style.fontWeight === "bold" ? 700 : 400,
     fontFamily: style.fontFamily,
+    prefersDark: view.matchMedia("(prefers-color-scheme: dark)").matches,
     text: (element.textContent ?? "").replace(/\s+/g, " ").trim(),
   };
 };

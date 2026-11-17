@@ -1,4 +1,4 @@
-import { parseExpression } from "@babel/parser";
+import { parse, parseExpression } from "@babel/parser";
 
 import { sentence } from "./theme-tokens";
 
@@ -157,4 +157,130 @@ export const renderedSamples = (
     const value = match?.[index + 1]?.trim();
     return isAmbiguous || value === undefined || value === "" ? null : value;
   });
+};
+
+type Program = ReturnType<typeof parse>["program"];
+type Statement = Program["body"][number];
+
+/** The template's input schema as written: the object `defineTemplate`'s `schema` holds. */
+export type InputSchemaNode = ValueNode;
+
+const parseModule = (source: string): Program | null => {
+  // oxlint-disable-next-line samva/no-try-catch-or-throw -- Babel parser boundary: an entry that does not parse names its bindings from their paths.
+  try {
+    return parse(source, { sourceType: "module", plugins: ["typescript", "jsx"] }).program;
+  } catch {
+    return null;
+  }
+};
+
+/** The expressions a top-level statement evaluates: an export, a declaration's initializers. */
+const statementValues = (statement: Statement): ReadonlyArray<ValueNode> => {
+  switch (statement.type) {
+    case "ExportDefaultDeclaration":
+      return statement.declaration.type === "CallExpression" ||
+        statement.declaration.type === "Identifier"
+        ? [statement.declaration]
+        : [];
+    case "ExportNamedDeclaration":
+      return statement.declaration?.type === "VariableDeclaration"
+        ? statement.declaration.declarations.flatMap((item) =>
+            item.init == null ? [] : [item.init],
+          )
+        : [];
+    case "VariableDeclaration":
+      return statement.declarations.flatMap((item) => (item.init == null ? [] : [item.init]));
+    case "ExpressionStatement":
+      return [statement.expression];
+    default:
+      return [];
+  }
+};
+
+/** The initializer of a top-level `const name = …`. */
+const topLevelConst = (program: Program, name: string): ValueNode | null => {
+  for (const statement of program.body) {
+    const declaration =
+      statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+    if (declaration?.type !== "VariableDeclaration") continue;
+    for (const item of declaration.declarations)
+      if (item.id.type === "Identifier" && item.id.name === name && item.init != null)
+        return item.init;
+  }
+  return null;
+};
+
+/** `jsonSchema<T>({ … })`, a named constant, or an object with `as`/`satisfies`: the object. */
+const schemaObject = (program: Program, value: ValueNode, depth = 0): ValueNode | null => {
+  if (depth > 4) return null;
+  switch (value.type) {
+    case "ObjectExpression":
+      return value;
+    case "CallExpression": {
+      const first = value.arguments[0];
+      return first === undefined ||
+        first.type === "SpreadElement" ||
+        first.type === "ArgumentPlaceholder"
+        ? null
+        : schemaObject(program, first, depth + 1);
+    }
+    case "Identifier": {
+      const init = topLevelConst(program, value.name);
+      return init === null ? null : schemaObject(program, init, depth + 1);
+    }
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+      return schemaObject(program, value.expression, depth + 1);
+    default:
+      return null;
+  }
+};
+
+/** The input schema an entry's `defineTemplate({ schema })` declares, or null without one. */
+export const inputSchemaOf = (entrySource: string): InputSchemaNode | null => {
+  const program = parseModule(entrySource);
+  if (program === null) return null;
+  for (const statement of program.body)
+    for (const value of statementValues(statement)) {
+      const call =
+        value.type === "Identifier"
+          ? topLevelConst(program, value.name)
+          : (value as ValueNode | null);
+      if (
+        call?.type !== "CallExpression" ||
+        call.callee.type !== "Identifier" ||
+        call.callee.name !== "defineTemplate"
+      )
+        continue;
+      const definition = call.arguments[0];
+      if (definition?.type !== "ObjectExpression") continue;
+      const schema = member(definition, "schema");
+      return schema === null ? null : schemaObject(program, schema);
+    }
+  return null;
+};
+
+/**
+ * The `title` the input schema gives a bound path, walking `properties` (and `items` for a list
+ * position) from the input root. A path outside the input (a loop variable) has none.
+ */
+export const schemaTitle = (
+  schema: InputSchemaNode | null,
+  path: ReadonlyArray<string>,
+): string | null => {
+  if (schema === null || path.length < 2 || !ROOTS.has(path[0]!)) return null;
+  let node: ValueNode | null = schema;
+  for (const segment of path.slice(1)) {
+    if (node === null) return null;
+    if (/^\d+$/.test(segment)) {
+      node = member(node, "items");
+      continue;
+    }
+    const properties = member(node, "properties");
+    node = properties === null ? null : member(properties, segment);
+  }
+  if (node === null) return null;
+  const title = member(node, "title");
+  const text = title === null ? null : literal(title)?.trim();
+  return text === undefined || text === null || text === "" ? null : text;
 };

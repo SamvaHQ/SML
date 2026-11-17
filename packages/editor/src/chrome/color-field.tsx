@@ -8,8 +8,11 @@ import {
   colorLabel,
   displayColor,
   hexOf,
-  matchColor,
   isTransparent,
+  matchColor,
+  renderedScheme,
+  valueIn,
+  type ColorScheme,
   sourceLabel,
   type PaletteColor,
 } from "./theme-tokens";
@@ -131,24 +134,36 @@ export function PickerList({
   );
 }
 
-/** A color's swatch, with its dark value beside it when the theme sets one. */
+/**
+ * A color's swatch, with its dark value beside it when the theme sets one; the half the canvas
+ * renders is marked `data-active`.
+ */
 export function Swatch({
   value,
   dark,
+  scheme = "light",
 }: {
   readonly value: string | null;
   readonly dark?: string | undefined;
+  readonly scheme?: ColorScheme | undefined;
 }) {
   if (value === null) return null;
-  const dot = (color: string, mode: "light" | "dark") => (
-    <span
-      key={mode}
-      aria-hidden
-      data-mode={mode}
-      className="size-3.5 shrink-0 rounded-full border border-black/15 dark:border-white/20"
-      style={{ background: color }}
-    />
-  );
+  const dot = (color: string, mode: ColorScheme) => {
+    const active = dark === undefined || mode === scheme;
+    return (
+      <span
+        key={mode}
+        aria-hidden
+        data-mode={mode}
+        data-active={active ? "" : undefined}
+        className={cn(
+          "size-3.5 shrink-0 rounded-full border border-black/15 dark:border-white/20",
+          !active && "opacity-50",
+        )}
+        style={{ background: color }}
+      />
+    );
+  };
   return (
     <span data-slot="editor-design-swatch" className="flex shrink-0 items-center gap-0.5">
       {dot(value, "light")}
@@ -181,6 +196,11 @@ export interface ColorFieldProps {
   readonly custom: string | undefined;
   /** The color the element renders in, when the canvas can tell. */
   readonly rendered: string | null;
+  /**
+   * The scheme the canvas renders in; values shown are the ones it paints. Without one it is told
+   * from `rendered` (a token's dark value means dark).
+   */
+  readonly scheme?: ColorScheme | undefined;
   readonly disabled: boolean;
   readonly pending: boolean;
   /** Set the class to a palette color, a hex, or nothing (inherit). */
@@ -196,6 +216,7 @@ export function ColorField({
   token,
   custom,
   rendered,
+  scheme: givenScheme,
   disabled,
   pending,
   onChoose,
@@ -205,24 +226,40 @@ export function ColorField({
   const [hex, setHex] = useState(custom ?? "");
   const [editingCustom, setEditingCustom] = useState(false);
   const renderedColor = rendered === null || isTransparent(rendered) ? null : rendered;
+  const scheme =
+    givenScheme ??
+    (renderedColor === null ? "light" : renderedScheme(colors, [renderedColor], "light"));
   const inherited = token === undefined && custom === undefined;
-  const renderedMatch = renderedColor === null ? undefined : matchColor(colors, renderedColor);
+  const renderedMatch =
+    renderedColor === null ? undefined : matchColor(colors, renderedColor, scheme);
   const applied: {
     readonly name: string;
     readonly value: string | null;
     readonly dark?: string | undefined;
+    /** The value the canvas paints. */
+    readonly shown: string | null;
   } =
     token !== undefined
-      ? { name: colorLabel(token), value: token.value, dark: token.dark }
+      ? {
+          name: colorLabel(token),
+          value: token.value,
+          dark: token.dark,
+          shown: valueIn(token, scheme),
+        }
       : custom !== undefined
-        ? { name: "Custom", value: custom }
+        ? { name: "Custom", value: custom, shown: custom }
         : renderedMatch !== undefined
           ? {
               name: `Inherited · ${colorLabel(renderedMatch)}`,
               value: renderedMatch.value,
               dark: renderedMatch.dark,
+              shown: valueIn(renderedMatch, scheme),
             }
-          : { name: "Inherited", value: renderedColor === null ? null : hexOf(renderedColor) };
+          : {
+              name: "Inherited",
+              value: renderedColor === null ? null : hexOf(renderedColor),
+              shown: renderedColor === null ? null : hexOf(renderedColor),
+            };
 
   const choose = (choice: Parameters<ColorFieldProps["onChoose"]>[0]) => {
     setOpen(false);
@@ -240,8 +277,10 @@ export function ColorField({
       key: color.name,
       testId: `${testId}.${color.name}`,
       name: colorLabel(color),
-      detail: color.value === null ? undefined : displayColor(color.value),
-      leading: <Swatch value={color.value} dark={color.dark} />,
+      detail: ((shown) => (shown === null ? undefined : displayColor(shown)))(
+        valueIn(color, scheme),
+      ),
+      leading: <Swatch value={color.value} dark={color.dark} scheme={scheme} />,
       selected: token?.name === color.name,
       onChoose: () => choose({ token: color.name }),
     });
@@ -293,11 +332,11 @@ export function ColorField({
           />
         }
       >
-        <Swatch value={applied.value} dark={applied.dark} />
+        <Swatch value={applied.value} dark={applied.dark} scheme={scheme} />
         <span className="min-w-0 flex-1 truncate text-left text-[13px]">{applied.name}</span>
-        {applied.value !== null && (
+        {applied.shown !== null && (
           <span className="text-muted-foreground shrink-0 font-mono text-[11px]">
-            {displayColor(applied.value)}
+            {displayColor(applied.shown)}
           </span>
         )}
         {pending ? (

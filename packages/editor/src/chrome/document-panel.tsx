@@ -14,7 +14,7 @@ import { ColorField } from "./color-field";
 import { ChevronRight } from "./editor-icons";
 import { FixtureSelect } from "./preview-bar";
 import { FixtureSourceControls } from "./source-controls";
-import { fontFamilyName, useThemePalette } from "./theme-tokens";
+import { fontFamilyName, renderedScheme, useThemePalette } from "./theme-tokens";
 import { GroupLabel, Value } from "./ui";
 
 // What the inspector shows when nothing is selected: the email as a reader sees it (its page and
@@ -235,6 +235,15 @@ function PageBackground() {
         token={token}
         custom={custom}
         rendered={rendered?.backgroundColor ?? null}
+        scheme={
+          rendered === null
+            ? "light"
+            : renderedScheme(
+                palette.colors,
+                [rendered.backgroundColor],
+                rendered.prefersDark ? "dark" : "light",
+              )
+        }
         disabled={!available}
         pending={pendingHere && pendingEdit?.field === PAGE_BACKGROUND}
         onChoose={choose}
