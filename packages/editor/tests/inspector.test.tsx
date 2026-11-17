@@ -2,12 +2,13 @@
  * @vitest-environment happy-dom
  * @jsxImportSource react
  */
-import { afterEach, describe, expect, it } from "@effect/vitest";
+import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 
 import { Inspector } from "../src/chrome/inspector";
-import { useEditorStore } from "../src/state/context";
+import { useEditorStore, useEditorStoreApi } from "../src/state/context";
 import { EditorProvider } from "../src/state/provider";
+import type { EditorStore } from "../src/state/store";
 import { emitChange, mockEditor } from "./mock-host";
 
 afterEach(cleanup);
@@ -42,29 +43,163 @@ function Scopes() {
   );
 }
 
+/** Hands the provider's store to a test that has to set state the actions cannot reach. */
+function StoreHandle({ into }: { readonly into: { current: EditorStore | null } }) {
+  into.current = useEditorStoreApi();
+  return null;
+}
+
 const mountInspector = async () => {
   const editor = await mockEditor();
+  const store: { current: EditorStore | null } = { current: null };
   const view = render(
     <EditorProvider host={editor.host}>
+      <StoreHandle into={store} />
       <Scopes />
       <Inspector />
     </EditorProvider>,
   );
   await waitFor(() => expect(view.container.textContent).toContain("src/Welcome.tsx"));
-  return { editor, view };
+  return { editor, view, store };
 };
 
 describe("Inspector document scope", () => {
-  it("names the entry, the fixture on screen, and the declared variables", async () => {
+  it("opens on the email as a reader sees it, with the data behind it one step away", async () => {
+    const { view } = await mountInspector();
+    const text = view.getByTestId("inspector.document-panel").parentElement?.textContent ?? "";
+
+    expect(view.getByTestId("inspector").textContent).toContain("Email");
+    const order = [
+      "Click any part of the email to change it.",
+      "Page",
+      "Background",
+      "Preview with",
+      "Edit sample data",
+      "Where it's written",
+      "Variables",
+    ].map((heading) => text.indexOf(heading));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect(order).toEqual(order.toSorted((a, b) => a - b));
+    expect(view.getByTestId("inspector.document.hint").textContent).toBe(
+      "Click any part of the email to change it.",
+    );
+    // Values come from the fixture the picker selected, not from editable samples.
+    expect(text).toContain("values of the fixture selected above it");
+  });
+
+  it("previews with the fixture picker, naming the fixture on screen", async () => {
     const { view } = await mountInspector();
 
-    expect(view.container.textContent).toContain("Document");
-    expect(view.container.textContent).toContain("src/Welcome.tsx");
-    expect(view.container.textContent).toContain("welcome");
-    expect(view.container.textContent).toContain("firstName");
-    expect(view.container.textContent).toContain("claimUrl");
-    // Values come from the fixture the toolbar selected, not from editable samples.
-    expect(view.container.textContent).toContain("values of the fixture selected above it");
+    const picker = view.getByTestId("inspector.document.fixture") as HTMLSelectElement;
+    expect(picker.value).toBe("welcome");
+    expect([...picker.options].map((option) => option.value)).toEqual(["welcome", "returning"]);
+  });
+
+  it("keeps sample data and the file it is written in collapsed until opened", async () => {
+    const { view } = await mountInspector();
+
+    for (const id of ["inspector.document.sample-data", "inspector.document.written"]) {
+      expect(view.getByTestId(`${id}-toggle`).getAttribute("aria-expanded")).toBe("false");
+      expect(view.getByTestId(id).hasAttribute("hidden")).toBe(true);
+    }
+    // The sample data stays mounted while it is folded, so a host or test can still reach it.
+    expect(view.getByTestId("inspector.document.sample-data").textContent).toContain(
+      "Fixture data",
+    );
+    expect(view.getByTestId("inspector.document.entry").textContent).toBe("src/Welcome.tsx");
+    expect(view.getByTestId("inspector.document.width").textContent).toContain("600");
+
+    fireEvent.click(view.getByTestId("inspector.document.sample-data-toggle"));
+    await waitFor(() =>
+      expect(view.getByTestId("inspector.document.sample-data").hasAttribute("hidden")).toBe(false),
+    );
+    expect(view.getByTestId("inspector.document.written").hasAttribute("hidden")).toBe(true);
+  });
+
+  it("says why the preview cannot build, and undoes the last change", async () => {
+    const { editor, view } = await mountInspector();
+    expect(view.queryByTestId("inspector.document.error")).toBeNull();
+
+    await act(() => emitChange(editor, { origin: "external", broken: true }));
+    await waitFor(() => expect(view.queryByTestId("inspector.document.error")).not.toBeNull());
+    const error = view.getByTestId("inspector.document.error");
+    expect(error.getAttribute("role")).toBe("alert");
+    expect(error.textContent).toContain("The template entry did not compile.");
+    // Nothing to undo yet, so no button promises it.
+    expect(view.queryByTestId("inspector.document.undo")).toBeNull();
+  });
+
+  it("offers Undo beside the reason when the editor holds a change to take back", async () => {
+    const { editor, view, store } = await mountInspector();
+    await act(() => emitChange(editor, { origin: "external", broken: true }));
+    await waitFor(() => expect(view.queryByTestId("inspector.document.error")).not.toBeNull());
+
+    const undo = vi.fn();
+    act(() =>
+      store.current?.setState((state) => ({
+        undoHistory: [{ before: "<Email />", after: "<Email broken" }],
+        actions: { ...state.actions, undo },
+      })),
+    );
+    fireEvent.click(await view.findByTestId("inspector.document.undo"));
+    expect(undo).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Inspector page background", () => {
+  it("sets the Email's background to a theme colour as an ordinary Design edit", async () => {
+    const editor = await mockEditor();
+    const store: { current: EditorStore | null } = { current: null };
+    const host = {
+      ...editor.host,
+      theme: {
+        status: "ready" as const,
+        api: {
+          tokens: async () => ({
+            colors: [
+              { name: "background", value: "#f6f8fb", source: { kind: "project" as const } },
+              { name: "card", value: "#ffffff", source: { kind: "project" as const } },
+            ],
+            fonts: [
+              {
+                name: "heading",
+                family: '"Barlow Semi Condensed", sans-serif',
+                source: { kind: "brand" as const, name: "Pruuvo" },
+              },
+              {
+                name: "sans",
+                family: "Inter, sans-serif",
+                source: { kind: "brand" as const, name: "Pruuvo" },
+              },
+            ],
+          }),
+        },
+      },
+    };
+    const view = render(
+      <EditorProvider host={host}>
+        <StoreHandle into={store} />
+        <Inspector />
+      </EditorProvider>,
+    );
+    await waitFor(() => expect(view.getByTestId("inspector.document.fonts")).toBeTruthy());
+    expect(view.getByTestId("inspector.document.fonts").textContent).toBe(
+      "Barlow Semi Condensed · Interfrom Pruuvo",
+    );
+
+    const field = await waitFor(() => {
+      const trigger = view.getByTestId("inspector.document.background") as HTMLButtonElement;
+      expect(trigger.disabled).toBe(false);
+      return trigger;
+    });
+    expect(field.textContent).toContain("Background");
+    fireEvent.click(field);
+    fireEvent.click(await view.findByTestId("inspector.document.background.card"));
+
+    const state = store.current?.getState();
+    expect(state?.lastDesignEdit?.field).toBe("color.bg");
+    const written = state?.pendingAuthoredSource ?? state?.doc?.origin.authoredSource ?? "";
+    expect(written).toContain('backgroundColor="var(--color-card)"');
   });
 });
 
@@ -143,6 +278,6 @@ describe("Inspector element scope", () => {
 
     await act(() => emitChange(editor, { origin: "external", broken: true }));
     await waitFor(() => expect(view.queryByTestId("inspector.element-name")).toBeNull());
-    expect(view.container.textContent).toContain("Document");
+    expect(view.getByTestId("inspector.document-panel")).toBeTruthy();
   });
 });

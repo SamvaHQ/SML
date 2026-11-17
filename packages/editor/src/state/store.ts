@@ -7,6 +7,7 @@ import type {
   RenderTarget,
   FromDefault,
   RevisionToken,
+  SavedVersion,
 } from "@samva/editor/host";
 import type {
   AsyncAssetApi,
@@ -16,13 +17,14 @@ import type {
   AsyncVersionsApi,
   EditorEvent,
 } from "@samva/editor/host";
-import { isPageRender } from "@samva/editor/host";
+import { DocumentUnavailable, isPageRender } from "@samva/editor/host";
 import {
   applySourceReplacements,
   inspectMarkdownNode,
   type SourceElement,
   type SourceReplacement,
 } from "@samva/markup/edit";
+import { Predicate } from "effect";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 import type { DeviceMode } from "../canvas/device";
@@ -104,57 +106,187 @@ const RIGHT_MAX = 440;
  */
 export type CanvasMode = "point" | "design" | "pin";
 
-/** One staged Design edit: the entry before and after it, and what the author did. */
-export interface DesignEdit {
-  readonly label: string;
-  readonly before: string;
-  readonly after: string;
-  /** Consecutive edits under one key (typing in one field) are one staged edit. */
-  readonly key?: string | undefined;
+/** The preview before the first Design edit since the last saved version, which Compare shows. */
+export interface DesignBase {
+  /** The authored entry before the first edit. */
+  readonly source: string;
+  readonly render: EmailRender | null;
+}
+
+/** A version this session saved: the revision and number the host names it by, and the entry it holds. */
+export interface EditorSavedVersion extends SavedVersion {
+  readonly source: string;
+}
+
+/** Saving the draft as a version through the host's `versions`. */
+export interface VersionState {
+  readonly status: "idle" | "saving" | "failed";
+  /** Why the last save failed; null otherwise. */
+  readonly reason: string | null;
+  /** The last version this session saved. */
+  readonly saved: EditorSavedVersion | null;
+  /**
+   * The host's answer to whether the open revision is its saved version (`savedRevision`), with
+   * the revision it answered for. Asked again whenever the revision moves.
+   */
+  readonly head: {
+    readonly revision: RevisionToken;
+    readonly saved: SavedVersion | null;
+  } | null;
+  /**
+   * Where the draft last matched what this session counts from (it opened, or saved a version)
+   * on the undo history; see {@link changeCount}. Null once the draft holds changes it did not
+   * count, such as an assistant's or a restored version's.
+   */
+  readonly mark: HistoryMark | null;
 }
 
 /**
- * Design edits staged on the draft and not yet applied as a version. Each edit is in the draft
- * the host renders, so the preview shows it; Apply saves them all as one version, Reset writes
- * the entry back to what it was before the first.
+ * A point on the undo history: `depth` is the history's length there, and `fork` the deepest
+ * entry it still shares with the current history. A new edit made below `depth` discards the
+ * redo entries that led back to it, so the path to it runs down to `fork` and up again.
  */
-export interface DesignDraft {
-  /** The authored entry before the first staged edit. */
-  readonly baseSource: string;
-  /** The preview on screen before the first staged edit, which Compare shows. */
-  readonly baseRender: EmailRender | null;
-  readonly edits: ReadonlyArray<DesignEdit>;
-  /** Edits undone since the last new one, most recent last, for redo. */
-  readonly undone: ReadonlyArray<DesignEdit>;
+export interface HistoryMark {
+  readonly depth: number;
+  readonly fork: number;
 }
 
-export type DesignApplyState =
-  | { readonly status: "idle" }
-  | { readonly status: "applying" }
-  | { readonly status: "failed"; readonly reason: string };
+const markAt = (depth: number): HistoryMark => ({ depth, fork: depth });
 
-const DESIGN_IDLE: DesignApplyState = { status: "idle" };
-
-const STAGED_EDITS_FIRST = "Apply or reset your Design edits before editing the source.";
-
-/** The name of the version Apply saves. */
-export const designVersionMessage = (count: number): string =>
-  `Design: ${count} ${count === 1 ? "edit" : "edits"}`;
+/** The mark after a new entry is pushed onto a history `length` deep. */
+const markAfterPush = (mark: HistoryMark | null, length: number): HistoryMark | null =>
+  mark === null || length >= mark.depth ? mark : { ...mark, fork: Math.min(mark.fork, length) };
 
 /**
- * The host's chat waits while this is true: edits are staged, Apply is saving them, or Design
- * is writing the draft (an undo or a reset) and the host has not taken the write yet.
+ * The changes between the draft and the point the session counts from, in undo steps: an undo
+ * after a save is one change, and its redo is none. Null when the draft holds changes this
+ * session did not count.
  */
-export const designWaiting = (
-  state: Pick<EditorState, "designDraft" | "designApply" | "designSettling">,
-): boolean =>
-  (state.designDraft?.edits.length ?? 0) > 0 ||
-  state.designApply.status === "applying" ||
-  state.designSettling;
+export const changeCount = (state: Pick<EditorState, "version" | "undoHistory">): number | null => {
+  const { mark } = state.version;
+  if (mark === null) return null;
+  const length = state.undoHistory.length;
+  return mark.fork >= Math.min(length, mark.depth)
+    ? Math.abs(length - mark.depth)
+    : mark.depth - mark.fork + (length - mark.fork);
+};
 
-/** Staged Design edits waiting for Apply. */
-export const pendingDesignEdits = (state: Pick<EditorState, "designDraft">): number =>
-  state.designDraft?.edits.length ?? 0;
+/** The element an edit from the element controls targets: one rendered instance and one origin. */
+export interface DesignEditTarget {
+  readonly instancePath: string;
+  /** Which of the element's origins the edit changes (the element, or a call site). */
+  readonly originIndex: number;
+}
+
+/** The last edit made from the element controls, and the control that made it. */
+export interface DesignEdit extends DesignEditTarget {
+  /** The control, such as `color.text` or `size`; null when the edit names none. */
+  readonly field: string | null;
+}
+
+/** The element the assistant is pointed at, pinned to the render it was chosen in. */
+export interface AssistantTarget extends DesignEditTarget {
+  readonly revision: RevisionToken;
+  readonly fixture: string;
+}
+
+/** Where the draft stands against its saved versions, as the status bar and the assistant say it. */
+export type SaveStatus =
+  | { readonly kind: "loading" }
+  /** The host has not said yet whether the open revision is a saved version. */
+  | { readonly kind: "checking" }
+  | { readonly kind: "unsaved"; readonly changes: number | null }
+  /** A version is being saved; without `versions`, the draft itself is being written. */
+  | { readonly kind: "saving" }
+  /** The draft is a saved version; without `versions`, the draft is written. */
+  | { readonly kind: "saved"; readonly number?: number | undefined }
+  | {
+      readonly kind: "failed";
+      readonly reason: string;
+      /** What retrying does: save the version again, write the draft again, or reload it. */
+      readonly retry: "version" | "draft" | "reload";
+    };
+
+/** The undo key of Source-tab typing, and how long a pause ends one burst of it. */
+const SOURCE_TYPING = "source-typing";
+const SOURCE_TYPING_GROUP_MS = 1000;
+
+const LOADING: SaveStatus = { kind: "loading" };
+const CHECKING: SaveStatus = { kind: "checking" };
+const SAVING: SaveStatus = { kind: "saving" };
+const DRAFT_SAVED: SaveStatus = { kind: "saved" };
+
+/** The host's saved version for `revision`, when the host or this session saved it. */
+const savedVersionAt = (version: VersionState, revision: RevisionToken): SavedVersion | null => {
+  if (version.head?.revision === revision && version.head.saved !== null) return version.head.saved;
+  return version.saved?.revision === revision ? version.saved : null;
+};
+
+/**
+ * Where the draft stands. With `versions`, the draft is saved (it is a version), unsaved (it holds
+ * changes no version has), saving, or failed; without it, the status reports the draft's own
+ * writes. A draft that cannot be written, or that changed elsewhere under an edit, is failed
+ * either way.
+ */
+export const saveStatus = (
+  state: Pick<
+    EditorState,
+    | "doc"
+    | "pendingAuthoredSource"
+    | "conflict"
+    | "storageError"
+    | "version"
+    | "versionsCapability"
+    | "undoHistory"
+  >,
+): SaveStatus => {
+  const { doc, version } = state;
+  if (doc === null) return LOADING;
+  if (state.conflict)
+    return { kind: "failed", reason: "This template changed somewhere else.", retry: "reload" };
+  if (state.storageError !== null)
+    return { kind: "failed", reason: state.storageError, retry: "draft" };
+  const settled = state.pendingAuthoredSource === null;
+  if (state.versionsCapability?.status !== "ready") return settled ? DRAFT_SAVED : SAVING;
+  if (version.status === "saving") return SAVING;
+  if (version.status === "failed")
+    return {
+      kind: "failed",
+      reason: version.reason ?? "The version could not be saved.",
+      retry: "version",
+    };
+  const atRevision = savedVersionAt(version, doc.rev);
+  if (settled && atRevision !== null) return { kind: "saved", number: atRevision.number };
+  // Undoing back to what this session saved is the saved version again, whatever its revision,
+  // while every change since is one this session counted: a change to another project file (a
+  // theme or a shared part) leaves the entry as saved but not the version.
+  if (
+    settled &&
+    version.mark !== null &&
+    version.saved !== null &&
+    version.saved.source === doc.origin.authoredSource
+  )
+    return { kind: "saved", number: version.saved.number };
+  const changes = changeCount(state);
+  if (version.head?.revision !== doc.rev && (changes ?? 0) === 0 && settled) return CHECKING;
+  return { kind: "unsaved", changes };
+};
+
+/** The edit from the element controls still on its way to the preview, if there is one. */
+export const pendingDesignEdit = (
+  state: Pick<EditorState, "pendingAuthoredSource" | "lastDesignEdit">,
+): DesignEdit | null => (state.pendingAuthoredSource === null ? null : state.lastDesignEdit);
+
+/** A failure's own words, for "Couldn't save: …". */
+export const reasonOf = (cause: unknown, fallback: string): string => {
+  if (
+    Predicate.hasProperty(cause, "reason") &&
+    typeof cause.reason === "string" &&
+    cause.reason !== ""
+  )
+    return cause.reason;
+  return cause instanceof Error && cause.message !== "" ? cause.message : fallback;
+};
 
 const readStored = (key: string): string | null => {
   // oxlint-disable-next-line samva/no-try-catch-or-throw -- Browser localStorage adapter boundary (not Effect domain): access throws in private mode / SSR, so fall back to the default.
@@ -225,15 +357,26 @@ export interface EditorActions {
      */
     readonly coalesceKey?: string | undefined;
     /**
-     * Stage the edit as a Design edit under this label instead of adding it to the source
-     * history. The draft still renders it; Apply saves the staged edits as one version.
+     * A visual edit from Design or the element controls: what it does, and the control that made
+     * it (`color.text`, `size`), which shows as pending until the preview holds the edit. Its
+     * first edit since the last saved version keeps the preview for Compare.
      */
-    readonly design?: { readonly label: string } | undefined;
+    readonly design?: { readonly label: string; readonly field?: string | undefined } | undefined;
+    /**
+     * The element the edit was computed for. While an earlier edit is on its way to the preview,
+     * only an edit to the same element and origin is taken: its own start does not move when its
+     * attributes or children change, so its origin still points at it in the source the editor
+     * holds.
+     */
+    readonly target?: DesignEditTarget | undefined;
   }) => void;
-  /** Undo and redo also walk the staged Design edits while there are any. */
   readonly undo: () => void;
   readonly redo: () => void;
   readonly openSource: () => void;
+  /**
+   * Point the assistant at the selected element, at one of its origins, and bring the chat into
+   * view. In Design and pin mode this is the only way a selection reaches the assistant.
+   */
   readonly requestSourceAssistance: (originIndex: number) => void;
   /** Open Assistant with one exact finding from the current draft. */
   readonly requestDiagnosticAssistance: (check: CheckItem) => void;
@@ -271,6 +414,18 @@ export interface EditorActions {
   }) => void;
   /** Re-attempt the queued saves after a storage failure — non-destructive, keeps the source. */
   readonly retrySave: () => void;
+  /**
+   * Save the draft as a version through the host's `versions`: flush the draft, save it unless
+   * the open revision already is the saved version, and resolve the saved revision. One save runs
+   * at a time; a second call shares it. Rejects with the reason, also shown in the status bar,
+   * when it fails. Without `versions` it flushes the draft and resolves its revision.
+   */
+  readonly saveVersion: () => Promise<RevisionToken>;
+  /**
+   * Put the draft back to the saved version: the saved head through `lifecycle`, or, without it,
+   * the version this session saved. Rejects with the reason when it cannot.
+   */
+  readonly discardChanges: () => Promise<void>;
 
   /** Select one rendered instance; an unknown path falls back to document scope. */
   readonly select: (instancePath: string | null) => void;
@@ -322,17 +477,13 @@ export interface EditorActions {
   readonly breadcrumbOf: (instancePath: string) => ReadonlyArray<Crumb>;
   readonly setHovered: (instancePath: string | null) => void;
 
-  /**
-   * Point, Design or pin mode. Leaving Design is refused while edits are staged; apply or reset
-   * them first.
-   */
+  /** Point, Design or pin mode. Entering Design waits for an assistant turn to finish. */
   readonly setCanvasMode: (mode: CanvasMode) => void;
-  /** Write the entry back to what it was before the first staged Design edit. */
-  readonly resetDesign: () => void;
-  /** Show the preview from before the first staged edit until turned off or the draft moves. */
+  /**
+   * Show the preview from before the first Design edit since the last saved version, until
+   * turned off or the draft moves.
+   */
   readonly setDesignCompare: (on: boolean) => void;
-  /** Save the staged Design edits as one version through the host's `versions`. */
-  readonly applyDesign: () => void;
   /** Drop a numbered pin on a rendered element of the preview on screen. */
   readonly addPin: (instancePath: string) => void;
   /** Remove one pin; the pins after it move up one number. */
@@ -456,20 +607,26 @@ export interface EditorState {
   readonly hoveredCandidatePath: string | null;
   // ── design mode and pins
   readonly canvasMode: CanvasMode;
-  /** Staged Design edits; null when nothing has been staged since the last Apply or Reset. */
-  readonly designDraft: DesignDraft | null;
-  readonly designApply: DesignApplyState;
-  /** The canvas shows the preview from before the staged edits. */
-  readonly designCompare: boolean;
   /**
-   * Design's undo or reset is writing the draft and the writer has not accepted it yet, or the
-   * write failed. A reload clears it.
+   * The preview before the first Design edit, for Compare. Cleared when a version is saved, the
+   * draft is replaced, or the draft returns to it.
    */
-  readonly designSettling: boolean;
+  readonly designBase: DesignBase | null;
+  /** The canvas shows {@link designBase}'s preview. */
+  readonly designCompare: boolean;
+  /** The last edit from the element controls; see {@link pendingDesignEdit}. */
+  readonly lastDesignEdit: DesignEdit | null;
+  /** Saving the draft as a version; see {@link saveStatus}. */
+  readonly version: VersionState;
+  /**
+   * The element the assistant is pointed at. In point mode a selection points it; in Design and
+   * pin mode only {@link EditorActions.requestSourceAssistance} does. A mode change clears it.
+   */
+  readonly assistantTarget: AssistantTarget | null;
   readonly pins: ReadonlyArray<EditorPin>;
   /**
-   * The host reports an assistant turn at work. Design edits, entering Design and Apply wait for
-   * it, so a turn and the author never write the email at once.
+   * The host reports an assistant turn at work. Design edits and entering Design wait for it, so
+   * a turn and the author never write the email at once.
    */
   readonly hostBusy: boolean;
   readonly actions: EditorActions;
@@ -529,8 +686,32 @@ export const createEditorBundle = (
   let markdownEntrySource: string | null = null;
   // Revision tokens are opaque: retire each one as the writer or change stream advances past it.
   const obsoleteMarkdownRevisions = new Set<string>();
+  // Revisions an adopted one replaced while their own render was still on its way. That render,
+  // when it lands, shows the adopted revision rather than moving the document back.
+  const superseded = new Map<RevisionToken, RevisionToken>();
+  const supersede = (from: RevisionToken, to: RevisionToken): void => {
+    if (from === to) return;
+    for (const [earlier, adopted] of superseded) if (adopted === from) superseded.set(earlier, to);
+    superseded.set(from, to);
+  };
+  const adoptedChange = (change: DocumentChange): DocumentChange => {
+    const adopted = superseded.get(change.rev);
+    if (adopted === undefined) return change;
+    superseded.delete(change.rev);
+    return change.channel === "email" && change.render !== null
+      ? { ...change, rev: adopted, render: { ...change.render, revision: adopted } }
+      : { ...change, rev: adopted };
+  };
   let invalidateMarkdown: () => void = () => {};
   let cancelMarkdownWait: (() => void) | undefined;
+  // Resolves once every pending Markdown edit is written or dropped.
+  let settleMarkdown: () => Promise<void> = () => Promise.resolve();
+  let markdownIdleWaiters: Array<() => void> = [];
+  const releaseMarkdownWaiters = (): void => {
+    const waiters = markdownIdleWaiters;
+    markdownIdleWaiters = [];
+    for (const resolve of waiters) resolve();
+  };
 
   /**
    * An uneditable host, readonly document, active lifecycle operation, or a refresh still waiting
@@ -565,6 +746,64 @@ export const createEditorBundle = (
       ...derived,
       render: renderOf(doc),
       selection: resolveSelection(state.selection, doc, state.outline),
+      assistantTarget: resolveTarget(state.assistantTarget, doc, state.outline),
+    };
+  };
+
+  /** Rebind the assistant's element like a selection, or drop it when the element is gone. */
+  const resolveTarget = (
+    target: AssistantTarget | null,
+    doc: EditorDocument,
+    outline: EmailOutline | null,
+  ): AssistantTarget | null => {
+    if (target === null) return null;
+    const resolved = resolveSelection({ kind: "element", ...target }, doc, outline);
+    if (resolved.kind !== "element") return null;
+    return resolved.revision === target.revision && resolved.fixture === target.fixture
+      ? target
+      : { ...target, revision: resolved.revision, fixture: resolved.fixture };
+  };
+
+  /**
+   * Move the open document to `rev` without a new render, for a revision the host minted for
+   * the source the editor already holds (a saved version, or a save acked after its render).
+   * When the render on screen shows that source, it is the render of `rev` too: it, the
+   * selection, the assistant's element and the pins move with the revision, so a just-edited
+   * element stays current instead of falling behind a render that will not come.
+   */
+  const movedRevision = (
+    state: EditorState,
+    rev: RevisionToken,
+    authoredSource: string,
+  ): Partial<EditorState> | null => {
+    const { doc, render } = state;
+    if (
+      doc === null ||
+      doc.channel !== "email" ||
+      render === null ||
+      state.pendingAuthoredSource !== null ||
+      render.revision !== doc.rev ||
+      authoredSource !== doc.origin.authoredSource
+    )
+      return null;
+    const from = render.revision;
+    const moved = { ...render, revision: rev };
+    const { selection, assistantTarget, pageRender } = state;
+    return {
+      doc: { ...doc, rev, render: moved },
+      render: moved,
+      selection:
+        selection.kind === "element" && selection.revision === from
+          ? { ...selection, revision: rev }
+          : selection,
+      assistantTarget:
+        assistantTarget?.revision === from
+          ? { ...assistantTarget, revision: rev }
+          : assistantTarget,
+      pins: state.pins.some((pin) => pin.revision === from)
+        ? state.pins.map((pin) => (pin.revision === from ? { ...pin, revision: rev } : pin))
+        : state.pins,
+      pageRender: pageRender?.revision === from ? { ...pageRender, revision: rev } : pageRender,
     };
   };
 
@@ -648,6 +887,7 @@ export const createEditorBundle = (
         ...(ownedGate ? { lifecycleBusy: false } : {}),
         ...(hadEdits ? { sourceEditError: staleMarkdown } : {}),
       });
+      releaseMarkdownWaiters();
     };
     // Keep text typed during an unavailable write until the author's Retry has saved its base.
     // Waiting on the store also lets an external change or disposal cancel the continuation.
@@ -695,7 +935,7 @@ export const createEditorBundle = (
     const drainMarkdown = (): void => {
       if (markdownSaving || markdownTimer !== undefined) return;
       const next = pendingMarkdown.entries().next();
-      if (next.done === true) return;
+      if (next.done === true) return releaseMarkdownWaiters();
       const [instancePath, item] = next.value;
       pendingMarkdown.delete(instancePath);
       const target = markdownTarget(instancePath);
@@ -709,8 +949,10 @@ export const createEditorBundle = (
         refuseMarkdown(staleMarkdown);
         return drainMarkdown();
       }
-      if (target.kind === "project" && !actions.beginLifecycle())
-        return failMarkdown(staleMarkdown);
+      if (target.kind === "project" && !actions.beginLifecycle()) {
+        failMarkdown(staleMarkdown);
+        return releaseMarkdownWaiters();
+      }
       markdownSaving = true;
       markdownEntryRevision = target.kind === "entry" ? item.revision : null;
       markdownEntrySource = target.kind === "entry" ? target.source : null;
@@ -735,11 +977,7 @@ export const createEditorBundle = (
               markdown: { file: item.file },
             });
             if (!changed.ok) return refuseMarkdown(changed.reason);
-            const state = get();
-            set({
-              undoHistory: [...state.undoHistory, { before: target.source, after: changed.source }],
-              redoHistory: [],
-            });
+            set(pushedEntry(get(), { before: target.source, after: changed.source }));
             commitSource(changed.source, { markdownSpan: true });
             const revision = await flushMarkdownSource();
             if (generation !== markdownGeneration) return;
@@ -809,115 +1047,99 @@ export const createEditorBundle = (
           drainMarkdown();
         });
     };
+    settleMarkdown = () => {
+      // Text still inside its typing pause is written now rather than after it.
+      if (markdownTimer !== undefined) {
+        clearTimeout(markdownTimer);
+        markdownTimer = undefined;
+        drainMarkdown();
+      }
+      if (!markdownSaving && markdownTimer === undefined && pendingMarkdown.size === 0)
+        return Promise.resolve();
+      // A write that conflicts or cannot be stored refuses the wait; the text stays queued for
+      // the author's Retry.
+      const failure = (state: EditorState): DocumentUnavailable | null =>
+        state.conflict || state.storageError !== null
+          ? new DocumentUnavailable({
+              reason: state.storageError ?? "Your latest changes haven't reached the draft.",
+            })
+          : null;
+      const failed = failure(get());
+      if (failed !== null) return Promise.reject(failed);
+      return new Promise<void>((resolve, reject) => {
+        const unsubscribe = store.subscribe((state) => {
+          const cause = failure(state);
+          if (cause === null) return;
+          unsubscribe();
+          reject(cause);
+        });
+        markdownIdleWaiters.push(() => {
+          unsubscribe();
+          resolve();
+        });
+      });
+    };
+    // Typing in the Source tab is one undo step per burst: a keystroke within this long of the
+    // last one joins its step.
+    let sourceTypingAt = 0;
+    type HistoryEntry = EditorState["undoHistory"][number];
+    /** A new undo step; any other history change ends a burst of Source typing. */
+    const pushedEntry = (state: EditorState, entry: HistoryEntry): Partial<EditorState> => {
+      sourceTypingAt = 0;
+      return {
+        undoHistory: [...state.undoHistory, entry],
+        redoHistory: [],
+        version: {
+          ...state.version,
+          mark: markAfterPush(state.version.mark, state.undoHistory.length),
+        },
+      };
+    };
+    /**
+     * Whether an edit under `key` joins the last undo step: the same key, made on the source the
+     * editor holds, and after the last saved version, so a step never spans a save.
+     */
+    const joinsLastEntry = (state: EditorState, key: string | undefined): boolean => {
+      const last = state.undoHistory.at(-1);
+      const { mark } = state.version;
+      return (
+        key !== undefined &&
+        last?.key === key &&
+        last.after === state.doc?.origin.authoredSource &&
+        (mark === null || state.undoHistory.length > mark.depth)
+      );
+    };
+    // The version save in flight; a second call shares it.
+    let versionSave: Promise<RevisionToken> | null = null;
     const commitSource = (
       authoredSource: string,
       enqueueOptions?: {
         readonly coalesceKey?: string | undefined;
         readonly markdownSpan?: boolean | undefined;
+        /** The element-controls edit this write carries; any other write clears the last one. */
+        readonly designEdit?: DesignEdit | undefined;
       },
     ): void => {
       const state = get();
       if (state.doc === null) return;
       if (markdownEntryRevision !== null && enqueueOptions?.markdownSpan !== true)
         invalidateMarkdown();
+      // Back where Design started: nothing is left to compare.
+      const returned = state.designBase?.source === authoredSource;
       set({
         doc: withAuthoredSource(state.doc, authoredSource),
         pendingAuthoredSource: authoredSource,
         sourceEditError: null,
+        lastDesignEdit: enqueueOptions?.designEdit ?? null,
+        ...(returned ? { designBase: null, designCompare: false } : {}),
       });
       spine.enqueueAuthoredSource(authoredSource, {
         coalesceKey: enqueueOptions?.coalesceKey ?? "authored-source",
       });
     };
-    /**
-     * Hold the chat until the writer accepts a Design write. The spine's flush resolves once its
-     * queue drains; a conflict or a storage failure keeps the hold until a reload or a retry.
-     */
-    const settleDesignWrite = (): void => {
-      set({ designSettling: true });
-      spine.flushSaves().then(
-        () => {
-          const state = get();
-          if (!state.conflict && state.storageError === null) set({ designSettling: false });
-        },
-        () => {},
-      );
-    };
-    const designHistory = (direction: "undo" | "redo", draft: DesignDraft): void => {
-      const state = get();
-      if (state.doc === null || state.designApply.status === "applying") return;
-      const from = direction === "undo" ? draft.edits : draft.undone;
-      const entry = from.at(-1);
-      if (entry === undefined) return;
-      if (state.doc.origin.authoredSource !== (direction === "undo" ? entry.after : entry.before)) {
-        set({
-          sourceEditError:
-            "Your edits conflict with a newer change. Your current work is kept. Review the saved versions.",
-        });
-        return;
-      }
-      set({
-        designDraft:
-          direction === "undo"
-            ? { ...draft, edits: draft.edits.slice(0, -1), undone: [...draft.undone, entry] }
-            : { ...draft, undone: draft.undone.slice(0, -1), edits: [...draft.edits, entry] },
-        designCompare: false,
-        designApply: DESIGN_IDLE,
-      });
-      commitSource(direction === "undo" ? entry.before : entry.after);
-      settleDesignWrite();
-    };
-    /** Record a Design edit on the draft and write it, so the host renders it. */
-    const stageDesignEdit = (input: {
-      readonly before: string;
-      readonly after: string;
-      readonly label: string;
-      readonly key: string | undefined;
-    }): void => {
-      const state = get();
-      // With every staged edit undone, the next one starts a new draft from the source as it is
-      // now: the old base may predate a change made elsewhere since.
-      const fresh = state.designDraft === null || state.designDraft.edits.length === 0;
-      const draft: DesignDraft = fresh
-        ? { baseSource: input.before, baseRender: state.render, edits: [], undone: [] }
-        : state.designDraft;
-      const last = draft.edits.at(-1);
-      const merges =
-        input.key !== undefined && last?.key === input.key && last.after === input.before;
-      set({
-        // A new draft starts a new chronology: the source history before it is kept until Apply
-        // folds the batch in as one step, and its redo no longer applies.
-        ...(fresh ? { redoHistory: [] } : {}),
-        canvasMode: "design",
-        designCompare: false,
-        designApply: DESIGN_IDLE,
-        designDraft: {
-          ...draft,
-          edits: merges
-            ? [
-                ...draft.edits.slice(0, -1),
-                { label: input.label, before: last.before, after: input.after, key: input.key },
-              ]
-            : [
-                ...draft.edits,
-                { label: input.label, before: input.before, after: input.after, key: input.key },
-              ],
-          undone: [],
-        },
-      });
-      commitSource(input.after, { coalesceKey: input.key });
-    };
     const history = (direction: "undo" | "redo"): void => {
       const state = get();
       if (gated(state) || !state.sourceEditable || state.conflict || state.doc === null) return;
-      const draft = state.designDraft;
-      if (
-        draft !== null &&
-        (direction === "undo" ? draft.edits.length > 0 : draft.undone.length > 0)
-      ) {
-        designHistory(direction, draft);
-        return;
-      }
       const entries = direction === "undo" ? state.undoHistory : state.redoHistory;
       const entry = entries.at(-1);
       if (entry === undefined) return;
@@ -931,16 +1153,17 @@ export const createEditorBundle = (
       set(
         direction === "undo"
           ? {
-              // Stepping back past a draft's start leaves its undone edits nothing to redo onto.
-              designDraft: null,
               undoHistory: entries.slice(0, -1),
               redoHistory: [...state.redoHistory, entry],
+              designCompare: false,
             }
           : {
               redoHistory: entries.slice(0, -1),
               undoHistory: [...state.undoHistory, entry],
+              designCompare: false,
             },
       );
+      sourceTypingAt = 0;
       commitSource(direction === "undo" ? entry.before : entry.after);
     };
     /** The chat a request is addressed to comes into view, in every layout. */
@@ -1003,12 +1226,23 @@ export const createEditorBundle = (
           drainMarkdown();
         }, 300);
       },
-      requestSourceAssistance: (originIndex) =>
+      requestSourceAssistance: (originIndex) => {
+        const { selection } = get();
         set({
           assistantOriginIndex: originIndex,
+          assistantTarget:
+            selection.kind === "element"
+              ? {
+                  instancePath: selection.instancePath,
+                  revision: selection.revision,
+                  fixture: selection.fixture,
+                  originIndex,
+                }
+              : null,
           rightCollapsed: false,
           ...revealedChat(),
-        }),
+        });
+      },
       requestDiagnosticAssistance: (check) => {
         const state = get();
         if (
@@ -1037,15 +1271,36 @@ export const createEditorBundle = (
       applySourceEdit: (input) => {
         const state = get();
         if (gated(state) || !state.sourceEditable || state.conflict || state.doc === null) return;
-        if (
-          state.doc.rev !== input.revision ||
-          state.doc.origin.authoredSource !== input.source ||
-          (state.pendingAuthoredSource !== null && input.coalesceKey === undefined)
-        ) {
+        // While an edit is on its way, the render's origins only still point into the source the
+        // editor holds for the element that edit changed.
+        const pending = pendingDesignEdit(state);
+        const continues =
+          input.target !== undefined &&
+          pending !== null &&
+          pending.instancePath === input.target.instancePath &&
+          pending.originIndex === input.target.originIndex;
+        if (state.pendingAuthoredSource !== null && input.coalesceKey === undefined && !continues) {
+          set({ sourceEditError: "Wait for your last change to reach the preview." });
+          return;
+        }
+        // An edit computed from the render's origins needs that render to show the source it
+        // edits (or to be the one its element's own pending edit started from); any other edit
+        // is computed against the draft revision.
+        const renderCurrent =
+          state.pendingAuthoredSource === null && state.render?.revision === state.doc.rev;
+        const fresh =
+          input.target === undefined
+            ? input.revision === state.doc.rev
+            : input.revision === state.render?.revision && (renderCurrent || continues);
+        if (state.doc.origin.authoredSource !== input.source || !fresh) {
           set({
             sourceEditError:
               "That edit is stale. The preview moved on. Reselect the element and try again.",
           });
+          return;
+        }
+        if (input.design !== undefined && state.hostBusy) {
+          set({ sourceEditError: "Design waits for the assistant to finish." });
           return;
         }
         // An edit that would leave the static profile is refused where the author can read why.
@@ -1061,42 +1316,36 @@ export const createEditorBundle = (
           return;
         }
         if (result.source === input.source) return;
-        if (input.design !== undefined) {
-          if (state.hostBusy) {
-            set({ sourceEditError: "Design waits for the assistant to finish." });
-            return;
-          }
-          stageDesignEdit({
-            before: input.source,
-            after: result.source,
-            label: input.design.label,
-            key: input.coalesceKey,
-          });
-          return;
-        }
-        if (pendingDesignEdits(state) > 0) {
-          set({ sourceEditError: STAGED_EDITS_FIRST });
-          return;
-        }
         const last = state.undoHistory.at(-1);
-        const merges =
-          input.coalesceKey !== undefined &&
-          last?.key === input.coalesceKey &&
-          last.after === input.source;
         set({
-          designDraft: null,
-          undoHistory: merges
-            ? [
-                ...state.undoHistory.slice(0, -1),
-                { before: last.before, after: result.source, key: input.coalesceKey },
-              ]
-            : [
-                ...state.undoHistory,
-                { before: input.source, after: result.source, key: input.coalesceKey },
-              ],
-          redoHistory: [],
+          ...(last !== undefined && joinsLastEntry(state, input.coalesceKey)
+            ? {
+                undoHistory: [
+                  ...state.undoHistory.slice(0, -1),
+                  { before: last.before, after: result.source, key: input.coalesceKey },
+                ],
+                redoHistory: [],
+              }
+            : pushedEntry(state, {
+                before: input.source,
+                after: result.source,
+                key: input.coalesceKey,
+              })),
+          ...(input.design === undefined
+            ? {}
+            : {
+                designBase: state.designBase ?? { source: input.source, render: state.render },
+                designCompare: false,
+              }),
         });
-        commitSource(result.source, { coalesceKey: input.coalesceKey });
+        sourceTypingAt = 0;
+        commitSource(result.source, {
+          coalesceKey: input.coalesceKey,
+          designEdit:
+            input.design === undefined || input.target === undefined
+              ? undefined
+              : { ...input.target, field: input.design.field ?? null },
+        });
       },
       replaceAuthoredSource: (authoredSource) => {
         const state = get();
@@ -1109,19 +1358,29 @@ export const createEditorBundle = (
         ) {
           return;
         }
-        if (pendingDesignEdits(state) > 0) {
-          set({ sourceEditError: STAGED_EDITS_FIRST });
-          return;
-        }
-        set({
-          designDraft: null,
-          undoHistory: [
-            ...state.undoHistory,
-            { before: state.doc.origin.authoredSource, after: authoredSource },
-          ],
-          redoHistory: [],
-        });
+        const now = Date.now();
+        const last = state.undoHistory.at(-1);
+        const typing =
+          last !== undefined &&
+          now - sourceTypingAt < SOURCE_TYPING_GROUP_MS &&
+          joinsLastEntry(state, SOURCE_TYPING);
+        set(
+          typing
+            ? {
+                undoHistory: [
+                  ...state.undoHistory.slice(0, -1),
+                  { ...last, after: authoredSource },
+                ],
+                redoHistory: [],
+              }
+            : pushedEntry(state, {
+                before: state.doc.origin.authoredSource,
+                after: authoredSource,
+                key: SOURCE_TYPING,
+              }),
+        );
         commitSource(authoredSource);
+        sourceTypingAt = now;
       },
 
       viewFixture: (fixture) => {
@@ -1165,7 +1424,7 @@ export const createEditorBundle = (
       reload: () => {
         if (get().lifecycleBusy) return;
         if (get().doc?.origin.kind === "markdown") invalidateMarkdown();
-        set({ conflict: false, storageError: null, fixtureError: null, designSettling: false });
+        set({ conflict: false, storageError: null, fixtureError: null });
         spine.reload();
       },
 
@@ -1200,17 +1459,47 @@ export const createEditorBundle = (
           invalidateMarkdown();
         }
         spine.adoptRev(input.rev);
+        sourceTypingAt = 0;
         set((current) => {
           if (current.doc === null) return { conflict: false };
+          // A version save in flight keeps its status; a failure no longer applies.
+          const same = input.authoredSource === current.doc.origin.authoredSource;
+          // The entry as it was under a new revision: another project file changed, so the
+          // changes this session counted no longer describe the draft.
+          const projectMoved = same && input.rev !== current.doc.rev;
+          const version: VersionState = {
+            ...current.version,
+            ...(current.version.status === "failed" ? { status: "idle", reason: null } : {}),
+            ...(projectMoved ? { mark: null } : {}),
+          };
+          // The same source while its render is still on its way: only the revision moves. The
+          // edit stays pending, and its own render, when it lands, is the adopted revision's.
+          if (same && current.pendingAuthoredSource !== null) {
+            supersede(current.doc.rev, input.rev);
+            return {
+              doc: { ...current.doc, rev: input.rev },
+              conflict: false,
+              sourceEditError: null,
+              version,
+            };
+          }
+          const settled = { conflict: false, sourceEditError: null, lastDesignEdit: null, version };
+          // The same source under a new revision, such as a saved version, keeps its render.
+          const moved = movedRevision(current, input.rev, input.authoredSource);
+          if (moved !== null) return { ...moved, ...settled };
           const doc = { ...withAuthoredSource(current.doc, input.authoredSource), rev: input.rev };
-          // A restore replaces the entry, so edits staged on the old one no longer apply.
-          const replaced = input.authoredSource !== current.doc.origin.authoredSource;
+          // A restore replaces the entry: Compare's base and the change count no longer apply.
           return {
             ...committedDocument(current, doc, null),
+            ...settled,
             sourceEditable: sourceEditableFor(doc),
-            conflict: false,
-            sourceEditError: null,
-            ...(replaced ? { designDraft: null, designCompare: false } : {}),
+            ...(same
+              ? {}
+              : {
+                  designBase: null,
+                  designCompare: false,
+                  version: { ...version, mark: null },
+                }),
           };
         });
       },
@@ -1218,19 +1507,164 @@ export const createEditorBundle = (
       retrySave: () => {
         if (gated(get())) return;
         spine.retrySave();
-        if (get().designSettling) settleDesignWrite();
+      },
+
+      saveVersion: () => {
+        if (versionSave !== null) return versionSave;
+        const state = get();
+        const versions =
+          state.versionsCapability?.status === "ready" ? state.versionsCapability.api : undefined;
+        // Without versions, keeping the draft is the save: every pending edit written, and refused
+        // when a write conflicted or could not be stored.
+        if (versions === undefined)
+          return settleMarkdown()
+            .then(() => spine.flushSaves())
+            .then((revision) => {
+              const settled = get();
+              return settled.doc === null || settled.conflict || settled.storageError !== null
+                ? Promise.reject(
+                    new DocumentUnavailable({
+                      reason:
+                        settled.storageError ?? "Your latest changes haven't reached the draft.",
+                    }),
+                  )
+                : revision;
+            });
+        const { doc } = state;
+        if (
+          doc !== null &&
+          state.pendingAuthoredSource === null &&
+          savedVersionAt(state.version, doc.rev) !== null
+        ) {
+          if (state.version.status === "failed")
+            set({ version: { ...state.version, status: "idle", reason: null } });
+          return Promise.resolve(doc.rev);
+        }
+        if (!actions.beginLifecycle())
+          return Promise.reject(
+            new DocumentUnavailable({
+              reason: "Another change is still being saved. Try again in a moment.",
+            }),
+          );
+        set({ version: { ...state.version, status: "saving", reason: null } });
+        const saving = spine
+          .flushSaves()
+          .then(async (revision) => {
+            const settled = get();
+            // A write that conflicted or could not be stored leaves the draft without the latest
+            // changes; a version saved now would not hold them.
+            if (settled.doc === null || settled.conflict || settled.storageError !== null)
+              return Promise.reject(
+                new DocumentUnavailable({
+                  reason: settled.storageError ?? "Your latest changes haven't reached the draft.",
+                }),
+              );
+            if (savedVersionAt(settled.version, revision) !== null) {
+              set((latest) => ({ version: { ...latest.version, status: "idle", reason: null } }));
+              return revision;
+            }
+            const snapshot = settled.doc;
+            const saved = await versions.save(revision);
+            const changes = changeCount(get());
+            const current = get().doc;
+            // Adopt the saved revision only when nothing moved under the save; a later edit owns
+            // the revision fence instead.
+            if (
+              (current?.rev === revision || current?.rev === saved.revision) &&
+              current.origin.authoredSource === snapshot.origin.authoredSource
+            ) {
+              actions.adoptLifecycleSnapshot({
+                rev: saved.revision,
+                authoredSource: snapshot.origin.authoredSource,
+              });
+            }
+            sourceTypingAt = 0;
+            set((latest) => ({
+              designBase: null,
+              designCompare: false,
+              version: {
+                status: "idle",
+                reason: null,
+                saved: { ...saved, source: snapshot.origin.authoredSource },
+                head: { revision: saved.revision, saved },
+                // Changes count from here; one from elsewhere that landed during the save is not
+                // in the version.
+                mark:
+                  latest.doc?.origin.authoredSource === snapshot.origin.authoredSource
+                    ? markAt(latest.undoHistory.length)
+                    : null,
+              },
+            }));
+            state.telemetry?.({ name: "version.save", data: { changes: changes ?? 0 } });
+            return saved.revision;
+          })
+          .catch((cause: unknown) => {
+            set((latest) => ({
+              version: {
+                ...latest.version,
+                status: "failed",
+                reason: reasonOf(cause, "The version could not be saved."),
+              },
+            }));
+            return Promise.reject(cause);
+          })
+          .finally(() => {
+            actions.endLifecycle();
+            versionSave = null;
+          });
+        versionSave = saving;
+        return saving;
+      },
+
+      discardChanges: async () => {
+        const state = get();
+        const refuse = (reason: string) => Promise.reject(new DocumentUnavailable({ reason }));
+        if (gated(state) || !state.sourceEditable || state.conflict || state.doc === null)
+          return refuse("This template can't be changed right now.");
+        const lifecycle =
+          state.lifecycleCapability?.status === "ready" ? state.lifecycleCapability.api : undefined;
+        if (lifecycle === undefined) {
+          const saved = state.version.saved;
+          if (saved === null) return refuse("There is no saved version to go back to.");
+          if (saved.source === state.doc.origin.authoredSource) return;
+          set({
+            ...pushedEntry(state, { before: state.doc.origin.authoredSource, after: saved.source }),
+            version: { ...state.version, mark: markAt(state.undoHistory.length + 1) },
+          });
+          commitSource(saved.source);
+          return;
+        }
+        if (!actions.beginLifecycle())
+          return refuse("Another change is still being saved. Try again in a moment.");
+        return spine
+          .flushSaves()
+          .then(() => lifecycle.inspect())
+          .then(async (project) => {
+            const head = project.commits.find((commit) => commit.isHead);
+            if (head === undefined) return refuse("There is no saved version to go back to.");
+            const restored = await lifecycle.restore({
+              commit: head.commit,
+              baseRev: await spine.flushSaves(),
+            });
+            actions.adoptLifecycleSnapshot(restored);
+            set((latest) => ({
+              version: { ...latest.version, mark: markAt(latest.undoHistory.length) },
+            }));
+          })
+          .finally(() => actions.endLifecycle());
       },
 
       select: (instancePath) => {
         set((current) => {
-          if (instancePath === null) return { selection: DOCUMENT_SELECTION };
+          const cleared = {
+            selection: DOCUMENT_SELECTION,
+            ...(current.canvasMode === "point" ? { assistantTarget: null } : {}),
+          };
+          if (instancePath === null) return cleared;
           const { render, doc } = current;
-          if (render === null || doc?.channel !== "email" || doc.fixture === null) {
-            return { selection: DOCUMENT_SELECTION };
-          }
-          if (!render.selections.some((entry) => entry.instancePath === instancePath)) {
-            return { selection: DOCUMENT_SELECTION };
-          }
+          if (render === null || doc?.channel !== "email" || doc.fixture === null) return cleared;
+          if (!render.selections.some((entry) => entry.instancePath === instancePath))
+            return cleared;
           // The layers around a selection open, so the selected row is on screen.
           const collapsed = new Set(current.collapsedLayers);
           if (current.outline !== null) {
@@ -1238,14 +1672,19 @@ export const createEditorBundle = (
               collapsed.delete(ancestor);
             }
           }
+          const selection = {
+            kind: "element" as const,
+            instancePath,
+            revision: render.revision,
+            fixture: doc.fixture,
+          };
           return {
             assistantOriginIndex: 0,
-            selection: {
-              kind: "element",
-              instancePath,
-              revision: render.revision,
-              fixture: doc.fixture,
-            },
+            selection,
+            // Pointing is what a click means in point mode; Design and pins point only on request.
+            ...(current.canvasMode === "point"
+              ? { assistantTarget: { ...selection, originIndex: 0 } }
+              : {}),
             collapsedLayers: collapsed,
           };
         });
@@ -1258,8 +1697,16 @@ export const createEditorBundle = (
           });
         }
       },
-      selectDocument: () => set({ selection: DOCUMENT_SELECTION }),
-      selectEnvelope: () => set({ selection: ENVELOPE_SELECTION }),
+      selectDocument: () =>
+        set((current) => ({
+          selection: DOCUMENT_SELECTION,
+          ...(current.canvasMode === "point" ? { assistantTarget: null } : {}),
+        })),
+      selectEnvelope: () =>
+        set((current) => ({
+          selection: ENVELOPE_SELECTION,
+          ...(current.canvasMode === "point" ? { assistantTarget: null } : {}),
+        })),
 
       toggleLeft: () => set((current) => ({ leftCollapsed: !current.leftCollapsed })),
       toggleRight: () => set((current) => ({ rightCollapsed: !current.rightCollapsed })),
@@ -1472,129 +1919,20 @@ export const createEditorBundle = (
       setCanvasMode: (mode) => {
         const state = get();
         if (state.canvasMode === mode) return;
-        if (state.canvasMode === "design" && designWaiting(state)) return;
         if (mode === "design" && state.hostBusy) return;
         set({
           canvasMode: mode,
-          designDraft: mode === "design" ? state.designDraft : null,
           designCompare: false,
-          designApply: DESIGN_IDLE,
           hoveredCandidatePath: null,
+          // The assistant's element was chosen for the mode being left.
+          assistantTarget: null,
         });
-      },
-
-      resetDesign: () => {
-        const state = get();
-        const draft = state.designDraft;
-        if (
-          draft === null ||
-          draft.edits.length === 0 ||
-          gated(state) ||
-          !state.sourceEditable ||
-          state.conflict ||
-          state.doc === null
-        )
-          return;
-        if (state.doc.origin.authoredSource !== draft.edits.at(-1)?.after) {
-          set({
-            sourceEditError:
-              "Your edits conflict with a newer change, so they can't be reset here. Review the saved versions.",
-          });
-          return;
-        }
-        set({ designDraft: null, designCompare: false, designApply: DESIGN_IDLE });
-        commitSource(draft.baseSource);
-        settleDesignWrite();
       },
 
       setDesignCompare: (on) => {
         const state = get();
-        const comparable =
-          state.designDraft !== null &&
-          state.designDraft.edits.length > 0 &&
-          state.designDraft.baseRender !== null;
-        const next = on && comparable;
+        const next = on && state.designBase?.render != null;
         if (state.designCompare !== next) set({ designCompare: next });
-      },
-
-      applyDesign: () => {
-        const state = get();
-        const draft = state.designDraft;
-        if (
-          draft === null ||
-          draft.edits.length === 0 ||
-          state.designApply.status === "applying" ||
-          state.hostBusy
-        )
-          return;
-        const count = draft.edits.length;
-        // Without saved versions the edits stay in the draft once it holds them: Apply keeps them.
-        const versions =
-          state.versionsCapability?.status === "ready" ? state.versionsCapability.api : undefined;
-        if (!actions.beginLifecycle()) return;
-        set({ designApply: { status: "applying" }, designCompare: false });
-        void spine
-          .flushSaves()
-          .then(async (revision) => {
-            const settled = get();
-            // A staged write that conflicted or could not be stored leaves the draft without the
-            // edits; saving a version then would name edits it does not hold.
-            if (
-              settled.doc === null ||
-              settled.conflict ||
-              settled.storageError !== null ||
-              settled.doc?.origin.authoredSource !== draft.edits.at(-1)?.after
-            ) {
-              set({
-                designApply: {
-                  status: "failed",
-                  reason: "Your edits haven't reached the draft, so no version was saved.",
-                },
-              });
-              return;
-            }
-            const snapshot = settled.doc;
-            const saved =
-              versions === undefined
-                ? revision
-                : await versions.save(revision, { message: designVersionMessage(count) });
-            const current = get().doc;
-            // Adopt the saved revision only when nothing moved under the save.
-            if (
-              versions !== undefined &&
-              (current?.rev === revision || current?.rev === saved) &&
-              current.origin.authoredSource === snapshot.origin.authoredSource
-            ) {
-              actions.adoptLifecycleSnapshot({
-                rev: saved,
-                authoredSource: snapshot.origin.authoredSource,
-              });
-            }
-            // The applied batch becomes one step of the source history, so Undo after Apply
-            // reverts it as a whole.
-            set((latest) => ({
-              designDraft: null,
-              designApply: DESIGN_IDLE,
-              undoHistory: [
-                ...latest.undoHistory,
-                { before: draft.baseSource, after: snapshot.origin.authoredSource },
-              ],
-              redoHistory: [],
-            }));
-            state.telemetry?.({ name: "design.apply", data: { edits: count } });
-          })
-          .catch((cause: unknown) =>
-            set({
-              designApply: {
-                status: "failed",
-                reason:
-                  cause instanceof Error && cause.message !== ""
-                    ? cause.message
-                    : "The version could not be saved.",
-              },
-            }),
-          )
-          .finally(() => actions.endLifecycle());
       },
 
       addPin: (instancePath) => {
@@ -1719,10 +2057,11 @@ export const createEditorBundle = (
       draftSavedAt: null,
       hoveredCandidatePath: null,
       canvasMode: "point",
-      designDraft: null,
-      designApply: DESIGN_IDLE,
+      designBase: null,
       designCompare: false,
-      designSettling: false,
+      lastDesignEdit: null,
+      version: { status: "idle", reason: null, saved: null, head: null, mark: markAt(0) },
+      assistantTarget: null,
       pins: [],
       hostBusy: false,
       actions,
@@ -1751,6 +2090,7 @@ export const createEditorBundle = (
 
   spine = createEditorSpine(host, {
     onInitial: (doc) => {
+      superseded.clear();
       obsoleteMarkdownRevisions.clear();
       store.setState((current) => ({
         ...committedDocument(current, doc, null),
@@ -1758,6 +2098,15 @@ export const createEditorBundle = (
         editable: host.access === "editable" && doc.access.kind !== "readonly",
         sourceEditable: sourceEditableFor(doc),
         readonlyReason: doc.access.kind === "readonly" ? doc.access.reason : null,
+        // A (re)opened document replaces whatever the editor held; counting starts again.
+        designBase: null,
+        designCompare: false,
+        lastDesignEdit: null,
+        version: {
+          ...current.version,
+          ...(current.version.status === "failed" ? { status: "idle", reason: null } : {}),
+          mark: markAt(current.undoHistory.length),
+        },
       }));
     },
     onPersistedRevision: (rev) => {
@@ -1769,13 +2118,20 @@ export const createEditorBundle = (
         }
         if (snapshot.doc.rev !== rev) obsoleteMarkdownRevisions.add(snapshot.doc.rev);
       }
-      store.setState((current) =>
-        current.doc === null ? current : { doc: { ...current.doc, rev }, draftSavedAt: Date.now() },
-      );
+      store.setState((current) => {
+        if (current.doc === null) return current;
+        // An ack that names a later revision for the source already on screen keeps the render.
+        const moved =
+          rev === current.doc.rev
+            ? null
+            : movedRevision(current, rev, current.doc.origin.authoredSource);
+        return { ...(moved ?? { doc: { ...current.doc, rev } }), draftSavedAt: Date.now() };
+      });
     },
     // Our own acked save came back with the render the host produced for it.
     // Local text that has moved on since is kept; everything else is the host's.
-    onSelfAck: (change) => {
+    onSelfAck: (received) => {
+      const change = adoptedChange(received);
       const snapshot = store.getState();
       if (snapshot.doc?.origin.kind === "markdown") {
         if (snapshot.conflict || obsoleteMarkdownRevisions.has(change.rev)) return;
@@ -1783,7 +2139,17 @@ export const createEditorBundle = (
         if (snapshot.doc.fixture !== change.fixture) invalidateMarkdown();
         if (snapshot.doc.rev !== change.rev) obsoleteMarkdownRevisions.add(snapshot.doc.rev);
       }
+      // A new revision with no entry write of ours on its way and the entry unchanged: another
+      // project file changed (a theme or a shared part), which the change count does not cover.
+      const projectMoved =
+        snapshot.doc !== null &&
+        snapshot.pendingAuthoredSource === null &&
+        change.rev !== snapshot.doc.rev &&
+        (change.authoredSource === undefined ||
+          change.authoredSource === snapshot.doc.origin.authoredSource);
       applyChange(change, true);
+      if (projectMoved)
+        store.setState((current) => ({ version: { ...current.version, mark: null } }));
     },
     onForeignChange: (change, saveInFlight) => {
       const snapshot = store.getState();
@@ -1809,8 +2175,14 @@ export const createEditorBundle = (
         return;
       }
       applyChange(change, false);
+      // Someone else's change: the draft is no longer what Design started from, and the count
+      // of changes no longer covers it.
       store.setState((current) => ({
         sourceEditable: sourceEditableFor(current.doc),
+        designBase: null,
+        designCompare: false,
+        lastDesignEdit: null,
+        version: { ...current.version, mark: null },
       }));
     },
     onConflict: () => store.setState({ conflict: true, sourceEditable: false }),
@@ -1822,6 +2194,32 @@ export const createEditorBundle = (
 
   store.subscribe((state, previous) => {
     if (state.pins !== previous.pins) pinsListener?.(state.pins);
+  });
+
+  // Whether the open revision is a saved version is the host's to say; ask whenever it moves.
+  let headRequest = 0;
+  store.subscribe((state, previous) => {
+    const revision = state.doc?.rev;
+    const versions = state.versionsCapability;
+    if (revision === undefined || revision === previous.doc?.rev || versions?.status !== "ready")
+      return;
+    headRequest += 1;
+    const request = headRequest;
+    const answer = (saved: SavedVersion | null) => {
+      if (request !== headRequest || store.getState().doc?.rev !== revision) return;
+      const found = saved?.revision === revision ? saved : null;
+      store.setState((current) => ({
+        version: {
+          ...current.version,
+          head: { revision, saved: found },
+          // A draft that is a saved version holds no uncounted changes.
+          ...(found !== null && current.pendingAuthoredSource === null
+            ? { mark: markAt(current.undoHistory.length) }
+            : {}),
+        },
+      }));
+    };
+    void versions.api.savedRevision().then(answer, () => answer(null));
   });
 
   // The web page is the host's render of the same revision and fixture the email shows, so it is
@@ -1878,6 +2276,8 @@ export const createEditorBundle = (
         cancelMarkdownWait?.();
         if (markdownTimer !== undefined) clearTimeout(markdownTimer);
         markdownTimer = undefined;
+        markdownSaving = false;
+        releaseMarkdownWaiters();
         store.setState({ lifecycleBusy: false });
         spine.dispose();
       },

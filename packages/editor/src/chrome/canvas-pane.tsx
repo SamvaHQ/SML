@@ -14,7 +14,7 @@ import { useShallow } from "zustand/react/shallow";
 import { DESKTOP_WIDTH, MOBILE_WIDTH } from "../canvas/device";
 import { EmailFrame } from "../canvas/email-frame";
 import { PageFrame } from "../canvas/page-frame";
-import { SelectionOverlay } from "../canvas/selection-overlay";
+import { SelectionOverlay, type SelectedGeometry } from "../canvas/selection-overlay";
 import {
   isZoomWheel,
   zoomFromWheel,
@@ -30,7 +30,7 @@ import { CheckActions } from "./check-actions";
 import { CheckDetails } from "./check-details";
 import { useContributions } from "./contributions";
 import { EditorDesignDock, EditorPinTray } from "./design-controls";
-import { DesignToolbar } from "./design-toolbar";
+import { FloatingDesignToolbar } from "./design-toolbar";
 import { outlineAncestry, selectionLabel } from "./email-outline";
 import { EnvelopeCard } from "./envelope-card";
 import { nearestAuthored } from "./friendly";
@@ -97,7 +97,7 @@ export function CanvasPane({
       canvasZoom: state.canvasZoom,
       previewEpoch: state.previewEpoch,
       canvasMode: state.canvasMode,
-      beforeEdits: state.designCompare ? (state.designDraft?.baseRender ?? null) : null,
+      beforeEdits: state.designCompare ? (state.designBase?.render ?? null) : null,
       pins: state.pins,
       sourceEditable: state.sourceEditable,
       previewTarget: state.pageAvailable ? state.previewTarget : "email",
@@ -120,6 +120,7 @@ export function CanvasPane({
   const canvasOverlays = useContributions("canvas.overlay");
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(1);
+  const [selectedGeometry, setSelectedGeometry] = useState<SelectedGeometry | null>(null);
   const [contextAncestors, setContextAncestors] = useState<ReadonlyArray<AncestorEntry>>([]);
   const [contextOpen, setContextOpen] = useState(false);
   const [contextAnchor, setContextAnchor] = useState<{
@@ -360,9 +361,8 @@ export function CanvasPane({
             renderRevision={render.revision}
             selected={canvasMode === "pin" ? null : selected}
             hovered={hovered}
-            toolbar={
-              designing && selected !== null ? <DesignToolbar selection={selected} /> : undefined
-            }
+            chip={!designing}
+            onSelectedGeometry={designing ? setSelectedGeometry : undefined}
             pins={overlayPins}
           />
         }
@@ -370,6 +370,9 @@ export function CanvasPane({
     );
 
   const frame = onWeb ? pageFrame : emailFrame;
+  // The toolbar for the element selected in Design, on the email being edited (not the page or
+  // the preview from before the edits).
+  const toolbarSelection = designing && !onWeb && beforeEdits === null ? selected : null;
 
   const children = (
     <>
@@ -462,6 +465,14 @@ export function CanvasPane({
                   </NodeContextMenu>
                 )}
               </div>
+            )}
+            {toolbarSelection !== null && (
+              <FloatingDesignToolbar
+                selection={toolbarSelection}
+                geometry={selectedGeometry}
+                viewport={workspaceRef}
+                zoom={scale}
+              />
             )}
           </div>
           {beforeEdits !== null && (

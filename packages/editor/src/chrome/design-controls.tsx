@@ -2,11 +2,10 @@ import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
-import { designWaiting, pendingDesignEdits, type CanvasMode } from "../state/store";
+import type { CanvasMode } from "../state/store";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Separator } from "../ui/separator";
 import { Toggle } from "../ui/toggle";
 import { useContribution } from "./contributions";
 import {
@@ -16,7 +15,6 @@ import {
   PaintBrush,
   Pin,
   Redo,
-  Reset,
   Undo,
   Xmark,
 } from "./editor-icons";
@@ -24,7 +22,6 @@ import { usePart, type PartProps } from "./part";
 import { Tip } from "./ui";
 import { cn, revealOnRowHover } from "./ui-classes";
 
-const editCount = (count: number): string => `${count} ${count === 1 ? "edit" : "edits"}`;
 const pinCount = (count: number): string => `${count} ${count === 1 ? "pin" : "pins"}`;
 
 /** The floating surface the dock and the tray share, on the same paper as the zoom control. */
@@ -35,25 +32,21 @@ const floatingClass =
 export interface CanvasModeSwitchState extends Record<string, unknown> {
   /** What a click on the email does: `point`, `design` or `pin`. */
   readonly mode: CanvasMode;
-  /** Staged Design edits. */
-  readonly pending: number;
-  /** Design cannot be switched right now (edits to apply, an assistant turn, a read-only template). */
+  /** Design cannot be turned on right now (an assistant turn, a read-only template). */
   readonly locked: boolean;
 }
 
 /**
  * The preview bar's Design and Pin switches. Design makes a click on the email select it for
- * editing, with a toolbar on the element and the edits staged until Apply; Pin makes a click drop
- * a numbered pin for the chat. Pin is offered only beside a docked assistant, which is where pins
- * go. Leaving Design waits for the staged edits to be applied or reset, and Design waits for an
- * assistant turn to finish, so the two never edit the email at once.
+ * editing, with a toolbar on the element; its edits are ordinary changes to the draft, which the
+ * status bar saves as a version. Pin makes a click drop a numbered pin for the chat. Pin is
+ * offered only beside a docked assistant, which is where pins go. Design waits for an assistant
+ * turn to finish, so the two never edit the email at once.
  */
 export function EditorCanvasModeSwitch(props: PartProps<"div", CanvasModeSwitchState>) {
-  const { mode, pending, waiting, editable, emailReady, hostBusy } = useEditorStore(
+  const { mode, editable, emailReady, hostBusy } = useEditorStore(
     useShallow((state) => ({
       mode: state.canvasMode,
-      pending: pendingDesignEdits(state),
-      waiting: designWaiting(state),
       editable: state.sourceEditable,
       emailReady: state.render !== null,
       hostBusy: state.hostBusy,
@@ -62,14 +55,10 @@ export function EditorCanvasModeSwitch(props: PartProps<"div", CanvasModeSwitchS
   const { setCanvasMode } = useEditorStore((state) => state.actions);
   const pinsOffered = useContribution("rail.assistant") !== undefined;
   const designOn = mode === "design";
-  const designLocked = !emailReady || (designOn ? waiting : hostBusy || !editable);
-  const pinLocked = !emailReady || (mode !== "pin" && waiting);
+  const designLocked = !emailReady || (!designOn && (hostBusy || !editable));
+  const pinLocked = !emailReady;
   const designTip = designOn
-    ? pending > 0
-      ? "Apply or reset your edits to leave Design"
-      : waiting
-        ? "Design is saving your last change"
-        : "Leave Design"
+    ? "Leave Design"
     : hostBusy
       ? "Design waits for the assistant to finish"
       : !editable
@@ -79,7 +68,7 @@ export function EditorCanvasModeSwitch(props: PartProps<"div", CanvasModeSwitchS
     "editor-canvas-mode-switch",
     { role: "group", "aria-label": "Canvas mode", ...props },
     {
-      state: { mode, pending, locked: designLocked },
+      state: { mode, locked: designLocked },
       className: "flex shrink-0 items-center gap-0.5",
       props: {
         children: (
@@ -100,27 +89,10 @@ export function EditorCanvasModeSwitch(props: PartProps<"div", CanvasModeSwitchS
               >
                 <PaintBrush />
                 <span className="@max-[34rem]/preview-bar:sr-only">Design</span>
-                {pending > 0 && (
-                  <Badge
-                    data-testid="preview-bar.design-count"
-                    className="h-4 min-w-4 px-1 text-[10.5px] tabular-nums"
-                  >
-                    {pending}
-                    <span className="sr-only"> staged</span>
-                  </Badge>
-                )}
               </Toggle>
             </Tip>
             {pinsOffered && (
-              <Tip
-                label={
-                  mode === "pin"
-                    ? "Stop pinning"
-                    : waiting
-                      ? "Apply or reset your edits to pin"
-                      : "Pin parts of the email for the chat"
-                }
-              >
+              <Tip label={mode === "pin" ? "Stop pinning" : "Pin parts of the email for the chat"}>
                 <Toggle
                   size="sm"
                   aria-label="Pin"
@@ -146,209 +118,79 @@ export function EditorCanvasModeSwitch(props: PartProps<"div", CanvasModeSwitchS
 
 /** The state an `EditorDesignDock` exposes. */
 export interface DesignDockState extends Record<string, unknown> {
-  /** Staged Design edits. */
-  readonly pending: number;
-  /** `idle`, `applying` or `failed`. */
-  readonly apply: string;
   /** The canvas shows the preview from before the edits. */
   readonly compare: boolean;
-  /** The dock asks before resetting. */
-  readonly confirming: boolean;
 }
 
 /**
- * The Design dock under the canvas: how many edits are staged, undo, redo, reset (after a
- * confirm), a locked before-and-after compare, and Apply, which saves them as one version.
+ * The Design dock under the canvas: undo and redo through the editor's history, and a locked
+ * before-and-after compare against the preview before the first edit since the last saved
+ * version. Saving lives in the status bar.
  */
 export function EditorDesignDock(props: PartProps<"div", DesignDockState>) {
-  const { pending, undone, apply, compare, comparable, versions, hostBusy } = useEditorStore(
+  const { canUndo, canRedo, compare, comparable } = useEditorStore(
     useShallow((state) => ({
-      pending: pendingDesignEdits(state),
-      undone: state.designDraft?.undone.length ?? 0,
-      apply: state.designApply,
+      canUndo: state.sourceEditable && state.undoHistory.length > 0,
+      canRedo: state.sourceEditable && state.redoHistory.length > 0,
       compare: state.designCompare,
-      comparable: state.designDraft?.baseRender != null,
-      versions: state.versionsCapability?.status === "ready",
-      hostBusy: state.hostBusy,
+      comparable: state.designBase?.render != null,
     })),
   );
-  const { undo, redo, resetDesign, setDesignCompare, applyDesign } = useEditorStore(
-    (state) => state.actions,
-  );
-  const [confirmingReset, setConfirmingReset] = useState(false);
-  const applying = apply.status === "applying";
-  const failed = apply.status === "failed";
-  const confirming = confirmingReset && pending > 0;
-  const applyBlocked = pending === 0 || applying || hostBusy;
-
-  const status = applying
-    ? "Saving the version…"
-    : failed
-      ? "Couldn’t save the version"
-      : pending === 0
-        ? "No edits yet"
-        : `${editCount(pending)} staged`;
-
-  const bar = confirming ? (
-    <div
-      role="group"
-      aria-label="Reset edits"
-      data-slot="editor-design-dock-confirm"
-      data-testid="design-dock.reset-confirm"
-      className="flex items-center gap-1 pl-3"
-    >
-      <span className="text-foreground mr-1 text-xs font-medium">
-        Reset {pending === 1 ? "this edit" : `all ${pending} edits`}?
-      </span>
-      <Button
-        variant="ghost"
-        size="sm"
-        data-testid="design-dock.reset-cancel"
-        data-editor-control=""
-        onClick={() => setConfirmingReset(false)}
-      >
-        Cancel
-      </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        data-testid="design-dock.reset-confirm-button"
-        data-editor-control=""
-        onClick={() => {
-          setConfirmingReset(false);
-          resetDesign();
-        }}
-      >
-        Reset
-      </Button>
-    </div>
-  ) : (
-    <div
-      role="toolbar"
-      aria-label="Design edits"
-      data-slot="editor-design-dock-bar"
-      data-testid="design-dock"
-      data-pending={pending}
-      data-state={apply.status}
-      className="flex items-center gap-0.5"
-    >
-      <span
-        data-slot="editor-design-dock-status"
-        data-testid="design-dock.status"
-        aria-live="polite"
-        className={cn(
-          "px-2.5 text-xs whitespace-nowrap tabular-nums @max-[24rem]/design-bar:sr-only",
-          pending === 0 ? "text-muted-foreground" : "text-foreground font-medium",
-          failed && "text-destructive",
-        )}
-      >
-        {status}
-      </span>
-      <Tip label="Undo" side="top">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Undo"
-          data-testid="design-dock.undo"
-          data-editor-control=""
-          disabled={pending === 0 || applying}
-          onClick={undo}
-        >
-          <Undo />
-        </Button>
-      </Tip>
-      <Tip label="Redo" side="top">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Redo"
-          data-testid="design-dock.redo"
-          data-editor-control=""
-          disabled={undone === 0 || applying}
-          onClick={redo}
-        >
-          <Redo />
-        </Button>
-      </Tip>
-      <Tip label="Reset all edits" side="top">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Reset all edits"
-          data-testid="design-dock.reset"
-          data-editor-control=""
-          disabled={pending === 0 || applying}
-          onClick={() => setConfirmingReset(true)}
-        >
-          <Reset />
-        </Button>
-      </Tip>
-      <Tip label={compare ? "Show your edits" : "Compare with before your edits"} side="top">
-        <Toggle
-          size="sm"
-          aria-label="Compare with before your edits"
-          pressed={compare}
-          onPressedChange={setDesignCompare}
-          data-testid="design-dock.compare"
-          data-editor-control=""
-          disabled={pending === 0 || !comparable || applying}
-          className="min-w-7 px-0"
-        >
-          <Compare />
-        </Toggle>
-      </Tip>
-      <Separator orientation="vertical" className="mx-0.5 h-4!" />
-      <Tip
-        label={
-          hostBusy
-            ? "Apply waits for the assistant to finish"
-            : versions
-              ? "Save these edits as one version"
-              : "Keep these edits"
-        }
-        side="top"
-      >
-        <Button
-          size="sm"
-          data-testid="design-dock.apply"
-          data-editor-control=""
-          aria-disabled={applyBlocked || undefined}
-          onClick={() => {
-            if (!applyBlocked) applyDesign();
-          }}
-          className="aria-disabled:cursor-default aria-disabled:opacity-50"
-        >
-          {applying
-            ? "Applying…"
-            : failed
-              ? "Try again"
-              : pending > 1
-                ? `Apply ${pending} edits`
-                : "Apply"}
-        </Button>
-      </Tip>
-    </div>
-  );
+  const { undo, redo, setDesignCompare } = useEditorStore((state) => state.actions);
 
   return usePart<DesignDockState>("editor-design-dock", props, {
-    state: { pending, apply: apply.status, compare, confirming },
+    state: { compare },
     className: "ml-auto flex min-w-0 items-center gap-2",
     props: {
       children: (
-        <>
-          {failed && !confirming && (
-            <p
-              role="alert"
-              data-slot="editor-design-dock-error"
-              data-testid="design-dock.error"
-              className="text-destructive max-w-xs truncate text-xs"
-              title={apply.reason}
+        <div
+          role="toolbar"
+          aria-label="Design edits"
+          data-slot="editor-design-dock-bar"
+          data-testid="design-dock"
+          className="flex items-center gap-0.5"
+        >
+          <Tip label="Undo" side="top">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Undo"
+              data-testid="design-dock.undo"
+              data-editor-control=""
+              disabled={!canUndo}
+              onClick={undo}
             >
-              {apply.reason} Your edits are kept.
-            </p>
-          )}
-          {bar}
-        </>
+              <Undo />
+            </Button>
+          </Tip>
+          <Tip label="Redo" side="top">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Redo"
+              data-testid="design-dock.redo"
+              data-editor-control=""
+              disabled={!canRedo}
+              onClick={redo}
+            >
+              <Redo />
+            </Button>
+          </Tip>
+          <Tip label={compare ? "Show your edits" : "Compare with before your edits"} side="top">
+            <Toggle
+              size="sm"
+              aria-label="Compare with before your edits"
+              pressed={compare}
+              onPressedChange={setDesignCompare}
+              data-testid="design-dock.compare"
+              data-editor-control=""
+              disabled={!comparable}
+              className="min-w-7 px-0"
+            >
+              <Compare />
+            </Toggle>
+          </Tip>
+        </div>
       ),
     },
   });

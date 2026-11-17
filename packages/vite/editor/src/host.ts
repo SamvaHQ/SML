@@ -1,5 +1,6 @@
 import {
   contractVersion,
+  themeTokensFromStylesheets,
   DocumentUnavailable,
   DocumentConflict,
   type DocumentChange,
@@ -8,6 +9,7 @@ import {
   type EmailDocumentChange,
   type EditorDocument,
   type SmsDocumentChange,
+  type ThemeStylesheets,
   type WhatsAppDocumentChange,
 } from "@samva/editor/host";
 import {
@@ -15,6 +17,7 @@ import {
   type DocumentReader,
   type EditorHost,
   type FixtureApi,
+  type ThemeApi,
 } from "@samva/editor/host/effect";
 import { Effect, Queue, Stream } from "effect";
 
@@ -204,6 +207,24 @@ const viewFixture = (id: string, clientId: string): FixtureApi => ({
     }),
 });
 
+/** The theme's stylesheets from the plugin, resolved to the tokens the inspector paints. */
+const themeApi: ThemeApi = {
+  tokens: Effect.gen(function* () {
+    const unavailable = (cause: unknown) => new DocumentUnavailable({ reason: String(cause) });
+    const response = yield* Effect.tryPromise({
+      try: () => fetch(apiUrl("theme", {})),
+      catch: unavailable,
+    });
+    if (!response.ok)
+      return yield* new DocumentUnavailable({ reason: `theme failed (${response.status})` });
+    const stylesheets = yield* Effect.tryPromise({
+      try: () => response.json() as Promise<ThemeStylesheets>,
+      catch: unavailable,
+    });
+    return themeTokensFromStylesheets(stylesheets);
+  }),
+};
+
 const fileWriter = (id: string, clientId: string): DocumentWriter => ({
   save: (update) =>
     Effect.gen(function* () {
@@ -254,5 +275,6 @@ export const createFileHost = ({ id }: FileHostOptions): EditorHost => {
     writer: fileWriter(id, clientId),
     document: { open: openStore<EditableEditorDocument>(id, clientId, last) },
     fixtures: { status: "ready", api: viewFixture(id, clientId) },
+    theme: { status: "ready", api: themeApi },
   };
 };

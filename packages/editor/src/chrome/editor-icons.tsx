@@ -49,6 +49,7 @@ export const CheckList = icon("checkList");
 export const Clock = icon("clock");
 export const Code = icon("code");
 export const Compare = icon("compare");
+export const DataField = icon("dataField");
 export const Minus = icon("minus");
 export const MoreHorizontal = icon("moreHorizontal");
 export const OpenExternal = icon("openExternal");

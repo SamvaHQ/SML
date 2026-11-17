@@ -440,13 +440,19 @@ describe("toAsyncHost versions", () => {
       versions: {
         status: "ready",
         api: {
-          save: (revision) => Effect.succeed(`${revision}_saved`),
-          savedRevision: Effect.succeed("rev_2_saved"),
+          save: (revision) => Effect.succeed({ revision: `${revision}_saved`, number: 3 }),
+          savedRevision: Effect.succeed({ revision: "rev_2_saved", number: 3 }),
         },
       },
     });
     if (host.versions?.status !== "ready") throw new Error("expected versions");
-    await expect(host.versions.api.save("rev_2")).resolves.toBe("rev_2_saved");
-    await expect(host.versions.api.savedRevision()).resolves.toBe("rev_2_saved");
+    await expect(host.versions.api.save("rev_2")).resolves.toEqual({
+      revision: "rev_2_saved",
+      number: 3,
+    });
+    await expect(host.versions.api.savedRevision()).resolves.toEqual({
+      revision: "rev_2_saved",
+      number: 3,
+    });
   });
 });

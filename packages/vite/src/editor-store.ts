@@ -498,6 +498,12 @@ export class EditorFileStore {
     return this.ensureLoaded();
   }
 
+  /** The brand the latest project load resolved. */
+  async brand(): Promise<LoadedProject["brand"] | undefined> {
+    await this.ensureLoaded();
+    return this.project?.brand;
+  }
+
   /**
    * Recompile the project after a template, partial, theme or asset changed.
    * `changed` names the file whose change asked for this refresh.

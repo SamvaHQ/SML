@@ -31,7 +31,7 @@ boundaries—not compiler transforms—provide render isolation.
   `ProfileGuard`, so `checkTemplate` compares the file before and after and refuses an edit
   that introduces an error the source did not already have; the reason reaches the author through
   `sourceEditError` or the review panel. Expression and structural changes show that refusal
-  before Apply. Class names change only where they are literal (`classNameEdit`); a conditional
+  in their review, before the change is made. Class names change only where they are literal (`classNameEdit`); a conditional
   `className` is refused, never overwritten.
 - One authored element is one source span, however many times it renders, so an edit changes every
   rendered copy and the controls say how many. An element written in a partial (an origin outside
@@ -39,11 +39,15 @@ boundaries—not compiler transforms—provide render isolation.
   through `inspect`, warn that every template using the partial changes, and save through
   `updateFile`. Without it they are read-only and point at Source. Local undo history covers the
   entry only.
-- A visual edit from the inspector or the Design toolbar passes `design` to `applySourceEdit`, so
-  it is staged on `designDraft` rather than the source history. The draft the host renders holds
-  it; `applyDesign` saves the staged edits as one version through `versions`. Channel forms and
-  the Source tab never stage. Leaving Design is refused while edits are staged, and the
-  assistant's `workspace.design` is the signal a host's chat waits on.
+- A visual edit from the inspector or the Design toolbar passes `design` (its label and the
+  control that made it) and `target` to `applySourceEdit`. It is an ordinary change on the one
+  undo history; its first edit since the last saved version keeps `designBase` for Compare. While
+  an edit is on its way to the preview, only an edit to the same `target` is taken: the render's
+  origins still point into the held source for that element alone.
+- The store owns saving a version (`saveVersion`) and the save status (`saveStatus`), which the
+  status bar, ⌘/Ctrl+S and the assistant's `saveVersion` and `workspace.version` all read. A
+  revision the host mints for the source already on screen (a saved version, an ack after its
+  render) moves the render with it, so a just-edited element never reads as behind.
 - Subscribe to the narrowest state slices. Use `useShallow` for object or array selectors, and read
   handler-only state through `useEditorStoreApi().getState()` at event time. The `actions` object is
   stable and can be selected as one slice.
@@ -83,9 +87,9 @@ boundaries—not compiler transforms—provide render isolation.
 ## Chrome copy
 
 Built-in chrome (canvas, rails, inspector, lifecycle) and host contributions are customer
-surfaces. Label the thing, not the mechanism: say what the author has and can do next ("Unsaved
-changes", "No preview yet", "Saved version"), never the machinery behind it (Git, commits,
-revisions, renders, builds, internal paths, tool names). Expandable content signals itself with a
+surfaces. Label the thing, not the mechanism: say what the author has and can do next ("2 changes
+not in a version yet", "No preview yet", "Saved as version 13"), never the machinery behind it
+(Git, commits, revisions, renders, builds, internal paths, tool names). Expandable content signals itself with a
 chevron, hover fill or tooltip, not a "Details" or "More" label. Numbers are measured and current,
 never hard-coded. Host panels own their transport copy under the same rules.
 

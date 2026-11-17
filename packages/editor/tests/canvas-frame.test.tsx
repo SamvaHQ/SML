@@ -11,6 +11,7 @@ import { EmailFrame } from "../src/canvas/email-frame";
 import {
   firstVisibleRect,
   isCanvasActivationTarget,
+  neighbourBoxes,
   resolveInstancePath,
 } from "../src/canvas/instance-dom";
 import { SelectionOverlay } from "../src/canvas/selection-overlay";
@@ -150,6 +151,60 @@ const selectionOf = (
   ...overrides,
 });
 
+describe("neighbourBoxes", () => {
+  it("counts the content around an element, not the element, its content or its wrappers", () => {
+    const view = render(
+      <div {...{ [INSTANCE_PATH_ATTRIBUTE]: "0" }}>
+        <span {...{ [INSTANCE_PATH_ATTRIBUTE]: "0.0" }} data-name="badge" />
+        <h1 {...{ [INSTANCE_PATH_ATTRIBUTE]: "0.1" }}>
+          <b {...{ [INSTANCE_PATH_ATTRIBUTE]: "0.1.0" }} data-name="own" />
+        </h1>
+        <p {...{ [INSTANCE_PATH_ATTRIBUTE]: "0.2" }} data-name="hidden-twin" hidden />
+      </div>,
+    );
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: Element,
+    ) {
+      return this.hasAttribute("hidden")
+        ? DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 })
+        : DOMRect.fromRect({ x: 1, y: 2, width: 3, height: 4 });
+    });
+    // Only the badge: the heading's own bold, the wrapper and the unlaid-out twin are left out.
+    expect(neighbourBoxes(view.container, "0.1")).toEqual([
+      { top: 2, left: 1, width: 3, height: 4 },
+    ]);
+  });
+
+  it("counts the text a neighbour holds beside its stamped children", () => {
+    const view = render(
+      <div {...{ [INSTANCE_PATH_ATTRIBUTE]: "0" }}>
+        {"  "}
+        <h1 {...{ [INSTANCE_PATH_ATTRIBUTE]: "0.0" }}>Thanks</h1>
+        <p {...{ [INSTANCE_PATH_ATTRIBUTE]: "0.1" }}>
+          Confirmed <b {...{ [INSTANCE_PATH_ATTRIBUTE]: "0.1.0" }}>today</b>
+        </p>
+      </div>,
+    );
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(() =>
+      DOMRect.fromRect({ x: 60, y: 30, width: 40, height: 10 }),
+    );
+    vi.spyOn(Range.prototype, "getClientRects").mockImplementation(function (this: Range) {
+      const rects = (this.startContainer.textContent ?? "").includes("Confirmed")
+        ? [DOMRect.fromRect({ x: 0, y: 30, width: 50, height: 10 })]
+        : [];
+      const list: DOMRectList = Object.assign([...rects], {
+        item: (index: number) => rects[index] ?? null,
+      });
+      return list;
+    });
+    // The bold word and the paragraph's own "Confirmed"; the heading's text is the heading.
+    expect(neighbourBoxes(view.container, "0.0")).toEqual([
+      { top: 30, left: 0, width: 50, height: 10 },
+      { top: 30, left: 60, width: 40, height: 10 },
+    ]);
+  });
+});
+
 describe("SelectionOverlay", () => {
   const withTargets = (node: React.ReactNode) =>
     render(
@@ -182,6 +237,18 @@ describe("SelectionOverlay", () => {
     expect(view.container.querySelector("[data-samva-chip]")?.textContent).toBe(
       "table · generated",
     );
+  });
+
+  it("leaves the name to the Design toolbar when the chip is off", () => {
+    const view = withTargets(
+      <SelectionOverlay
+        renderRevision="rev_1"
+        selected={selectionOf("0.0.1", "h1")}
+        hovered={null}
+        chip={false}
+      />,
+    );
+    expect(view.container.querySelector("[data-samva-chip]")).toBeNull();
   });
 
   it("draws nothing at all when nothing is selected or hovered", () => {

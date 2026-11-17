@@ -133,7 +133,7 @@ describe("public editor chrome", () => {
     );
   });
 
-  it("splits the checks by severity and dates the draft's last save", async () => {
+  it("splits the checks by severity and reports the draft's own save", async () => {
     stubWideShell();
     const checks = [
       { id: "e", severity: "error" as const, label: "Broken link", detail: "" },
@@ -176,16 +176,16 @@ describe("public editor chrome", () => {
     const trigger = await view.findByTestId("statusbar.checks-trigger");
     expect(trigger.textContent).toBe("1 error · 2 warnings · 1 tip");
     expect(trigger.querySelector("[data-tone]")?.getAttribute("data-tone")).toBe("error");
-    expect((await view.findByTestId("statusbar.draft")).textContent).toBe("Draft");
-    act(() => storeApi?.setState({ draftSavedAt: Date.now() - 2 * 60_000 }));
-    await waitFor(() =>
-      expect(view.getByTestId("statusbar.draft").textContent).toBe("Draft · saved 2 min ago"),
-    );
-    // A save that stopped is not "saving": the note says so even while its source is queued.
-    act(() => storeApi?.setState({ pendingAuthoredSource: "queued", conflict: true }));
-    await waitFor(() =>
-      expect(view.getByTestId("statusbar.draft").textContent).toBe("Draft · couldn’t save"),
-    );
+    // Without the host's versions, the status reports the draft's own writes.
+    const status = await view.findByTestId("statusbar.save-version");
+    await waitFor(() => expect(status.textContent).toBe("Saved"));
+    expect(status.dataset.saveVersionState).toBe("unavailable");
+    act(() => storeApi?.setState({ pendingAuthoredSource: "queued" }));
+    expect(status.textContent).toBe("Saving…");
+    // A save that stopped is not "saving": the status says so even while its source is queued.
+    act(() => storeApi?.setState({ conflict: true }));
+    expect(status.textContent).toBe("Couldn't save: This template changed somewhere else.");
+    expect(view.getByTestId("statusbar.retry").textContent).toBe("Reload");
   });
 
   it("gives the assistant, the work pane tabs and the preview bar one header height and divider", async () => {

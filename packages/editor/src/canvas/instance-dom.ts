@@ -33,6 +33,48 @@ export const firstVisibleRect = (root: ParentNode, instancePath: string): Box | 
   return fallback;
 };
 
+const INSTANCE_SELECTOR = `[${INSTANCE_PATH_ATTRIBUTE}]`;
+
+const isLaidOut = (box: Box): boolean => box.width > 0 && box.height > 0;
+
+/**
+ * The lines of text an element holds itself, beside the stamped elements inside it: `Confirmed`
+ * in `<p>Confirmed <b>today</b></p>`.
+ */
+const ownTextBoxes = (element: Element): ReadonlyArray<Box> => {
+  const boxes: Box[] = [];
+  const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if ((node.textContent ?? "").trim() === "") continue;
+    if (node.parentElement?.closest(INSTANCE_SELECTOR) !== element) continue;
+    const range = element.ownerDocument.createRange();
+    range.selectNodeContents(node);
+    for (const rect of range.getClientRects()) {
+      const box = boxOf(rect);
+      if (isLaidOut(box)) boxes.push(box);
+    }
+  }
+  return boxes;
+};
+
+/**
+ * The rendered content around an instance: every innermost stamped element that is not the
+ * instance or inside it, and the text a stamped element holds beside the stamped elements in it,
+ * as laid out. Innermost elements are the content a reader sees (text, images, buttons); the
+ * tables and cells around them are mostly empty space, so only their own text counts.
+ */
+export const neighbourBoxes = (root: ParentNode, instancePath: string): ReadonlyArray<Box> => {
+  const selected = [
+    ...root.querySelectorAll(`[${INSTANCE_PATH_ATTRIBUTE}="${CSS.escape(instancePath)}"]`),
+  ];
+  return [...root.querySelectorAll(INSTANCE_SELECTOR)].flatMap((element) => {
+    if (selected.some((own) => own.contains(element))) return [];
+    if (element.querySelector(INSTANCE_SELECTOR) !== null) return ownTextBoxes(element);
+    const box = boxOf(element.getBoundingClientRect());
+    return isLaidOut(box) ? [box] : [];
+  });
+};
+
 const INTERACTIVE_SELECTOR =
   'a[href],button,input[type="button"],input[type="submit"],input[type="image"]';
 

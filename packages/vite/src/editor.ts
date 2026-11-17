@@ -15,6 +15,7 @@ import {
   EDITOR_SOURCE_TOO_LARGE_MESSAGE,
   type StoreChange,
 } from "./editor-store";
+import { readThemeStylesheets } from "./editor-theme";
 import { isObject } from "./internal/guards";
 import { isProjectFile, projectPath, SAMVA_DIR } from "./layout";
 
@@ -491,6 +492,21 @@ export const samvaEditor = (options: SamvaEditorPluginOptions = {}): Plugin => {
             const snapshot = await store.open(id);
             if (snapshot === undefined) return sendJson(res, 404, { error: "template not found" });
             return sendJson(res, 200, snapshot);
+          }
+
+          // The theme's stylesheets for the inspector's colour and font values.
+          if (pathname === `${apiPrefix}/theme`) {
+            if (req.method !== "GET") return sendJson(res, 405, { error: "Use GET." });
+            return sendJson(
+              res,
+              200,
+              await readThemeStylesheets({
+                root,
+                theme: options.theme,
+                brand: await store.brand(),
+                brandSpecifier: options.brandPlugin?.specifier,
+              }),
+            );
           }
 
           if (pathname === `${apiPrefix}/fixture`) {

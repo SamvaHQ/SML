@@ -1,12 +1,7 @@
 import { afterEach, describe, expect, it } from "@effect/vitest";
+import type { EditorEvent, SavedVersion } from "@samva/editor/host";
 
-import {
-  createEditorBundle,
-  designVersionMessage,
-  designWaiting,
-  pendingDesignEdits,
-  type EditorBundle,
-} from "../src/state/store";
+import { changeCount, createEditorBundle, saveStatus, type EditorBundle } from "../src/state/store";
 import type { EditorPin } from "../src/state/types";
 import { emitChange, mockEditor, settle, withVersions, type MockEditor } from "./mock-host";
 
@@ -25,11 +20,12 @@ const start = async (
     await settle(5);
   const doc = bundle.store.getState().doc;
   if (doc === null) throw new Error("the document did not open");
+  await settle();
   return { bundle, original: doc.origin.authoredSource };
 };
 
-/** Stage one Design edit that prepends a line, against whatever the draft holds now. */
-const stage = (bundle: EditorBundle, line: string, coalesceKey?: string): void => {
+/** One Design edit that prepends a line, against whatever the draft holds now. */
+const design = (bundle: EditorBundle, line: string, coalesceKey?: string): void => {
   const doc = bundle.store.getState().doc;
   if (doc === null) throw new Error("no document");
   bundle.store.getState().actions.applySourceEdit({
@@ -49,289 +45,354 @@ const flushed = async (bundle: EditorBundle): Promise<void> => {
 const source = (bundle: EditorBundle): string =>
   bundle.store.getState().doc?.origin.authoredSource ?? "";
 
-describe("Design draft", () => {
-  it("stages edits on the draft instead of the source history and turns Design on", async () => {
+/** A versions capability that records each save and numbers it. */
+const numbered = (from = 12) => {
+  const saves: Array<{ readonly revision: string }> = [];
+  let number = from;
+  const save = async (revision: string): Promise<SavedVersion> => {
+    saves.push({ revision });
+    number += 1;
+    return { revision, number };
+  };
+  return { saves, save };
+};
+
+describe("Design edits", () => {
+  it("are ordinary changes on the undo history, and keep the preview before the first", async () => {
     const editor = await mockEditor();
     const { bundle, original } = await start(editor.host);
     const before = bundle.store.getState().render;
-    stage(bundle, "// one");
+    design(bundle, "// one");
     await flushed(bundle);
-    stage(bundle, "// two");
+    design(bundle, "// two");
     await flushed(bundle);
     const state = bundle.store.getState();
-    expect(state.canvasMode).toBe("design");
-    expect(state.undoHistory).toHaveLength(0);
-    expect(pendingDesignEdits(state)).toBe(2);
-    expect(state.designDraft?.baseSource).toBe(original);
-    expect(state.designDraft?.baseRender).toBe(before);
+    expect(state.undoHistory).toHaveLength(2);
+    expect(state.canvasMode).toBe("point");
+    expect(state.designBase?.source).toBe(original);
+    expect(state.designBase?.render).toBe(before);
     expect(source(bundle)).toBe(`// two\n// one\n${original}`);
   });
 
-  it("merges consecutive edits under one key into one staged edit", async () => {
+  it("merges consecutive edits under one key into one step and one change", async () => {
     const editor = await mockEditor();
-    const { bundle } = await start(editor.host);
-    stage(bundle, "// a", "field");
-    stage(bundle, "// b", "field");
+    const { bundle } = await start(withVersions(editor.host, numbered().save));
+    design(bundle, "// a", "field");
+    design(bundle, "// b", "field");
     await flushed(bundle);
-    expect(pendingDesignEdits(bundle.store.getState())).toBe(1);
+    expect(bundle.store.getState().undoHistory).toHaveLength(1);
+    expect(changeCount(bundle.store.getState())).toBe(1);
   });
 
-  it("undoes, redoes and resets the staged edits through the host writer", async () => {
+  it("undoes and redoes through the host writer, counting the changes back and forth", async () => {
     const editor = await mockEditor();
-    const { bundle, original } = await start(editor.host);
+    const { bundle, original } = await start(withVersions(editor.host, numbered().save));
     const { actions } = bundle.store.getState();
-    stage(bundle, "// one");
+    design(bundle, "// one");
     await flushed(bundle);
-    stage(bundle, "// two");
+    design(bundle, "// two");
     await flushed(bundle);
+    expect(saveStatus(bundle.store.getState())).toEqual({ kind: "unsaved", changes: 2 });
     actions.undo();
     await flushed(bundle);
     expect(source(bundle)).toBe(`// one\n${original}`);
-    expect(pendingDesignEdits(bundle.store.getState())).toBe(1);
+    expect(changeCount(bundle.store.getState())).toBe(1);
     actions.redo();
     await flushed(bundle);
     expect(source(bundle)).toBe(`// two\n// one\n${original}`);
-    actions.resetDesign();
-    await flushed(bundle);
-    expect(source(bundle)).toBe(original);
-    expect(bundle.store.getState().designDraft).toBeNull();
+    expect(changeCount(bundle.store.getState())).toBe(2);
   });
 
-  it("refuses to reset over a change made elsewhere and keeps the current work", async () => {
-    const editor = await mockEditor();
-    const { bundle } = await start(editor.host);
-    stage(bundle, "// one");
-    await flushed(bundle);
-    const foreign = `// agent\n${source(bundle)}`;
-    await emitChange(editor, { origin: "agent", authoredSource: foreign });
-    bundle.store.getState().actions.resetDesign();
-    expect(source(bundle)).toBe(foreign);
-    expect(bundle.store.getState().sourceEditError).toContain("conflict");
-  });
-
-  it("locks compare only while there is something to compare", async () => {
+  it("compares only while there is a base, and lets go of it back at the start", async () => {
     const editor = await mockEditor();
     const { bundle } = await start(editor.host);
     const { actions } = bundle.store.getState();
     actions.setDesignCompare(true);
     expect(bundle.store.getState().designCompare).toBe(false);
-    stage(bundle, "// one");
+    design(bundle, "// one");
     actions.setDesignCompare(true);
     expect(bundle.store.getState().designCompare).toBe(true);
     await flushed(bundle);
-    stage(bundle, "// two");
+    design(bundle, "// two");
     expect(bundle.store.getState().designCompare).toBe(false);
+    await flushed(bundle);
+    actions.undo();
+    await flushed(bundle);
+    actions.undo();
+    await flushed(bundle);
+    expect(bundle.store.getState().designBase).toBeNull();
   });
 
-  it("keeps Design on while edits are staged", async () => {
+  it("lets Design be left with changes not in a version", async () => {
     const editor = await mockEditor();
     const { bundle } = await start(editor.host);
     const { actions } = bundle.store.getState();
-    stage(bundle, "// one");
-    actions.setCanvasMode("pin");
-    expect(bundle.store.getState().canvasMode).toBe("design");
-    await flushed(bundle);
-    actions.undo();
-    await flushed(bundle);
+    actions.setCanvasMode("design");
+    design(bundle, "// one");
     actions.setCanvasMode("point");
     expect(bundle.store.getState().canvasMode).toBe("point");
-    expect(bundle.store.getState().designDraft).toBeNull();
+    expect(bundle.store.getState().undoHistory).toHaveLength(1);
   });
 
-  it("applies the staged edits as one named version", async () => {
-    const editor = await mockEditor();
-    const saves: Array<{ revision: string; message: string | undefined }> = [];
-    const host = withVersions(editor.host, async (revision, options) => {
-      saves.push({ revision, message: options?.message });
-      return `${revision}_saved`;
-    });
-    const { bundle } = await start(host);
-    stage(bundle, "// one");
-    await flushed(bundle);
-    stage(bundle, "// two");
-    await flushed(bundle);
-    const revision = bundle.store.getState().doc?.rev;
-    bundle.store.getState().actions.applyDesign();
-    expect(bundle.store.getState().designApply.status).toBe("applying");
-    expect(bundle.store.getState().lifecycleBusy).toBe(true);
-    await settle(20);
-    const state = bundle.store.getState();
-    expect(saves).toEqual([{ revision, message: designVersionMessage(2) }]);
-    expect(designVersionMessage(1)).toBe("Design: 1 edit");
-    expect(state.designDraft).toBeNull();
-    expect(state.designApply.status).toBe("idle");
-    expect(state.lifecycleBusy).toBe(false);
-    expect(state.doc?.rev).toBe(`${revision}_saved`);
-  });
-
-  it("keeps the staged edits and says why when Apply fails", async () => {
-    const editor = await mockEditor();
-    const host = withVersions(editor.host, () => Promise.reject(new Error("Storage is full.")));
-    const { bundle } = await start(host);
-    stage(bundle, "// one");
-    await flushed(bundle);
-    bundle.store.getState().actions.applyDesign();
-    await settle(20);
-    const state = bundle.store.getState();
-    expect(state.designApply).toEqual({ status: "failed", reason: "Storage is full." });
-    expect(pendingDesignEdits(state)).toBe(1);
-    expect(state.lifecycleBusy).toBe(false);
-  });
-});
-
-describe("Design draft beside other edits", () => {
-  it("refuses a source edit while edits are staged and keeps history in order after", async () => {
+  it("never blocks a source edit, and undo walks both in the order they were made", async () => {
     const editor = await mockEditor();
     const { bundle, original } = await start(editor.host);
     const { actions } = bundle.store.getState();
-    stage(bundle, "// design");
-    await flushed(bundle);
+    design(bundle, "// design");
     actions.replaceAuthoredSource(`// source\n${source(bundle)}`);
-    expect(source(bundle)).toBe(`// design\n${original}`);
-    expect(bundle.store.getState().sourceEditError).toContain("Apply or reset");
+    expect(bundle.store.getState().sourceEditError).toBeNull();
+    expect(source(bundle)).toBe(`// source\n// design\n${original}`);
+    await flushed(bundle);
     actions.undo();
     await flushed(bundle);
-    expect(source(bundle)).toBe(original);
-    // With nothing staged, a source edit takes the draft's place and undo reverts it.
-    actions.replaceAuthoredSource(`// source\n${original}`);
-    await flushed(bundle);
-    expect(bundle.store.getState().designDraft).toBeNull();
+    expect(source(bundle)).toBe(`// design\n${original}`);
     actions.undo();
     await flushed(bundle);
     expect(source(bundle)).toBe(original);
   });
 
-  it("starts a new base once every staged edit is undone", async () => {
+  it("waits for an assistant turn before an edit or entering Design", async () => {
     const editor = await mockEditor();
     const { bundle, original } = await start(editor.host);
-    const { actions } = bundle.store.getState();
-    stage(bundle, "// one");
-    await flushed(bundle);
-    actions.undo();
-    await flushed(bundle);
-    const moved = `// agent\n${original}`;
-    await emitChange(editor, { origin: "agent", authoredSource: moved });
-    stage(bundle, "// two");
-    await flushed(bundle);
-    expect(bundle.store.getState().designDraft?.baseSource).toBe(moved);
-    actions.resetDesign();
-    await flushed(bundle);
-    expect(source(bundle)).toBe(moved);
-  });
-
-  it("waits for an assistant turn before staging, entering Design or applying", async () => {
-    const editor = await mockEditor();
-    const saves: string[] = [];
-    const host = withVersions(editor.host, async (revision) => {
-      saves.push(revision);
-      return revision;
-    });
-    const { bundle } = await start(host);
     const { actions } = bundle.store.getState();
     actions.setHostBusy(true);
     actions.setCanvasMode("design");
     expect(bundle.store.getState().canvasMode).toBe("point");
-    stage(bundle, "// during a turn");
-    expect(pendingDesignEdits(bundle.store.getState())).toBe(0);
-    actions.setHostBusy(false);
-    stage(bundle, "// after");
+    design(bundle, "// during a turn");
+    expect(source(bundle)).toBe(original);
+    expect(bundle.store.getState().sourceEditError).toContain("assistant");
+  });
+
+  it("forgets the base and the count when someone else changes the draft", async () => {
+    const editor = await mockEditor();
+    const { bundle } = await start(withVersions(editor.host, numbered().save));
+    design(bundle, "// one");
     await flushed(bundle);
-    actions.setHostBusy(true);
-    actions.applyDesign();
-    await settle(20);
-    expect(saves).toEqual([]);
-    expect(pendingDesignEdits(bundle.store.getState())).toBe(1);
+    await emitChange(editor, { origin: "agent", authoredSource: `// agent\n${source(bundle)}` });
+    const state = bundle.store.getState();
+    expect(state.designBase).toBeNull();
+    expect(changeCount(state)).toBeNull();
+    expect(saveStatus(state)).toEqual({ kind: "unsaved", changes: null });
   });
 });
 
-describe("Design draft around Apply and Reset", () => {
-  it("folds an applied batch into the source history so Undo reverts it whole", async () => {
+describe("saving a version", () => {
+  it("saves the draft once, adopts the version and counts from zero again", async () => {
     const editor = await mockEditor();
-    const host = withVersions(editor.host, async (revision) => revision);
-    const { bundle, original } = await start(host);
-    const { actions } = bundle.store.getState();
-    actions.replaceAuthoredSource(`// source\n${original}`);
-    await flushed(bundle);
-    stage(bundle, "// one");
-    await flushed(bundle);
-    stage(bundle, "// two");
-    await flushed(bundle);
-    actions.applyDesign();
-    await settle(30);
-    expect(bundle.store.getState().designDraft).toBeNull();
-    actions.undo();
-    await flushed(bundle);
-    expect(source(bundle)).toBe(`// source\n${original}`);
-    actions.undo();
-    await flushed(bundle);
-    expect(source(bundle)).toBe(original);
-  });
-
-  it("keeps the chat waiting until a reset reaches the host", async () => {
-    const editor = await mockEditor();
-    const { bundle } = await start(editor.host);
-    stage(bundle, "// one");
-    await flushed(bundle);
-    bundle.store.getState().actions.resetDesign();
-    expect(pendingDesignEdits(bundle.store.getState())).toBe(0);
-    expect(designWaiting(bundle.store.getState())).toBe(true);
-    bundle.store.getState().actions.setCanvasMode("point");
-    expect(bundle.store.getState().canvasMode).toBe("design");
-    await flushed(bundle);
-    expect(designWaiting(bundle.store.getState())).toBe(false);
-  });
-
-  it("saves no version when the staged write did not reach the draft", async () => {
-    const editor = await mockEditor();
-    const saves: string[] = [];
-    const host = withVersions(editor.host, async (revision) => {
-      saves.push(revision);
-      return revision;
+    const versions = numbered();
+    const events: EditorEvent[] = [];
+    const { bundle } = await start({
+      ...withVersions(editor.host, versions.save),
+      telemetry: (event) => events.push(event),
     });
-    const { bundle } = await start(host);
-    stage(bundle, "// one");
+    design(bundle, "// one");
+    await flushed(bundle);
+    design(bundle, "// two");
+    const saving = bundle.store.getState().actions.saveVersion();
+    expect(bundle.store.getState().actions.saveVersion()).toBe(saving);
+    expect(saveStatus(bundle.store.getState())).toEqual({ kind: "saving" });
+    expect(bundle.store.getState().lifecycleBusy).toBe(true);
+    const revision = await saving;
+    await settle();
+    const state = bundle.store.getState();
+    expect(versions.saves).toHaveLength(1);
+    expect(revision).toBe(versions.saves[0]?.revision);
+    expect(state.doc?.rev).toBe(revision);
+    expect(state.render?.revision).toBe(revision);
+    expect(state.designBase).toBeNull();
+    expect(changeCount(state)).toBe(0);
+    expect(state.lifecycleBusy).toBe(false);
+    expect(saveStatus(state)).toEqual({ kind: "saved", number: 13 });
+    expect(events).toContainEqual({ name: "version.save", data: { changes: 2 } });
+  });
+
+  it("resolves at once when the open revision already is the saved version", async () => {
+    const editor = await mockEditor();
+    const versions = numbered();
+    const { bundle } = await start(withVersions(editor.host, versions.save));
+    design(bundle, "// one");
+    const first = await bundle.store.getState().actions.saveVersion();
+    await settle();
+    await expect(bundle.store.getState().actions.saveVersion()).resolves.toBe(first);
+    expect(versions.saves).toHaveLength(1);
+  });
+
+  it("shows the draft as saved again when undo returns to the saved version", async () => {
+    const editor = await mockEditor();
+    const { bundle } = await start(withVersions(editor.host, numbered().save));
+    design(bundle, "// one");
+    await bundle.store.getState().actions.saveVersion();
+    await settle();
+    design(bundle, "// two");
+    await flushed(bundle);
+    expect(saveStatus(bundle.store.getState())).toEqual({ kind: "unsaved", changes: 1 });
+    bundle.store.getState().actions.undo();
+    await flushed(bundle);
+    expect(saveStatus(bundle.store.getState())).toEqual({ kind: "saved", number: 13 });
+  });
+
+  it("says why a save failed, keeps the changes, and saves on retry", async () => {
+    const editor = await mockEditor();
+    let fail = true;
+    const { bundle } = await start(
+      withVersions(editor.host, async (revision) =>
+        fail ? Promise.reject(new Error("Storage is full.")) : { revision, number: 2 },
+      ),
+    );
+    design(bundle, "// one");
+    await expect(bundle.store.getState().actions.saveVersion()).rejects.toThrow("Storage is full.");
+    const state = bundle.store.getState();
+    expect(saveStatus(state)).toEqual({
+      kind: "failed",
+      reason: "Storage is full.",
+      retry: "version",
+    });
+    expect(changeCount(state)).toBe(1);
+    expect(state.lifecycleBusy).toBe(false);
+    fail = false;
+    await bundle.store.getState().actions.saveVersion();
+    expect(saveStatus(bundle.store.getState())).toEqual({ kind: "saved", number: 2 });
+  });
+
+  it("saves no version when the draft's write did not land", async () => {
+    const editor = await mockEditor();
+    const versions = numbered();
+    const { bundle } = await start(withVersions(editor.host, versions.save));
+    design(bundle, "// one");
     await emitChange(editor, { origin: "agent", authoredSource: "// elsewhere\n" });
     expect(bundle.store.getState().conflict).toBe(true);
-    bundle.store.getState().actions.applyDesign();
-    await settle(30);
-    const state = bundle.store.getState();
-    expect(saves).toEqual([]);
-    expect(state.designApply.status).toBe("failed");
-    expect(pendingDesignEdits(state)).toBe(1);
-    expect(state.conflict).toBe(true);
-    expect(state.lifecycleBusy).toBe(false);
+    await expect(bundle.store.getState().actions.saveVersion()).rejects.toBeDefined();
+    expect(versions.saves).toEqual([]);
+    expect(bundle.store.getState().lifecycleBusy).toBe(false);
+  });
+
+  it("only writes the draft without the host's versions", async () => {
+    const editor = await mockEditor();
+    const { bundle } = await start(editor.host);
+    design(bundle, "// one");
+    expect(saveStatus(bundle.store.getState())).toEqual({ kind: "saving" });
+    const revision = await bundle.store.getState().actions.saveVersion();
+    await settle();
+    expect(revision).toBe(bundle.store.getState().doc?.rev);
+    expect(saveStatus(bundle.store.getState())).toEqual({ kind: "saved" });
   });
 });
 
-describe("Design draft and source history together", () => {
-  it("redoes a source edit and then a Design edit in the order they were made", async () => {
+describe("counting changes against the saved version", () => {
+  it("counts an undo past a save as a change and its redo as none", async () => {
     const editor = await mockEditor();
-    const { bundle, original } = await start(editor.host);
+    const { bundle } = await start(withVersions(editor.host, numbered().save));
     const { actions } = bundle.store.getState();
-    actions.replaceAuthoredSource(`// source\n${original}`);
+    design(bundle, "// one");
     await flushed(bundle);
-    stage(bundle, "// design");
+    await actions.saveVersion();
+    await settle();
+    expect(changeCount(bundle.store.getState())).toBe(0);
+    actions.undo();
+    await flushed(bundle);
+    expect(changeCount(bundle.store.getState())).toBe(1);
+    actions.redo();
+    await flushed(bundle);
+    expect(changeCount(bundle.store.getState())).toBe(0);
+  });
+
+  it("counts both ways round once an edit branches below the save", async () => {
+    const editor = await mockEditor();
+    const { bundle } = await start(withVersions(editor.host, numbered().save));
+    const { actions } = bundle.store.getState();
+    design(bundle, "// one");
+    await flushed(bundle);
+    design(bundle, "// two");
+    await flushed(bundle);
+    await actions.saveVersion();
+    await settle();
+    actions.undo();
     await flushed(bundle);
     actions.undo();
     await flushed(bundle);
+    design(bundle, "// three");
+    await flushed(bundle);
+    expect(changeCount(bundle.store.getState())).toBe(3);
+    actions.undo();
+    await flushed(bundle);
+    expect(changeCount(bundle.store.getState())).toBe(2);
+  });
+
+  it("never folds an edit after a save into a step before it", async () => {
+    const editor = await mockEditor();
+    const { bundle } = await start(withVersions(editor.host, numbered().save));
+    design(bundle, "// a", "field");
+    await flushed(bundle);
+    await bundle.store.getState().actions.saveVersion();
+    await settle();
+    design(bundle, "// b", "field");
+    await flushed(bundle);
+    expect(bundle.store.getState().undoHistory).toHaveLength(2);
+    expect(changeCount(bundle.store.getState())).toBe(1);
+  });
+
+  it("takes a burst of Source typing as one step, undone as one", async () => {
+    const editor = await mockEditor();
+    const { bundle, original } = await start(withVersions(editor.host, numbered().save));
+    const { actions } = bundle.store.getState();
+    actions.replaceAuthoredSource(`/${original}`);
+    actions.replaceAuthoredSource(`//${original}`);
+    actions.replaceAuthoredSource(`// ${original}`);
+    await flushed(bundle);
+    expect(bundle.store.getState().undoHistory).toHaveLength(1);
+    expect(changeCount(bundle.store.getState())).toBe(1);
     actions.undo();
     await flushed(bundle);
     expect(source(bundle)).toBe(original);
-    actions.redo();
-    await flushed(bundle);
-    expect(source(bundle)).toBe(`// source\n${original}`);
-    expect(bundle.store.getState().sourceEditError).toBeNull();
+    expect(changeCount(bundle.store.getState())).toBe(0);
+  });
+});
+
+describe("a failed save", () => {
+  const failing = async () => {
+    const editor = await mockEditor();
+    let fail = true;
+    const { bundle } = await start(
+      withVersions(editor.host, async (revision) =>
+        fail ? Promise.reject(new Error("Storage is full.")) : { revision, number: 2 },
+      ),
+    );
+    design(bundle, "// one");
+    await expect(bundle.store.getState().actions.saveVersion()).rejects.toThrow();
+    expect(bundle.store.getState().version.status).toBe("failed");
+    return {
+      bundle,
+      succeed: () => {
+        fail = false;
+      },
+    };
+  };
+
+  it("no longer applies once a restore replaces the draft", async () => {
+    const { bundle } = await failing();
+    bundle.store
+      .getState()
+      .actions.adoptLifecycleSnapshot({ rev: "rev_restored", authoredSource: "// restored\n" });
+    expect(bundle.store.getState().version).toMatchObject({ status: "idle", reason: null });
   });
 
-  it("keeps the chat waiting through Apply without versions until the draft holds the edits", async () => {
-    const editor = await mockEditor();
-    const { bundle } = await start(editor.host);
-    stage(bundle, "// one");
-    bundle.store.getState().actions.applyDesign();
-    expect(designWaiting(bundle.store.getState())).toBe(true);
-    await settle(30);
-    expect(bundle.store.getState().designDraft).toBeNull();
-    expect(designWaiting(bundle.store.getState())).toBe(false);
+  it("no longer applies once the document opens again", async () => {
+    const { bundle } = await failing();
+    bundle.store.getState().actions.reload();
+    for (let attempt = 0; attempt < 20; attempt += 1) await settle(5);
+    expect(bundle.store.getState().version.status).toBe("idle");
+  });
+
+  it("no longer applies when the draft turns out to be saved already", async () => {
+    const { bundle, succeed } = await failing();
+    succeed();
+    await bundle.store.getState().actions.saveVersion();
+    await settle();
+    bundle.store.setState((state) => ({
+      version: { ...state.version, status: "failed", reason: "Stale." },
+    }));
+    await bundle.store.getState().actions.saveVersion();
+    expect(bundle.store.getState().version.status).toBe("idle");
   });
 });
 

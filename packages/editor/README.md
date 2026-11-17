@@ -99,25 +99,40 @@ Escape closes overlay panels in compact and narrow layouts.
 
 The preview bar's **Design** switch makes a click on the email select it for editing: a toolbar
 on the element steps out to its container, moves, duplicates or deletes it, and beside a docked
-assistant the element's properties sit next to the email. Every edit from the toolbar, the
-properties or the fixture data is **staged**: it is written to the draft the host renders, so the
-preview shows it, but it is not a version. A dock under the email counts the staged edits and
-offers undo, redo, reset (after a confirm, back to the draft before the first edit), a locked
-compare with the preview from before the edits, and **Apply**, which saves them as one version
-through the `versions` capability, named "Design: N edits" (without `versions` Apply keeps the
-draft as it is). Leaving Design waits until the edits are applied or reset, and Design and Apply
-wait while `previewBusy` reports an assistant turn, so the two never edit the email at once.
-Source is read-only while edits are staged, so undo and reset walk one history in order. The top bar's Undo and Redo and the dock's act on the same history: the staged edits first, then the source history. An
-element written in a partial is saved through `lifecycle` immediately, because other templates
-share it.
+assistant the element's properties sit next to the email. An edit from the toolbar, the
+properties or the fixture data is an ordinary change to the draft, on the same undo history as
+Source: the draft the host renders holds it, and the status bar counts it among the changes not
+in a version yet. A dock under the email offers undo, redo and a locked compare with the preview
+from before the first edit since the last saved version. Design can be left with changes, and
+waits while `previewBusy` reports an assistant turn, so the two never edit the email at once.
+While an edit is on its way to the preview, the element's panel keeps its controls: the control
+that made it shows as pending, further edits to the same element are taken, and other elements
+and block edits wait without hiding their controls. A refused edit says why under the controls,
+with Undo. An element written in a partial is saved through `lifecycle` immediately, because
+other templates share it.
+
+The status bar owns saving: "2 changes not in a version yet" with **Save version**, "Saving
+version…", "Saved as version 13" (the number the host's `versions` returns), or "Couldn't save:
+…" with Retry. The draft itself autosaves quietly; its last write is in the status's tooltip, and
+only a write that fails shows in the status. A menu beside it discards the changes after a
+confirm, back to the saved head through `lifecycle`, or to the version this session saved.
+⌘/Ctrl+S saves a version. Without `versions`, the status reports the draft's own writes:
+"Saving…", "Saved", or "Couldn't save: …" with Retry.
 
 The Design tab and the properties beside the email speak the author's language. Layers list
 the blocks and elements the template wrote, by component name (`Section`, `Button`) or a plain
 word (`Heading`, `Text`, `Image`), and leave out the tables and cells the compiler renders them
 into; the compiler's authored marks decide which is which. The properties edit the selected
-element's text (data bindings stay chips), image description and size, component settings,
-colors from the theme's tokens (a custom hex sits behind a disclosure), type size from the
-template's own scale and weight, alignment, and padding or spacing. Each change is a class or
+element's text (data fields stay pills, named the way an author says them with the active
+fixture's sample beneath), image description and size, component settings, colors from the
+resolved theme (one field per property showing the color in use, opening a list grouped by
+brand, this email, theme and default theme, with Inherited and a custom hex), the theme's font roles, type size
+and weight, alignment, and padding or spacing. Each control shows what the element renders with,
+read from the canvas when the element sets no class. A host's `theme` capability supplies the
+resolved theme, brand included; without it the editor resolves the project's stylesheets through
+`lifecycle` with `themeTokensFromStylesheets`, which hosts can also call from `@samva/editor/host`
+(over the compiler's default theme; pass `brandSpecifier` when the project imports its brand
+by a specifier other than `samva:brand`). Each change is a class or
 prop edit, staged like the toolbar's. **Advanced** keeps the raw props and classes and the
 block edits, and the Source tab keeps the whole template.
 
@@ -170,30 +185,35 @@ Every part follows Base UI's and shadcn's conventions:
   `data-busy` while true), for Tailwind `data-[…]:` variants;
 - `render` swaps the element for the host's while keeping the part's props and behaviour.
 
-| Part (export)            | `data-slot`                 | State attributes                                                                               | Sub-part slots                                                                                                                                                                                                                                            |
-| ------------------------ | --------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EditorRoot`             | `editor`                    | `data-layout`, `data-docked`, `data-busy`                                                      |                                                                                                                                                                                                                                                           |
-| `EditorTopBar`           | `editor-top-bar`            | `data-layout`                                                                                  | `editor-top-bar-title`, `editor-top-bar-name`, `editor-top-bar-actions`                                                                                                                                                                                   |
-| `EditorWorkspace`        | `editor-workspace`          | `data-layout`                                                                                  | `editor-workspace-view` (Visual \| Source, standalone)                                                                                                                                                                                                    |
-| `EditorAssistantDock`    | `editor-assistant-dock`     | `data-focused`, `data-hidden`                                                                  | `editor-assistant-dock-header`, `editor-assistant-dock-body`                                                                                                                                                                                              |
-| `EditorDivider`          | `editor-divider`            | `data-side`, `data-dragging`                                                                   |                                                                                                                                                                                                                                                           |
-| `EditorPaneSwitch`       | `editor-pane-switch`        | `data-pane`, `data-unseen`                                                                     |                                                                                                                                                                                                                                                           |
-| `EditorWorkPane`         | `editor-work-pane`          | `data-tab`, `data-split`                                                                       | `editor-work-pane-header`, `editor-work-pane-tabs`, `editor-work-pane-tab` (`data-active`), `editor-work-pane-tab-group`, `editor-work-pane-tab-close`, `editor-work-pane-add`, `editor-work-pane-panel`                                                  |
-| `EditorCanvas`           | `editor-canvas`             | `data-zoom`, `data-device`, `data-target` (`email`, `web`)                                     | `editor-envelope`, `editor-preview-notice`                                                                                                                                                                                                                |
-| `EditorPreviewBar`       | `editor-preview-bar`        | `data-busy`                                                                                    | `editor-version-picker`, `editor-fixture-select`, `editor-preview-bar-center`, `editor-preview-bar-size`, `editor-preview-bar-progress`, `editor-preview-bar-target` (Email \| Web, when the host renders the web page), `editor-preview-bar-differences` |
-| `EditorZoomControl`      | `editor-zoom-control`       | `data-fit`, `data-percent`                                                                     |                                                                                                                                                                                                                                                           |
-| `EditorCanvasModeSwitch` | `editor-canvas-mode-switch` | `data-mode` (`point`, `design`, `pin`), `data-pending`, `data-locked`                          |                                                                                                                                                                                                                                                           |
-| `EditorDesignDock`       | `editor-design-dock`        | `data-pending`, `data-apply` (`idle`, `applying`, `failed`), `data-compare`, `data-confirming` | `editor-design-dock-bar`, `editor-design-dock-status`, `editor-design-dock-confirm`, `editor-design-dock-error`                                                                                                                                           |
-| `EditorPinTray`          | `editor-pin-tray`           | `data-count`, `data-open`, `data-confirming`, `data-pinning`                                   | `editor-pin-tray-list`, `editor-pin-tray-row`                                                                                                                                                                                                             |
-| `EditorStatusBar`        | `editor-status-bar`         | `data-layout`, `data-save`                                                                     | `editor-status-bar-start`, `editor-status-bar-end`                                                                                                                                                                                                        |
+| Part (export)            | `data-slot`                 | State attributes                                                                           | Sub-part slots                                                                                                                                                                                                                                            |
+| ------------------------ | --------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EditorRoot`             | `editor`                    | `data-layout`, `data-docked`, `data-busy`                                                  |                                                                                                                                                                                                                                                           |
+| `EditorTopBar`           | `editor-top-bar`            | `data-layout`                                                                              | `editor-top-bar-title`, `editor-top-bar-name`, `editor-top-bar-actions`                                                                                                                                                                                   |
+| `EditorWorkspace`        | `editor-workspace`          | `data-layout`                                                                              | `editor-workspace-view` (Visual \| Source, standalone)                                                                                                                                                                                                    |
+| `EditorAssistantDock`    | `editor-assistant-dock`     | `data-focused`, `data-hidden`                                                              | `editor-assistant-dock-header`, `editor-assistant-dock-body`                                                                                                                                                                                              |
+| `EditorDivider`          | `editor-divider`            | `data-side`, `data-dragging`                                                               |                                                                                                                                                                                                                                                           |
+| `EditorPaneSwitch`       | `editor-pane-switch`        | `data-pane`, `data-unseen`                                                                 |                                                                                                                                                                                                                                                           |
+| `EditorWorkPane`         | `editor-work-pane`          | `data-tab`, `data-split`                                                                   | `editor-work-pane-header`, `editor-work-pane-tabs`, `editor-work-pane-tab` (`data-active`), `editor-work-pane-tab-group`, `editor-work-pane-tab-close`, `editor-work-pane-add`, `editor-work-pane-panel`                                                  |
+| `EditorCanvas`           | `editor-canvas`             | `data-zoom`, `data-device`, `data-target` (`email`, `web`)                                 | `editor-envelope`, `editor-preview-notice`                                                                                                                                                                                                                |
+| `EditorPreviewBar`       | `editor-preview-bar`        | `data-busy`                                                                                | `editor-version-picker`, `editor-fixture-select`, `editor-preview-bar-center`, `editor-preview-bar-size`, `editor-preview-bar-progress`, `editor-preview-bar-target` (Email \| Web, when the host renders the web page), `editor-preview-bar-differences` |
+| `EditorZoomControl`      | `editor-zoom-control`       | `data-fit`, `data-percent`                                                                 |                                                                                                                                                                                                                                                           |
+| `EditorCanvasModeSwitch` | `editor-canvas-mode-switch` | `data-mode` (`point`, `design`, `pin`), `data-locked`                                      |                                                                                                                                                                                                                                                           |
+| `EditorDesignDock`       | `editor-design-dock`        | `data-compare`                                                                             | `editor-design-dock-bar`                                                                                                                                                                                                                                  |
+| `EditorPinTray`          | `editor-pin-tray`           | `data-count`, `data-open`, `data-confirming`, `data-pinning`                               | `editor-pin-tray-list`, `editor-pin-tray-row`                                                                                                                                                                                                             |
+| `EditorStatusBar`        | `editor-status-bar`         | `data-layout`, `data-save` (`idle`, `checking`, `saving`, `saved`, `error`, `unavailable`) | `editor-status-bar-start`, `editor-status-bar-end`                                                                                                                                                                                                        |
 
 In Design the canvas shows `editor-design-properties` beside the email. Inside the inspector,
 `editor-element-inspector`, `editor-design-properties-controls`, `editor-design-group`,
-`editor-design-field` and `editor-design-swatches` mark the controls, and each row of the layers
+`editor-design-field` (`data-pending` while its edit is still rendering, with an
+`editor-design-field-pending` spinner) and `editor-design-swatch` mark the controls, and each row of the layers
 is an `editor-layer` with `data-selected`. The toolbar on the
-selected element is drawn inside the email's frame, so it is styled by the frame's own sheet
-(`--editor-canvas-toolbar-bg` and `-fg`) rather than by Tailwind; it carries
-`data-testid="design-toolbar"`. The Design and Checks tabs render `editor-design-panel` (with `editor-layers`) and
+selected element is drawn in the canvas beside the email (`editor-design-toolbar`, with
+`data-side` for the edge of the element it sits on and `data-orientation` for its direction) and
+keeps the `--editor-canvas-toolbar-bg` and `-fg` tokens; it carries
+`data-testid="design-toolbar"`. With nothing selected the inspector shows `editor-document-panel`:
+`editor-document-group` sections (Page, Preview with), `editor-document-disclosure` folds (Edit
+sample data, Where it's written) and, when the preview cannot build, `editor-document-error`
+with the reason and an Undo. The Design and Checks tabs render `editor-design-panel` (with `editor-layers`) and
 `editor-checks-panel`, which opens with `editor-email-differences` (`data-count`, one
 `editor-email-differences-row` per component) when the host renders the web page. Inside the parts, controls are the shadcn components, so they also carry
 shadcn's own slots (`button`, `tabs-trigger`, `toggle-group-item`, `dropdown-menu-content`,
@@ -208,8 +228,8 @@ set. Persisted history and restore appear when the host supplies the optional `l
 capability. Publish appears only when its ready API includes `publish`; omit that method for
 documents that are scheduled or sent without publication. The top bar then offers a secondary
 Saved versions control. Save version appears when the host supplies `versions`; a draft can be saved where
-nothing is published. The editor reports what a person does (`preview`, `export`) through the
-host's `telemetry`. None of these are shell callbacks.
+nothing is published. The editor reports what a person does (`preview`, `export`, and
+`version.save` with the number of `changes` it kept) through the host's `telemetry`. None of these are shell callbacks.
 
 The shell dispatches directly on the host document's `channel`. Email mounts the
 host's rendered HTML in a same-origin iframe. SMS and WhatsApp read their forms from the
@@ -291,7 +311,7 @@ origin: {
 }
 ```
 
-Hosts must use `contractVersion` (`2026-10-26.1`) and handle both email origin kinds. Source
+Hosts must carry the `contractVersion` `@samva/editor/host` exports and handle both email origin kinds. Source
 replacement, undo/redo, and prose span edits use the same revision-fenced writer for the open
 file. A Markdown host needs no `lifecycle` capability for prose edits; foreign Markdown spans in
 a TSX document still use `lifecycle.inspect` and `updateFile`. Structural, expression, fixture-data,
@@ -345,11 +365,14 @@ chat can attach the pins to the next message and clear them once it is sent. An 
 | `origin`                              | Where the template wrote the element, or null            |
 | `note`                                | The author's note, empty until written                   |
 
-The assistant's `workspace.design` reads `{ on, pending, applying, waiting }`. A host's chat must
-not send while `waiting` is true: edits are staged, Apply is saving them, or an undo or reset has
-not reached the host yet. A turn would otherwise build on edits the author has not kept, and a
-version it saved would carry them. `versions.save(revision, { message })` receives the name of the version the
-editor asks for; a host without a use for it names the version itself.
+Before each send, a host's chat calls the assistant controls' `saveVersion()` and starts the turn
+on the revision it resolves: it writes every edit still on its way, saves the draft as a version
+unless the open revision already is one, and rejects with the reason when the save fails, so a
+turn always builds on kept work. Design edits never hold the chat. `workspace.version` reads
+`{ status, changes, number?, reason? }` with `status` one of `unavailable` (no `versions`),
+`unsaved`, `saving`, `saved` or `failed`, as the status bar says it; `workspace.design` reads
+`{ on }`. `workspace.pointedElement` follows a selection in point mode; in Design and pin mode
+only the element panel's "Ask agent about this" sets it, and changing the canvas mode clears it.
 
 Persisted publish/version/restore behavior is an optional `lifecycle`
 capability. It is deliberately separate from the editor's local undo/redo
