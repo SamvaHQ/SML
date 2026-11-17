@@ -1,7 +1,7 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { inspectSourceElement } from "@samva/markup/edit";
@@ -1061,5 +1061,85 @@ describe("samvaEditor route validation", () => {
       await new Promise<void>((done) => running.http.close(() => done()));
       await running.server.close();
     }
+  });
+});
+
+describe("samvaEditor theme route", () => {
+  const THEME_ROUTE = `${ROUTE}/api/theme`;
+  const open: Array<{ server: ViteDevServer; http: Server }> = [];
+  afterEach(async () => {
+    for (const { server, http } of open.splice(0)) {
+      await new Promise<void>((done) => http.close(() => done()));
+      await server.close();
+    }
+  });
+  const boot = async (
+    files: Readonly<Record<string, string>>,
+    options: SamvaEditorPluginOptions = {},
+  ) => {
+    const root = await tempProject({ "templates/welcome.tsx": EMAIL, ...files });
+    const booted = await bootServer(root, ROUTE, options);
+    open.push(booted);
+    return booted;
+  };
+
+  it("serves the theme and the project stylesheets it imports", async () => {
+    const { origin } = await boot({
+      "theme.css": `@import "tailwindcss";\n@import "./styles/starter.css";\n@theme { --color-brand: #4f46e5; }\n`,
+      "styles/starter.css": `@import "./deep.css";\n@theme { --color-ink: #111; }\n`,
+      "styles/deep.css": `@theme { --color-wash: #eee; }\n`,
+    });
+    const { status, body } = await json(origin, THEME_ROUTE);
+    expect(status).toBe(200);
+    expect(body).toEqual({
+      themePath: "theme.css",
+      files: {
+        "theme.css": expect.stringContaining("#4f46e5"),
+        "styles/starter.css": expect.stringContaining("#111"),
+        "styles/deep.css": expect.stringContaining("#eee"),
+      },
+    });
+  });
+
+  it("does not read stylesheets outside the project root", async () => {
+    const outside = await tempProject({ "secret.css": "@theme { --color-secret: #f00; }\n" });
+    const { origin } = await boot({
+      "theme.css": `@import "../${basename(outside)}/secret.css";\n@theme { --color-brand: #4f46e5; }\n`,
+    });
+    const { body } = await json(origin, THEME_ROUTE);
+    expect(Object.keys((body as { files: object }).files)).toEqual(["theme.css"]);
+    expect(JSON.stringify(body)).not.toContain("#f00");
+  });
+
+  it("returns no files when theming is off", async () => {
+    const { origin } = await boot(
+      { "theme.css": "@theme { --color-brand: #4f46e5; }\n" },
+      {
+        theme: false,
+      },
+    );
+    const { body } = await json(origin, THEME_ROUTE);
+    expect(body).toEqual({ themePath: "theme.css", files: {} });
+  });
+
+  it("includes the brand css when a resolver supplies one", async () => {
+    const { origin } = await boot(
+      { "theme.css": `@import "samva:brand";\n@theme { --color-brand: #4f46e5; }\n` },
+      {
+        brandResolver: {
+          resolve: async () => ({
+            ok: true,
+            brand: { slug: "studio", css: "@theme { --color-brand: #e11d48; }" },
+            source: "studio",
+            warnings: [],
+          }),
+        },
+      },
+    );
+    const { body } = await json(origin, THEME_ROUTE);
+    expect((body as { brand: unknown }).brand).toEqual({
+      name: "studio",
+      css: "@theme { --color-brand: #e11d48; }",
+    });
   });
 });
