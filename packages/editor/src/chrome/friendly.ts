@@ -128,28 +128,6 @@ export const nearestAuthored = (
   return undefined;
 };
 
-/** A color token the theme declares, with its light value when the theme file says it. */
-export interface ThemeColor {
-  readonly name: string;
-  readonly value: string | undefined;
-}
-
-/**
- * The colors a theme declares as `--color-<name>` in its first `@theme` block (the light
- * values), in declaration order.
- */
-export const themeColors = (css: string): ReadonlyArray<ThemeColor> => {
-  const block = /@theme\s*\{([\s\S]*?)\}/.exec(css)?.[1] ?? "";
-  const colors: ThemeColor[] = [];
-  for (const match of block.matchAll(/--color-([a-z0-9-]+)\s*:\s*([^;]+);/gi)) {
-    const name = match[1];
-    const value = match[2];
-    if (name !== undefined && !colors.some((color) => color.name === name))
-      colors.push({ name, value: value?.trim() });
-  }
-  return colors;
-};
-
 /** Utilities that look like colors but are something else. */
 const NOT_COLORS = new Set([
   "left",

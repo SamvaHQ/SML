@@ -15,7 +15,6 @@ import {
   friendlyName,
   nearestAuthored,
   propLabel,
-  themeColors,
   usedColorTokens,
   type AuthoredNode,
 } from "../src/chrome/friendly";
@@ -85,16 +84,6 @@ describe("authored layers", () => {
 });
 
 describe("theme colors", () => {
-  it("reads the light colors in declaration order", () => {
-    const colors = themeColors(NIMBUS_THEME_CSS);
-    expect(colors.slice(0, 3)).toEqual([
-      { name: "background", value: "#f4ede3" },
-      { name: "foreground", value: "#2b1d14" },
-      { name: "card", value: "#ffffff" },
-    ]);
-    expect(colors.find((color) => color.name === "primary")?.value).toBe("#b4532a");
-  });
-
   it("falls back to the color tokens a template uses, leaving sizes and alignment out", () => {
     expect(usedColorTokens(NIMBUS_TEMPLATE_TSX)).toEqual(
       expect.arrayContaining(["primary", "card-foreground", "accent", "muted-foreground"]),
