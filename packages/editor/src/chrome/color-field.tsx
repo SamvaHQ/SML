@@ -51,10 +51,15 @@ export function PickerList({
 }) {
   const list = useRef<HTMLDivElement>(null);
   const options = groups.flatMap((group) => group.options);
-  const focusIndex = Math.max(
-    0,
-    options.findIndex((option) => option.selected),
-  );
+  // The option that holds the tab stop: the selected one until focus moves, then the focused one.
+  const [active, setActive] = useState<number | null>(null);
+  const focusIndex =
+    active !== null && active < options.length
+      ? active
+      : Math.max(
+          0,
+          options.findIndex((option) => option.selected),
+        );
   const move = (event: KeyboardEvent<HTMLDivElement>) => {
     const items = [...(list.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])];
     const at = items.indexOf(event.target as HTMLElement);
@@ -70,6 +75,7 @@ export function PickerList({
               : null;
     if (next === null) return;
     event.preventDefault();
+    setActive(next);
     items[next]?.focus();
   };
   // Each group's first option's position in the whole list, for roving focus.
@@ -100,6 +106,7 @@ export function PickerList({
                   tabIndex={index === focusIndex ? 0 : -1}
                   data-testid={option.testId}
                   data-editor-control=""
+                  onFocus={() => setActive(index)}
                   onClick={option.onChoose}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {

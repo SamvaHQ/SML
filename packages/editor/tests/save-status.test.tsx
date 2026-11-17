@@ -15,7 +15,7 @@ import type { EditorContribution } from "../src/chrome/contributions";
 import { EditorShell } from "../src/chrome/shell";
 import { useEditorStoreApi } from "../src/state/context";
 import { EditorProvider } from "../src/state/provider";
-import type { EditorStore } from "../src/state/store";
+import { changeCount, type EditorStore } from "../src/state/store";
 import { mockEditor, settle, withVersions } from "./mock-host";
 
 afterEach(cleanup);
@@ -302,7 +302,7 @@ describe("discarding changes", () => {
     expect(restores).toHaveLength(1);
     expect(restores[0]?.commit).toBe("c2");
     expect(storeOf().getState().doc?.origin.authoredSource).toBe(original);
-    expect(storeOf().getState().version.changes).toBe(0);
+    expect(changeCount(storeOf().getState())).toBe(0);
     await waitFor(() => expect(view.queryByTestId("statusbar.discard-dialog")).toBeNull());
   });
 

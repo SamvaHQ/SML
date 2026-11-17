@@ -18,7 +18,7 @@ import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react
 import { SourceControls } from "../src/chrome/source-controls";
 import { useEditorStore, useEditorStoreApi } from "../src/state/context";
 import { EditorProvider } from "../src/state/provider";
-import type { EditorStore } from "../src/state/store";
+import { pendingDesignEdit, type EditorStore } from "../src/state/store";
 
 afterEach(cleanup);
 
@@ -358,5 +358,106 @@ describe("an edit on its way to the preview", () => {
     expect(storeOf().getState().sourceEditError).toBe(
       "Wait for your last change to reach the preview.",
     );
+  });
+});
+
+describe("a version saved before its edit has rendered", () => {
+  it("moves only the revision, keeps the edit pending, and shows its late render as saved", async () => {
+    const saved: string[] = [];
+    const { controlled, view } = await mount("h1", {
+      status: "ready",
+      api: {
+        save: async (revision) => {
+          saved.push(revision);
+          return { revision: `${revision}_saved`, number: 5 };
+        },
+        savedRevision: async () => null,
+      },
+    });
+    editHeading(view, "Welcome");
+    let saving: Promise<string> | undefined;
+    act(() => {
+      saving = storeOf().getState().actions.saveVersion();
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const source = controlled.waiting()!;
+    await controlled.ack("rev_2");
+    await act(async () => {
+      await saving;
+    });
+    let state = storeOf().getState();
+    expect(saved).toEqual(["rev_2"]);
+    expect(state.doc?.rev).toBe("rev_2_saved");
+    // The edit is still on its way: its history, its pending state and its panel stay.
+    expect(state.pendingAuthoredSource).toBe(source);
+    expect(state.undoHistory).toHaveLength(1);
+    expect(pendingDesignEdit(state)?.instancePath).toBeDefined();
+    expect(view.queryByTestId("source.unavailable")).toBeNull();
+
+    // Its own render lands late, under the revision it was saved as.
+    await controlled.emit("rev_2", source);
+    state = storeOf().getState();
+    expect(state.doc?.rev).toBe("rev_2_saved");
+    expect(state.render?.revision).toBe("rev_2_saved");
+    expect(state.pendingAuthoredSource).toBeNull();
+  });
+});
+
+describe("the store's own guard on edits", () => {
+  it("refuses an element edit from a render that does not show the source it holds", async () => {
+    const { view } = await mount();
+    const state = storeOf().getState();
+    const heading = state.render!.selections.find((entry) => entry.tag === "h1")!;
+    const restored = SOURCE.replace(">Hello<", ">Restored<");
+    // A restore replaces the entry; its render is still on its way.
+    act(() => state.actions.adoptLifecycleSnapshot({ rev: "rev_9", authoredSource: restored }));
+    const after = storeOf().getState();
+    expect(after.render?.revision).toBe("rev_1");
+    act(() =>
+      after.actions.applySourceEdit({
+        revision: after.render!.revision,
+        source: restored,
+        edits: [{ start: 0, end: 0, before: "", after: "// x\n" }],
+        design: { label: "Edit text" },
+        target: { instancePath: heading.instancePath, originIndex: 0 },
+      }),
+    );
+    expect(storeOf().getState().sourceEditError).toContain("stale");
+    expect(storeOf().getState().doc?.origin.authoredSource).toBe(restored);
+    // The panel holds its controls, disabled, until the restored render arrives.
+    const literal = view.getByTestId("source.property.children.literal");
+    expect(literal.closest("fieldset")?.disabled).toBe(true);
+  });
+
+  it("makes the next edit wait for the preview after a block moves", async () => {
+    const { view } = await mount();
+    fireEvent.click(view.getByTestId("source.review-move-down"));
+    fireEvent.click(view.getByTestId("source.apply-structure"));
+    const state = storeOf().getState();
+    expect(state.pendingAuthoredSource).not.toBeNull();
+    // A neighbour now starts where the heading did, so nothing may follow it on the old origins.
+    expect(pendingDesignEdit(state)).toBeNull();
+    const heading = state.render!.selections.find((entry) => entry.tag === "h1")!;
+    act(() =>
+      state.actions.applySourceEdit({
+        revision: state.render!.revision,
+        source: state.doc!.origin.authoredSource,
+        edits: [{ start: 0, end: 0, before: "", after: "// x\n" }],
+        design: { label: "Edit text", field: "text.children" },
+        target: { instancePath: heading.instancePath, originIndex: 0 },
+      }),
+    );
+    expect(storeOf().getState().sourceEditError).toBe(
+      "Wait for your last change to reach the preview.",
+    );
+  });
+
+  it("lets an in-place block edit be followed on the same element", async () => {
+    const { view } = await mount();
+    fireEvent.click(view.getByTestId("source.review-duplicate"));
+    fireEvent.click(view.getByTestId("source.apply-structure"));
+    expect(pendingDesignEdit(storeOf().getState())?.instancePath).toBeDefined();
   });
 });

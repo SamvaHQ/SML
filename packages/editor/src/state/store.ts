@@ -134,12 +134,42 @@ export interface VersionState {
     readonly saved: SavedVersion | null;
   } | null;
   /**
-   * Changes made in this session since it opened or last saved a version: undo takes one back,
-   * redo adds it again. Null once the draft holds changes it did not count, such as an
-   * assistant's or a restored version's.
+   * Where the draft last matched what this session counts from (it opened, or saved a version)
+   * on the undo history; see {@link changeCount}. Null once the draft holds changes it did not
+   * count, such as an assistant's or a restored version's.
    */
-  readonly changes: number | null;
+  readonly mark: HistoryMark | null;
 }
+
+/**
+ * A point on the undo history: `depth` is the history's length there, and `fork` the deepest
+ * entry it still shares with the current history. A new edit made below `depth` discards the
+ * redo entries that led back to it, so the path to it runs down to `fork` and up again.
+ */
+export interface HistoryMark {
+  readonly depth: number;
+  readonly fork: number;
+}
+
+const markAt = (depth: number): HistoryMark => ({ depth, fork: depth });
+
+/** The mark after a new entry is pushed onto a history `length` deep. */
+const markAfterPush = (mark: HistoryMark | null, length: number): HistoryMark | null =>
+  mark === null || length >= mark.depth ? mark : { ...mark, fork: Math.min(mark.fork, length) };
+
+/**
+ * The changes between the draft and the point the session counts from, in undo steps: an undo
+ * after a save is one change, and its redo is none. Null when the draft holds changes this
+ * session did not count.
+ */
+export const changeCount = (state: Pick<EditorState, "version" | "undoHistory">): number | null => {
+  const { mark } = state.version;
+  if (mark === null) return null;
+  const length = state.undoHistory.length;
+  return mark.fork >= Math.min(length, mark.depth)
+    ? Math.abs(length - mark.depth)
+    : mark.depth - mark.fork + (length - mark.fork);
+};
 
 /** The element an edit from the element controls targets: one rendered instance and one origin. */
 export interface DesignEditTarget {
@@ -177,6 +207,10 @@ export type SaveStatus =
       readonly retry: "version" | "draft" | "reload";
     };
 
+/** The undo key of Source-tab typing, and how long a pause ends one burst of it. */
+const SOURCE_TYPING = "source-typing";
+const SOURCE_TYPING_GROUP_MS = 1000;
+
 const LOADING: SaveStatus = { kind: "loading" };
 const CHECKING: SaveStatus = { kind: "checking" };
 const SAVING: SaveStatus = { kind: "saving" };
@@ -197,7 +231,13 @@ const savedVersionAt = (version: VersionState, revision: RevisionToken): SavedVe
 export const saveStatus = (
   state: Pick<
     EditorState,
-    "doc" | "pendingAuthoredSource" | "conflict" | "storageError" | "version" | "versionsCapability"
+    | "doc"
+    | "pendingAuthoredSource"
+    | "conflict"
+    | "storageError"
+    | "version"
+    | "versionsCapability"
+    | "undoHistory"
   >,
 ): SaveStatus => {
   const { doc, version } = state;
@@ -220,18 +260,15 @@ export const saveStatus = (
   // Undoing back to what this session saved is the saved version again, whatever its revision.
   if (settled && version.saved !== null && version.saved.source === doc.origin.authoredSource)
     return { kind: "saved", number: version.saved.number };
-  if (version.head?.revision !== doc.rev && (version.changes ?? 0) === 0 && settled)
-    return CHECKING;
-  return { kind: "unsaved", changes: version.changes };
+  const changes = changeCount(state);
+  if (version.head?.revision !== doc.rev && (changes ?? 0) === 0 && settled) return CHECKING;
+  return { kind: "unsaved", changes };
 };
 
 /** The edit from the element controls still on its way to the preview, if there is one. */
 export const pendingDesignEdit = (
   state: Pick<EditorState, "pendingAuthoredSource" | "lastDesignEdit">,
 ): DesignEdit | null => (state.pendingAuthoredSource === null ? null : state.lastDesignEdit);
-
-const countChange = (changes: number | null, step: 1 | -1): number | null =>
-  changes === null ? null : Math.max(0, changes + step);
 
 /** A failure's own words, for "Couldn't save: …". */
 export const reasonOf = (cause: unknown, fallback: string): string => {
@@ -642,6 +679,22 @@ export const createEditorBundle = (
   let markdownEntrySource: string | null = null;
   // Revision tokens are opaque: retire each one as the writer or change stream advances past it.
   const obsoleteMarkdownRevisions = new Set<string>();
+  // Revisions an adopted one replaced while their own render was still on its way. That render,
+  // when it lands, shows the adopted revision rather than moving the document back.
+  const superseded = new Map<RevisionToken, RevisionToken>();
+  const supersede = (from: RevisionToken, to: RevisionToken): void => {
+    if (from === to) return;
+    for (const [earlier, adopted] of superseded) if (adopted === from) superseded.set(earlier, to);
+    superseded.set(from, to);
+  };
+  const adoptedChange = (change: DocumentChange): DocumentChange => {
+    const adopted = superseded.get(change.rev);
+    if (adopted === undefined) return change;
+    superseded.delete(change.rev);
+    return change.channel === "email" && change.render !== null
+      ? { ...change, rev: adopted, render: { ...change.render, revision: adopted } }
+      : { ...change, rev: adopted };
+  };
   let invalidateMarkdown: () => void = () => {};
   let cancelMarkdownWait: (() => void) | undefined;
 
@@ -906,13 +959,7 @@ export const createEditorBundle = (
               markdown: { file: item.file },
             });
             if (!changed.ok) return refuseMarkdown(changed.reason);
-            const state = get();
-            set({
-              undoHistory: [...state.undoHistory, { before: target.source, after: changed.source }],
-              redoHistory: [],
-              version: { ...state.version, changes: countChange(state.version.changes, 1) },
-            });
-            sourceTyping = false;
+            set(pushedEntry(get(), { before: target.source, after: changed.source }));
             commitSource(changed.source, { markdownSpan: true });
             const revision = await flushMarkdownSource();
             if (generation !== markdownGeneration) return;
@@ -982,8 +1029,36 @@ export const createEditorBundle = (
           drainMarkdown();
         });
     };
-    // Typing in the Source tab is one change to the count, however many keystrokes it takes.
-    let sourceTyping = false;
+    // Typing in the Source tab is one undo step per burst: a keystroke within this long of the
+    // last one joins its step.
+    let sourceTypingAt = 0;
+    type HistoryEntry = EditorState["undoHistory"][number];
+    /** A new undo step; any other history change ends a burst of Source typing. */
+    const pushedEntry = (state: EditorState, entry: HistoryEntry): Partial<EditorState> => {
+      sourceTypingAt = 0;
+      return {
+        undoHistory: [...state.undoHistory, entry],
+        redoHistory: [],
+        version: {
+          ...state.version,
+          mark: markAfterPush(state.version.mark, state.undoHistory.length),
+        },
+      };
+    };
+    /**
+     * Whether an edit under `key` joins the last undo step: the same key, made on the source the
+     * editor holds, and after the last saved version, so a step never spans a save.
+     */
+    const joinsLastEntry = (state: EditorState, key: string | undefined): boolean => {
+      const last = state.undoHistory.at(-1);
+      const { mark } = state.version;
+      return (
+        key !== undefined &&
+        last?.key === key &&
+        last.after === state.doc?.origin.authoredSource &&
+        (mark === null || state.undoHistory.length > mark.depth)
+      );
+    };
     // The version save in flight; a second call shares it.
     let versionSave: Promise<RevisionToken> | null = null;
     const commitSource = (
@@ -1025,23 +1100,20 @@ export const createEditorBundle = (
         });
         return;
       }
-      const changes = countChange(state.version.changes, direction === "undo" ? -1 : 1);
       set(
         direction === "undo"
           ? {
               undoHistory: entries.slice(0, -1),
               redoHistory: [...state.redoHistory, entry],
-              version: { ...state.version, changes },
               designCompare: false,
             }
           : {
               redoHistory: entries.slice(0, -1),
               undoHistory: [...state.undoHistory, entry],
-              version: { ...state.version, changes },
               designCompare: false,
             },
       );
-      sourceTyping = false;
+      sourceTypingAt = 0;
       commitSource(direction === "undo" ? entry.before : entry.after);
     };
     /** The chat a request is addressed to comes into view, in every layout. */
@@ -1149,30 +1221,32 @@ export const createEditorBundle = (
       applySourceEdit: (input) => {
         const state = get();
         if (gated(state) || !state.sourceEditable || state.conflict || state.doc === null) return;
-        // The edit's spans were computed against the source the editor holds, from the render on
-        // screen or the draft revision.
-        if (
-          state.doc.origin.authoredSource !== input.source ||
-          (input.revision !== state.doc.rev && input.revision !== state.render?.revision)
-        ) {
+        // While an edit is on its way, the render's origins only still point into the source the
+        // editor holds for the element that edit changed.
+        const pending = pendingDesignEdit(state);
+        const continues =
+          input.target !== undefined &&
+          pending !== null &&
+          pending.instancePath === input.target.instancePath &&
+          pending.originIndex === input.target.originIndex;
+        if (state.pendingAuthoredSource !== null && input.coalesceKey === undefined && !continues) {
+          set({ sourceEditError: "Wait for your last change to reach the preview." });
+          return;
+        }
+        // An edit computed from the render's origins needs that render to show the source it
+        // edits (or to be the one its element's own pending edit started from); any other edit
+        // is computed against the draft revision.
+        const renderCurrent =
+          state.pendingAuthoredSource === null && state.render?.revision === state.doc.rev;
+        const fresh =
+          input.target === undefined
+            ? input.revision === state.doc.rev
+            : input.revision === state.render?.revision && (renderCurrent || continues);
+        if (state.doc.origin.authoredSource !== input.source || !fresh) {
           set({
             sourceEditError:
               "That edit is stale. The preview moved on. Reselect the element and try again.",
           });
-          return;
-        }
-        // While an edit is on its way, the render's origins only still point into the source the
-        // editor holds for the element that edit changed.
-        const pending = pendingDesignEdit(state);
-        if (
-          state.pendingAuthoredSource !== null &&
-          input.coalesceKey === undefined &&
-          (input.target === undefined ||
-            pending === null ||
-            pending.instancePath !== input.target.instancePath ||
-            pending.originIndex !== input.target.originIndex)
-        ) {
-          set({ sourceEditError: "Wait for your last change to reach the preview." });
           return;
         }
         if (input.design !== undefined && state.hostBusy) {
@@ -1193,24 +1267,20 @@ export const createEditorBundle = (
         }
         if (result.source === input.source) return;
         const last = state.undoHistory.at(-1);
-        const merges =
-          input.coalesceKey !== undefined &&
-          last?.key === input.coalesceKey &&
-          last.after === input.source;
         set({
-          undoHistory: merges
-            ? [
-                ...state.undoHistory.slice(0, -1),
-                { before: last.before, after: result.source, key: input.coalesceKey },
-              ]
-            : [
-                ...state.undoHistory,
-                { before: input.source, after: result.source, key: input.coalesceKey },
-              ],
-          redoHistory: [],
-          version: merges
-            ? state.version
-            : { ...state.version, changes: countChange(state.version.changes, 1) },
+          ...(last !== undefined && joinsLastEntry(state, input.coalesceKey)
+            ? {
+                undoHistory: [
+                  ...state.undoHistory.slice(0, -1),
+                  { before: last.before, after: result.source, key: input.coalesceKey },
+                ],
+                redoHistory: [],
+              }
+            : pushedEntry(state, {
+                before: input.source,
+                after: result.source,
+                key: input.coalesceKey,
+              })),
           ...(input.design === undefined
             ? {}
             : {
@@ -1218,7 +1288,7 @@ export const createEditorBundle = (
                 designCompare: false,
               }),
         });
-        sourceTyping = false;
+        sourceTypingAt = 0;
         commitSource(result.source, {
           coalesceKey: input.coalesceKey,
           designEdit:
@@ -1238,18 +1308,29 @@ export const createEditorBundle = (
         ) {
           return;
         }
-        set({
-          undoHistory: [
-            ...state.undoHistory,
-            { before: state.doc.origin.authoredSource, after: authoredSource },
-          ],
-          redoHistory: [],
-          version: sourceTyping
-            ? state.version
-            : { ...state.version, changes: countChange(state.version.changes, 1) },
-        });
+        const now = Date.now();
+        const last = state.undoHistory.at(-1);
+        const typing =
+          last !== undefined &&
+          now - sourceTypingAt < SOURCE_TYPING_GROUP_MS &&
+          joinsLastEntry(state, SOURCE_TYPING);
+        set(
+          typing
+            ? {
+                undoHistory: [
+                  ...state.undoHistory.slice(0, -1),
+                  { ...last, after: authoredSource },
+                ],
+                redoHistory: [],
+              }
+            : pushedEntry(state, {
+                before: state.doc.origin.authoredSource,
+                after: authoredSource,
+                key: SOURCE_TYPING,
+              }),
+        );
         commitSource(authoredSource);
-        sourceTyping = true;
+        sourceTypingAt = now;
       },
 
       viewFixture: (fixture) => {
@@ -1328,31 +1409,43 @@ export const createEditorBundle = (
           invalidateMarkdown();
         }
         spine.adoptRev(input.rev);
-        sourceTyping = false;
+        sourceTypingAt = 0;
         set((current) => {
           if (current.doc === null) return { conflict: false };
-          const settled = {
-            conflict: false,
-            sourceEditError: null,
-            lastDesignEdit: null,
-          };
+          // A version save in flight keeps its status; a failure no longer applies.
+          const version: VersionState =
+            current.version.status === "failed"
+              ? { ...current.version, status: "idle", reason: null }
+              : current.version;
+          const same = input.authoredSource === current.doc.origin.authoredSource;
+          // The same source while its render is still on its way: only the revision moves. The
+          // edit stays pending, and its own render, when it lands, is the adopted revision's.
+          if (same && current.pendingAuthoredSource !== null) {
+            supersede(current.doc.rev, input.rev);
+            return {
+              doc: { ...current.doc, rev: input.rev },
+              conflict: false,
+              sourceEditError: null,
+              version,
+            };
+          }
+          const settled = { conflict: false, sourceEditError: null, lastDesignEdit: null, version };
           // The same source under a new revision, such as a saved version, keeps its render.
           const moved = movedRevision(current, input.rev, input.authoredSource);
           if (moved !== null) return { ...moved, ...settled };
           const doc = { ...withAuthoredSource(current.doc, input.authoredSource), rev: input.rev };
           // A restore replaces the entry: Compare's base and the change count no longer apply.
-          const replaced = input.authoredSource !== current.doc.origin.authoredSource;
           return {
             ...committedDocument(current, doc, null),
             ...settled,
             sourceEditable: sourceEditableFor(doc),
-            ...(replaced
-              ? {
+            ...(same
+              ? {}
+              : {
                   designBase: null,
                   designCompare: false,
-                  version: { ...current.version, changes: null },
-                }
-              : {}),
+                  version: { ...version, mark: null },
+                }),
           };
         });
       },
@@ -1373,8 +1466,11 @@ export const createEditorBundle = (
           doc !== null &&
           state.pendingAuthoredSource === null &&
           savedVersionAt(state.version, doc.rev) !== null
-        )
+        ) {
+          if (state.version.status === "failed")
+            set({ version: { ...state.version, status: "idle", reason: null } });
           return Promise.resolve(doc.rev);
+        }
         if (!actions.beginLifecycle())
           return Promise.reject(
             new DocumentUnavailable({
@@ -1395,7 +1491,7 @@ export const createEditorBundle = (
                 }),
               );
             if (savedVersionAt(settled.version, revision) !== null) {
-              set((latest) => ({ version: { ...latest.version, status: "idle" } }));
+              set((latest) => ({ version: { ...latest.version, status: "idle", reason: null } }));
               return revision;
             }
             const snapshot = settled.doc;
@@ -1412,8 +1508,8 @@ export const createEditorBundle = (
                 authoredSource: snapshot.origin.authoredSource,
               });
             }
-            const changes = get().version.changes;
-            sourceTyping = false;
+            const changes = changeCount(get());
+            sourceTypingAt = 0;
             set((latest) => ({
               designBase: null,
               designCompare: false,
@@ -1422,9 +1518,12 @@ export const createEditorBundle = (
                 reason: null,
                 saved: { ...saved, source: snapshot.origin.authoredSource },
                 head: { revision: saved.revision, saved },
-                // A change from elsewhere that landed during the save is not in the version.
-                changes:
-                  latest.doc?.origin.authoredSource === snapshot.origin.authoredSource ? 0 : null,
+                // Changes count from here; one from elsewhere that landed during the save is not
+                // in the version.
+                mark:
+                  latest.doc?.origin.authoredSource === snapshot.origin.authoredSource
+                    ? markAt(latest.undoHistory.length)
+                    : null,
               },
             }));
             state.telemetry?.({ name: "version.save", data: { changes: changes ?? 0 } });
@@ -1460,14 +1559,9 @@ export const createEditorBundle = (
           if (saved === null) return refuse("There is no saved version to go back to.");
           if (saved.source === state.doc.origin.authoredSource) return;
           set({
-            undoHistory: [
-              ...state.undoHistory,
-              { before: state.doc.origin.authoredSource, after: saved.source },
-            ],
-            redoHistory: [],
-            version: { ...state.version, changes: 0 },
+            ...pushedEntry(state, { before: state.doc.origin.authoredSource, after: saved.source }),
+            version: { ...state.version, mark: markAt(state.undoHistory.length + 1) },
           });
-          sourceTyping = false;
           commitSource(saved.source);
           return;
         }
@@ -1484,7 +1578,9 @@ export const createEditorBundle = (
               baseRev: await spine.flushSaves(),
             });
             actions.adoptLifecycleSnapshot(restored);
-            set((latest) => ({ version: { ...latest.version, changes: 0 } }));
+            set((latest) => ({
+              version: { ...latest.version, mark: markAt(latest.undoHistory.length) },
+            }));
           })
           .finally(() => actions.endLifecycle());
       },
@@ -1895,7 +1991,7 @@ export const createEditorBundle = (
       designBase: null,
       designCompare: false,
       lastDesignEdit: null,
-      version: { status: "idle", reason: null, saved: null, head: null, changes: 0 },
+      version: { status: "idle", reason: null, saved: null, head: null, mark: markAt(0) },
       assistantTarget: null,
       pins: [],
       hostBusy: false,
@@ -1925,6 +2021,7 @@ export const createEditorBundle = (
 
   spine = createEditorSpine(host, {
     onInitial: (doc) => {
+      superseded.clear();
       obsoleteMarkdownRevisions.clear();
       store.setState((current) => ({
         ...committedDocument(current, doc, null),
@@ -1936,7 +2033,11 @@ export const createEditorBundle = (
         designBase: null,
         designCompare: false,
         lastDesignEdit: null,
-        version: { ...current.version, changes: 0 },
+        version: {
+          ...current.version,
+          ...(current.version.status === "failed" ? { status: "idle", reason: null } : {}),
+          mark: markAt(current.undoHistory.length),
+        },
       }));
     },
     onPersistedRevision: (rev) => {
@@ -1960,7 +2061,8 @@ export const createEditorBundle = (
     },
     // Our own acked save came back with the render the host produced for it.
     // Local text that has moved on since is kept; everything else is the host's.
-    onSelfAck: (change) => {
+    onSelfAck: (received) => {
+      const change = adoptedChange(received);
       const snapshot = store.getState();
       if (snapshot.doc?.origin.kind === "markdown") {
         if (snapshot.conflict || obsoleteMarkdownRevisions.has(change.rev)) return;
@@ -2001,7 +2103,7 @@ export const createEditorBundle = (
         designBase: null,
         designCompare: false,
         lastDesignEdit: null,
-        version: { ...current.version, changes: null },
+        version: { ...current.version, mark: null },
       }));
     },
     onConflict: () => store.setState({ conflict: true, sourceEditable: false }),
@@ -2032,7 +2134,9 @@ export const createEditorBundle = (
           ...current.version,
           head: { revision, saved: found },
           // A draft that is a saved version holds no uncounted changes.
-          ...(found !== null && current.pendingAuthoredSource === null ? { changes: 0 } : {}),
+          ...(found !== null && current.pendingAuthoredSource === null
+            ? { mark: markAt(current.undoHistory.length) }
+            : {}),
         },
       }));
     };

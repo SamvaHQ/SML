@@ -4,7 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore, useEditorStoreApi } from "../state/context";
 import { summarizeChecks } from "../state/derive";
-import { saveStatus, type EditorLayoutMode, type SaveStatus } from "../state/store";
+import { changeCount, saveStatus, type EditorLayoutMode, type SaveStatus } from "../state/store";
 import type { CheckItem, EditorPin } from "../state/types";
 import { useContribution } from "./contributions";
 import {
@@ -180,7 +180,7 @@ export function useAssistant(): {
       layout: state.layoutMode,
       designOn: state.canvasMode === "design",
       versioned: state.versionsCapability?.status === "ready",
-      changes: state.version.changes,
+      changes: changeCount(state),
       pins: state.pins,
       canFix:
         state.sourceEditable &&

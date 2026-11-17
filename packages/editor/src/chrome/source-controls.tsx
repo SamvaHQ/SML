@@ -126,6 +126,11 @@ interface Reviewed {
   readonly label: string;
   /** Why the change cannot be applied; the diff is still shown so the author can see it. */
   readonly refusal: string | null;
+  /**
+   * The change keeps the element where it starts (its props, classes or children, or a copy
+   * after it). A delete or a move puts a neighbour there, so the next edit waits for the preview.
+   */
+  readonly inPlace: boolean;
 }
 
 const propertyLabel = (name: string): string =>
@@ -277,15 +282,20 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
     pendingEdit.originIndex === scope;
   const shown = editable && !hostBusy && target !== null && source !== null;
   const available = shown && !lifecycleBusy && !saving && (current || (!foreign && pendingHere));
-  const check = (edits: readonly SourceReplacement[], label: string): Reviewed => {
+  const check = (edits: readonly SourceReplacement[], label: string, inPlace = true): Reviewed => {
     const result = applySourceReplacements(source ?? "", edits, { profile: guard });
-    return { edits, label, refusal: result.ok ? null : result.reason };
+    return { edits, label, refusal: result.ok ? null : result.reason, inPlace };
   };
   /**
    * Stage an entry edit as a Design edit, or save a partial's change through the host's project
    * files: a partial is shared by other templates, so it is not part of this template's draft.
    */
-  const commit = (edits: readonly SourceReplacement[], label: string, field?: string) => {
+  const commit = (
+    edits: readonly SourceReplacement[],
+    label: string,
+    field?: string,
+    inPlace = true,
+  ) => {
     if (source === null) return;
     setLocalError(null);
     setStructureError(null);
@@ -295,7 +305,11 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
         source,
         edits,
         design: { label, field },
-        target: { instancePath: selection.instancePath, originIndex: scope },
+        // Only an edit that leaves the element where it starts lets the next one follow it
+        // before the preview catches up; after a delete or a move, a neighbour starts there.
+        ...(inPlace
+          ? { target: { instancePath: selection.instancePath, originIndex: scope } }
+          : {}),
       });
       return;
     }
@@ -508,7 +522,9 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                     disabled={!target.structural}
                     onClick={() => {
                       const edits = structuralReplacements(source, target, { kind: "delete" });
-                      setStructuralProposal(edits === null ? null : check(edits, "Delete block"));
+                      setStructuralProposal(
+                        edits === null ? null : check(edits, "Delete block", false),
+                      );
                     }}
                   >
                     Review delete
@@ -538,7 +554,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                         direction: "before",
                       });
                       setStructuralProposal(
-                        edits === null ? null : check(edits, "Move block earlier"),
+                        edits === null ? null : check(edits, "Move block earlier", false),
                       );
                     }}
                   >
@@ -555,7 +571,7 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                         direction: "after",
                       });
                       setStructuralProposal(
-                        edits === null ? null : check(edits, "Move block later"),
+                        edits === null ? null : check(edits, "Move block later", false),
                       );
                     }}
                   >
@@ -610,7 +626,9 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                                   kind: "move",
                                   destination: container,
                                 });
-                          setStructuralProposal(edits === null ? null : check(edits, "Move block"));
+                          setStructuralProposal(
+                            edits === null ? null : check(edits, "Move block", false),
+                          );
                           setStructureError(
                             edits === null
                               ? "This destination cannot accept the selected block. Choose another source container or use Source."
@@ -648,7 +666,12 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
                         className={buttonClass}
                         disabled={structuralProposal.refusal !== null}
                         onClick={() => {
-                          commit(structuralProposal.edits, structuralProposal.label);
+                          commit(
+                            structuralProposal.edits,
+                            structuralProposal.label,
+                            undefined,
+                            structuralProposal.inPlace,
+                          );
                           setStructuralProposal(null);
                         }}
                       >
