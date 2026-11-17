@@ -11,7 +11,7 @@ import { Data } from "effect";
  * carry it on the {@link EditorHost} they construct; the editor reads it to fail
  * loudly on a contract mismatch instead of silently mis-rendering.
  */
-export const contractVersion = "2026-10-26.1" as const;
+export const contractVersion = "2026-11-17.1" as const;
 
 export type TemplateChannel = "email" | "sms" | "whatsapp";
 
@@ -453,19 +453,75 @@ export interface VersionSaveOptions {
   readonly message?: string | undefined;
 }
 
+/** A saved version of the draft: the revision that names it, and its number when the host counts them. */
+export interface SavedVersion {
+  readonly revision: RevisionToken;
+  /** The version's ordinal in the template's history ("Saved as version 13"), when the host has one. */
+  readonly number?: number | undefined;
+}
+
 /**
  * Save the draft as a version (a Git commit) and read whether the open revision already is one.
  * A host offers it apart from `lifecycle`, because a draft can be saved where nothing is published.
  */
 export interface AsyncVersionsApi {
   /**
-   * Commit the draft at `revision` and resolve the revision that now names the saved head.
-   * `message` names the version when the editor knows what it holds, such as "Design: 3 edits";
-   * without one the host names it.
+   * Commit the draft at `revision` and resolve the version that now names the saved head.
+   * `message` names the version when the editor knows what it holds; without one the host names
+   * it.
    */
-  save(revision: RevisionToken, options?: VersionSaveOptions): Promise<RevisionToken>;
-  /** The open revision when it equals the saved head, or null while the draft differs from it. */
-  savedRevision(): Promise<RevisionToken | null>;
+  save(revision: RevisionToken, options?: VersionSaveOptions): Promise<SavedVersion>;
+  /** The saved version when the open revision equals the saved head, or null while the draft differs. */
+  savedRevision(): Promise<SavedVersion | null>;
+}
+
+/**
+ * Where a theme token's value comes from. `brand` is the organization brand the theme imports
+ * (`samva:brand`), which only the host can resolve; `stylesheet` is another project stylesheet the
+ * theme imports (the starter); `project` is the theme file's own `@theme`, this template's
+ * overrides.
+ */
+export type ThemeTokenSource =
+  | { readonly kind: "brand"; readonly name: string }
+  | { readonly kind: "stylesheet"; readonly path: string }
+  | { readonly kind: "project" };
+
+/** One `--color-*` token, resolved through the theme's imports and the brand. */
+export interface ThemeColorToken {
+  /** The token without its prefix: `card-foreground` for `--color-card-foreground`. */
+  readonly name: string;
+  /** A CSS color the browser can paint (`#17181c`, `oklch(…)`), as the theme resolves it. */
+  readonly value: string;
+  /** The value under the dark scheme, when the theme sets one. */
+  readonly dark?: string | undefined;
+  readonly source: ThemeTokenSource;
+  /** What the theme calls the token; without one the editor names it from `name`. */
+  readonly label?: string | undefined;
+}
+
+/** One `--font-*` role (`heading`, `sans`, `mono`), resolved like a color. */
+export interface ThemeFontToken {
+  /** The role without its prefix: `heading` for `--font-heading`. */
+  readonly name: string;
+  /** The font stack as written: `"Barlow Semi Condensed", ui-sans-serif, sans-serif`. */
+  readonly family: string;
+  readonly source: ThemeTokenSource;
+}
+
+/** The resolved theme of the open template, in the order its stylesheets declare it. */
+export interface ThemeTokens {
+  readonly colors: ReadonlyArray<ThemeColorToken>;
+  readonly fonts: ReadonlyArray<ThemeFontToken>;
+}
+
+/**
+ * The theme as the host resolves it, brand included. The editor reads it to name and paint the
+ * colors and fonts the inspector offers; without it the editor resolves the project's own
+ * stylesheets through `lifecycle` and cannot see the brand.
+ */
+export interface AsyncThemeApi {
+  /** The theme at the open revision. Called again when the revision moves. */
+  tokens(): Promise<ThemeTokens>;
 }
 
 interface AsyncEditorHostCapabilities {
@@ -477,6 +533,7 @@ interface AsyncEditorHostCapabilities {
   readonly fixtures?: Capability<AsyncFixtureApi> | undefined;
   readonly lifecycle?: Capability<AsyncLifecycleApi> | undefined;
   readonly versions?: Capability<AsyncVersionsApi> | undefined;
+  readonly theme?: Capability<AsyncThemeApi> | undefined;
   readonly telemetry?: ((event: EditorEvent) => void) | undefined;
   /**
    * Render the open document for one target. A host that renders the web page offers it; the
@@ -506,3 +563,4 @@ export interface AsyncReadonlyEditorHost extends AsyncEditorHostCapabilities {
 }
 
 export type AsyncEditorHost = AsyncEditableEditorHost | AsyncReadonlyEditorHost;
+export { themeTokensFromStylesheets, type ThemeStylesheets } from "./theme";

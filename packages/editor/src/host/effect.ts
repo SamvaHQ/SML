@@ -7,6 +7,7 @@ import type {
   AsyncFixtureApi,
   AsyncLifecycleApi,
   AsyncReadonlyEditorHost,
+  AsyncThemeApi,
   AsyncVersionsApi,
   Capability,
   contractVersion,
@@ -29,6 +30,8 @@ import type {
   ReadonlyEditorDocument,
   RenderTarget,
   RevisionToken,
+  SavedVersion,
+  ThemeTokens,
   UploadedImage,
   UploadImageInput,
   VersionSaveOptions,
@@ -150,8 +153,13 @@ export interface VersionsApi {
   readonly save: (
     revision: RevisionToken,
     options?: VersionSaveOptions,
-  ) => Effect.Effect<RevisionToken, DocumentError>;
-  readonly savedRevision: Effect.Effect<RevisionToken | null, DocumentUnavailable>;
+  ) => Effect.Effect<SavedVersion, DocumentError>;
+  readonly savedRevision: Effect.Effect<SavedVersion | null, DocumentUnavailable>;
+}
+
+/** The Effect form of {@link AsyncThemeApi}. */
+export interface ThemeApi {
+  readonly tokens: Effect.Effect<ThemeTokens, DocumentUnavailable>;
 }
 
 /**
@@ -170,6 +178,7 @@ interface EditorHostCapabilities {
   readonly assets?: Capability<AssetApi> | undefined;
   readonly lifecycle?: Capability<LifecycleApi> | undefined;
   readonly versions?: Capability<VersionsApi> | undefined;
+  readonly theme?: Capability<ThemeApi> | undefined;
   readonly telemetry?: ((event: EditorEvent) => Effect.Effect<void>) | undefined;
   /** Render the open document for one target; see the async contract's `render`. */
   readonly render?:
@@ -298,6 +307,11 @@ export function toAsyncHost(host: EditorHost): AsyncEditorHost {
         save: (revision: RevisionToken, options?: VersionSaveOptions) =>
           Effect.runPromise(api.save(revision, options)),
         savedRevision: () => Effect.runPromise(api.savedRevision),
+      })),
+    theme:
+      host.theme &&
+      mapCapability<ThemeApi, AsyncThemeApi>(host.theme, (api) => ({
+        tokens: () => Effect.runPromise(api.tokens),
       })),
     lifecycle:
       host.lifecycle &&
