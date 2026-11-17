@@ -16,7 +16,7 @@ import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 import { bindingName, bindingPath, fixtureSample, renderedSamples } from "./binding-label";
 import { ColorField, Spinner } from "./color-field";
-import { AlignCenter, AlignLeft, AlignRight, Code } from "./editor-icons";
+import { AlignCenter, AlignLeft, AlignRight, DataField } from "./editor-icons";
 import { FontField } from "./font-field";
 import { classTokens, propLabel } from "./friendly";
 import { useThemePalette } from "./theme-tokens";
@@ -573,7 +573,7 @@ export function DesignProperties({
                     data-path={segment.path?.join(".")}
                     className="w-fit gap-1 rounded-md text-[12px] font-normal"
                   >
-                    {segment.path !== null && <Code className="size-3 shrink-0 opacity-70" />}
+                    {segment.path !== null && <DataField className="size-3 shrink-0 opacity-70" />}
                     {segment.label}
                   </Badge>
                 </Tip>

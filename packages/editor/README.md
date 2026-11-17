@@ -205,9 +205,13 @@ In Design the canvas shows `editor-design-properties` beside the email. Inside t
 `editor-design-field` (`data-pending` while its edit is still rendering, with an
 `editor-design-field-pending` spinner) and `editor-design-swatch` mark the controls, and each row of the layers
 is an `editor-layer` with `data-selected`. The toolbar on the
-selected element is drawn inside the email's frame, so it is styled by the frame's own sheet
-(`--editor-canvas-toolbar-bg` and `-fg`) rather than by Tailwind; it carries
-`data-testid="design-toolbar"`. The Design and Checks tabs render `editor-design-panel` (with `editor-layers`) and
+selected element is drawn in the canvas beside the email (`editor-design-toolbar`, with
+`data-side` for the edge of the element it sits on and `data-orientation` for its direction) and
+keeps the `--editor-canvas-toolbar-bg` and `-fg` tokens; it carries
+`data-testid="design-toolbar"`. With nothing selected the inspector shows `editor-document-panel`:
+`editor-document-group` sections (Page, Preview with), `editor-document-disclosure` folds (Edit
+sample data, Where it's written) and, when the preview cannot build, `editor-document-error`
+with the reason and an Undo. The Design and Checks tabs render `editor-design-panel` (with `editor-layers`) and
 `editor-checks-panel`, which opens with `editor-email-differences` (`data-count`, one
 `editor-email-differences-row` per component) when the host renders the web page. Inside the parts, controls are the shadcn components, so they also carry
 shadcn's own slots (`button`, `tabs-trigger`, `toggle-group-item`, `dropdown-menu-content`,

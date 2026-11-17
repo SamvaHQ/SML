@@ -8,6 +8,7 @@ import ArrowShrink01Icon from "@hugeicons/core-free-icons/ArrowShrink01Icon";
 import ArrowUp01Icon from "@hugeicons/core-free-icons/ArrowUp01Icon";
 import ArrowUp02Icon from "@hugeicons/core-free-icons/ArrowUp02Icon";
 import ArrowUpDownIcon from "@hugeicons/core-free-icons/ArrowUpDownIcon";
+import BracesIcon from "@hugeicons/core-free-icons/BracesIcon";
 import BubbleChatIcon from "@hugeicons/core-free-icons/BubbleChatIcon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import CheckListIcon from "@hugeicons/core-free-icons/CheckListIcon";
@@ -100,6 +101,7 @@ export const DEFAULT_EDITOR_ICONS = {
   clock: hugeicon(Clock01Icon),
   code: hugeicon(SourceCodeIcon),
   compare: hugeicon(GitCompareIcon),
+  dataField: hugeicon(BracesIcon),
   dividerY: hugeicon(SeparatorHorizontalIcon),
   download: hugeicon(Download04Icon),
   duplicate: hugeicon(Copy01Icon),

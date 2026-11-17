@@ -5,24 +5,24 @@ import {
   emailSelectionSiblings,
   type EmailElementSelection,
 } from "@samva/markup/edit";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
-import { DEVICE_WIDTH } from "../state/store";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { ChecksPanel } from "./checks-panel";
+import { DocumentPanel } from "./document-panel";
 import { ChevronRight, SidebarRightHide } from "./editor-icons";
+import { roleCrumbs } from "./element-role";
 import { formatOrigin, selectionTextExcerpt } from "./email-outline";
 import { authoredAncestry, friendlyName, occurrenceNote } from "./friendly";
-import { SourceControls, FixtureSourceControls } from "./source-controls";
+import { SourceControls } from "./source-controls";
 import { GroupLabel, Value, VarChip } from "./ui";
 import { Tip } from "./ui";
 import { cn, focusRing } from "./ui-classes";
 
 /** Stable empty lists, so a selector that falls back never mints a fresh snapshot. */
-const NO_FIXTURES: ReadonlyArray<string> = [];
 const NO_VARIABLES: EditorDocument["variables"] = [];
 const NO_SELECTIONS: ReadonlyArray<EmailElementSelection> = [];
 
@@ -76,36 +76,9 @@ function ChecksGroup() {
 }
 
 function DocumentInspector({ checks }: { readonly checks: boolean }) {
-  const { deviceWidth, entryFile, fixture, fixtures } = useEditorStore(
-    useShallow((state) => ({
-      deviceWidth: DEVICE_WIDTH[state.previewDevice],
-      entryFile: state.doc?.origin.file ?? null,
-      fixture: state.doc?.channel === "email" ? state.doc.fixture : null,
-      fixtures: state.doc?.channel === "email" ? state.doc.fixtures : NO_FIXTURES,
-    })),
-  );
-
   return (
     <>
-      <div className="border-border-subtle border-b py-3">
-        <GroupLabel>Document</GroupLabel>
-        <Row label="Width">
-          <Value>
-            {deviceWidth} <span className="text-placeholder text-[10.5px]">px</span>
-          </Value>
-        </Row>
-        {entryFile !== null && (
-          <Row label="Entry">
-            <Value>{entryFile}</Value>
-          </Row>
-        )}
-        {fixture !== null && (
-          <Row label="Fixture" title={`${fixtures.length} declared`}>
-            <Value>{fixture}</Value>
-          </Row>
-        )}
-      </div>
-      <FixtureSourceControls key={`${fixture}:${entryFile}`} />
+      <DocumentPanel />
       <VariablesGroup />
       {checks && <ChecksGroup />}
     </>
@@ -401,16 +374,19 @@ export function Inspector({
   const scope =
     selection.kind === "envelope" ? "envelope" : selected === null ? "document" : "element";
   const authoredSource = useEditorStore((state) => state.doc?.origin.authoredSource ?? "");
-  // Only the blocks the author wrote, the nearest two, so the trail stays one short line.
-  const crumbs =
-    selected === null || outline === null
-      ? []
-      : authoredAncestry(outline, selected.instancePath)
-          .slice(-2)
-          .map((entry) => ({
-            instancePath: entry.instancePath,
-            label: friendlyName(entry, authoredSource),
-          }));
+  const authoredFile = useEditorStore((state) => state.doc?.origin.file ?? "");
+  // The nearest two blocks the author wrote, by what they are, so the trail stays one short line.
+  const crumbs = useMemo(
+    () =>
+      selected === null || outline === null
+        ? []
+        : roleCrumbs(
+            authoredAncestry(outline, selected.instancePath),
+            { file: authoredFile, source: authoredSource },
+            friendlyName(selected, authoredSource),
+          ),
+    [selected, outline, authoredFile, authoredSource],
+  );
   const repeat = selected === null ? undefined : occurrenceNote(selected);
   const overlay = !embedded && (layoutMode === "compact" || layoutMode === "narrow");
 
@@ -440,7 +416,7 @@ export function Inspector({
           <div className="flex min-h-10 items-center gap-2 px-3 py-2">
             <div className="text-muted-foreground flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden text-xs">
               {scope === "document" ? (
-                <span className="text-foreground truncate px-1 font-semibold">Document</span>
+                <span className="text-foreground truncate px-1 font-semibold">Email</span>
               ) : scope === "envelope" ? (
                 <span className="text-foreground truncate px-1 font-semibold">Envelope</span>
               ) : (
