@@ -63,7 +63,9 @@ export const sourceLabel = (source: ThemeTokenSource): string =>
     ? `${source.name} brand`
     : source.kind === "stylesheet"
       ? "Theme"
-      : "This email";
+      : source.kind === "default"
+        ? "Default theme"
+        : "This email";
 
 /** The theme role a rendered font stack is, matched by its first family. */
 export const matchFont = (
@@ -95,8 +97,11 @@ export const parseRgba = (value: string): Rgba | null => {
   if (rgb === undefined) return null;
   const parts = rgb.split(/[\s,/]+/).filter((part) => part !== "");
   if (parts.length < 3) return null;
-  const numbers = parts.map((part) =>
-    part.endsWith("%") ? Number.parseFloat(part) / 100 : Number.parseFloat(part),
+  // A percentage channel is of 255; a percentage alpha is of 1.
+  const numbers = parts.map((part, index) =>
+    part.endsWith("%")
+      ? (Number.parseFloat(part) / 100) * (index < 3 ? 255 : 1)
+      : Number.parseFloat(part),
   );
   if (numbers.some((number) => !Number.isFinite(number))) return null;
   return [numbers[0]!, numbers[1]!, numbers[2]!, numbers[3] ?? 1];

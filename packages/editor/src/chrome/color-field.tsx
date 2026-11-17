@@ -179,9 +179,14 @@ export function Swatch({
   );
 }
 
-/** Brand first, then the email's own overrides, then the starter theme. */
-const sourceRank = (color: PaletteColor): number =>
-  color.source.kind === "brand" ? 0 : color.source.kind === "project" ? 1 : 2;
+/** Brand first, then the email's own overrides, then the starter theme, then the default theme. */
+const SOURCE_RANK: Record<PaletteColor["source"]["kind"], number> = {
+  brand: 0,
+  project: 1,
+  stylesheet: 2,
+  default: 3,
+};
+const sourceRank = (color: PaletteColor): number => SOURCE_RANK[color.source.kind];
 
 /** 0 neutrals, 1 brand (primary, secondary, accent, destructive), 2 borders, 3 anything else. */
 const colorGroup = (name: string): number => {
@@ -239,6 +244,16 @@ export function ColorField({
   const inherited = token === undefined && custom === undefined;
   const renderedMatch =
     renderedColor === null ? undefined : matchColor(colors, renderedColor, scheme);
+  // A variant (`dark:text-card`) can paint another palette color over the base class; the field
+  // shows the one the canvas paints.
+  const shownToken =
+    token !== undefined &&
+    token.value !== null &&
+    renderedColor !== null &&
+    renderedMatch !== undefined &&
+    matchColor([token], renderedColor, scheme) === undefined
+      ? renderedMatch
+      : token;
   const applied: {
     readonly name: string;
     readonly value: string | null;
@@ -246,12 +261,12 @@ export function ColorField({
     /** The value the canvas paints. */
     readonly shown: string | null;
   } =
-    token !== undefined
+    shownToken !== undefined
       ? {
-          name: colorLabel(token),
-          value: token.value,
-          dark: token.dark,
-          shown: valueIn(token, scheme),
+          name: colorLabel(shownToken),
+          value: shownToken.value,
+          dark: shownToken.dark,
+          shown: valueIn(shownToken, scheme),
         }
       : custom !== undefined
         ? { name: "Custom", value: custom, shown: custom }

@@ -1,7 +1,9 @@
+import { DEFAULT_THEME } from "@samva/markup/brand";
+
 import type { ThemeColorToken, ThemeFontToken, ThemeTokenSource, ThemeTokens } from "./types";
 
-// A template's theme is layered: `theme.css` imports the starter stylesheet, then the brand
-// (`samva:brand`), then sets its own `@theme`. Each layer's dark-mode block,
+// A template's theme is layered: the compiler's default theme, then what `theme.css` imports (the
+// starter stylesheet, the brand), then the theme's own `@theme`. Each layer's dark-mode block,
 // `@media (prefers-color-scheme: dark) { @theme { … } }`, sets the colors that change in dark
 // mode. A layer that sets a color in its light `@theme` owns that color in both modes, so a dark
 // value from a layer beneath it stops applying. This resolver reads the same shapes without a CSS
@@ -13,11 +15,21 @@ export interface ThemeStylesheets {
   readonly themePath: string;
   /** Project stylesheets by path: the theme and every stylesheet it imports. */
   readonly files: Readonly<Record<string, string>>;
-  /** The brand `samva:brand` (or `samva:brand/<slug>`) resolves to; without one it is skipped. */
+  /** The brand the brand import (or `<specifier>/<slug>`) resolves to; without one it is skipped. */
   readonly brand?: { readonly name: string; readonly css: string } | undefined;
+  /** The specifier the project imports its brand from; `samva:brand` when absent. */
+  readonly brandSpecifier?: string | undefined;
 }
 
-const BRAND_SPECIFIER = /^samva:brand(?:\/[a-z0-9-]+)?$/;
+const DEFAULT_BRAND_SPECIFIER = "samva:brand";
+const BRAND_SLUG = "[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?";
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+
+/** `<specifier>` or `<specifier>/<slug>`, as the compiler reads a brand import. */
+const brandImport = (specifier: string): RegExp =>
+  new RegExp(`^${escapeRegExp(specifier)}(?:\\/${BRAND_SLUG})?$`);
+
 const DARK_QUERY = /^\(\s*prefers-color-scheme\s*:\s*dark\s*\)$/i;
 const MAX_VAR_DEPTH = 8;
 const AT_KEYWORD = /@([\w-]+)/y;
@@ -233,13 +245,14 @@ const resolveVars = (
       );
 
 /**
- * The colors and font roles a theme resolves to, through its imports and the brand, in the order
- * the stylesheets first declare them. A later layer's value replaces an earlier one's, and
+ * The colors and font roles a theme resolves to over the compiler's default theme, through its
+ * imports and the brand, in the order the layers first declare them. A later layer's value replaces an earlier one's, and
  * `var()` references between tokens are resolved.
  */
 export const themeTokensFromStylesheets = (input: ThemeStylesheets): ThemeTokens => {
   const entries = new Map<string, Entry>();
   const visited = new Set<string>();
+  const brandSpecifier = brandImport(input.brandSpecifier ?? DEFAULT_BRAND_SPECIFIER);
 
   const apply = (layer: Layer, source: ThemeTokenSource) => {
     for (const [property, value] of layer.light)
@@ -256,7 +269,7 @@ export const themeTokensFromStylesheets = (input: ThemeStylesheets): ThemeTokens
     visited.add(key);
     const { layer, imports } = readLayer(css);
     for (const target of imports) {
-      if (BRAND_SPECIFIER.test(target)) {
+      if (brandSpecifier.test(target)) {
         if (input.brand !== undefined)
           walk("samva:brand", input.brand.css, { kind: "brand", name: input.brand.name }, null);
         continue;
@@ -270,6 +283,13 @@ export const themeTokensFromStylesheets = (input: ThemeStylesheets): ThemeTokens
     apply(layer, source);
   };
 
+  apply(
+    {
+      light: new Map(Object.entries(DEFAULT_THEME.variables)),
+      dark: new Map(Object.entries(DEFAULT_THEME.dark)),
+    },
+    { kind: "default" },
+  );
   const theme = input.files[input.themePath];
   if (theme !== undefined) walk(input.themePath, theme, { kind: "project" }, input.themePath);
 

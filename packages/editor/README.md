@@ -126,11 +126,13 @@ into; the compiler's authored marks decide which is which. The properties edit t
 element's text (data fields stay pills, named the way an author says them with the active
 fixture's sample beneath), image description and size, component settings, colors from the
 resolved theme (one field per property showing the color in use, opening a list grouped by
-brand, this email and theme, with Inherited and a custom hex), the theme's font roles, type size
+brand, this email, theme and default theme, with Inherited and a custom hex), the theme's font roles, type size
 and weight, alignment, and padding or spacing. Each control shows what the element renders with,
 read from the canvas when the element sets no class. A host's `theme` capability supplies the
 resolved theme, brand included; without it the editor resolves the project's stylesheets through
-`lifecycle` with `themeTokensFromStylesheets`, which hosts can also call from `@samva/editor/host`. Each change is a class or
+`lifecycle` with `themeTokensFromStylesheets`, which hosts can also call from `@samva/editor/host`
+(over the compiler's default theme; pass `brandSpecifier` when the project imports its brand
+by a specifier other than `samva:brand`). Each change is a class or
 prop edit, staged like the toolbar's. **Advanced** keeps the raw props and classes and the
 block edits, and the Source tab keeps the whole template.
 
@@ -309,7 +311,7 @@ origin: {
 }
 ```
 
-Hosts must use `contractVersion` (`2026-10-26.1`) and handle both email origin kinds. Source
+Hosts must carry the `contractVersion` `@samva/editor/host` exports and handle both email origin kinds. Source
 replacement, undo/redo, and prose span edits use the same revision-fenced writer for the open
 file. A Markdown host needs no `lifecycle` capability for prose edits; foreign Markdown spans in
 a TSX document still use `lifecycle.inspect` and `updateFile`. Structural, expression, fixture-data,

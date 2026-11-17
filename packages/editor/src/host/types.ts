@@ -479,12 +479,14 @@ export interface AsyncVersionsApi {
  * Where a theme token's value comes from. `brand` is the organization brand the theme imports
  * (`samva:brand`), which only the host can resolve; `stylesheet` is another project stylesheet the
  * theme imports (the starter); `project` is the theme file's own `@theme`, this template's
- * overrides.
+ * overrides; `default` is the theme every project compiles with beneath its own
+ * (`DEFAULT_THEME` from `@samva/markup/brand`).
  */
 export type ThemeTokenSource =
   | { readonly kind: "brand"; readonly name: string }
   | { readonly kind: "stylesheet"; readonly path: string }
-  | { readonly kind: "project" };
+  | { readonly kind: "project" }
+  | { readonly kind: "default" };
 
 /** One `--color-*` token, resolved through the theme's imports and the brand. */
 export interface ThemeColorToken {

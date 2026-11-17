@@ -21,6 +21,6 @@ packages:
 
 - `contractVersion` is `2026-11-17.1`.
 - `versions.save` and `versions.savedRevision` resolve a `SavedVersion` (`{ revision, number? }`) instead of a revision token; `number` lets the status bar say "Saved as version 13".
-- A new optional `theme` capability (`tokens(): Promise<ThemeTokens>`) gives the editor the resolved theme, brand included. `themeTokensFromStylesheets` from `@samva/editor/host` builds `ThemeTokens` from project stylesheets and a brand's CSS.
-- The assistant contract: `workspace.design` is `{ on }`, `workspace.saveVersionStatus` is replaced by `workspace.version` (`{ status, changes, number?, reason? }`), and `EditorAssistantControls.saveVersion()` saves the draft as a version before a turn. Design edits no longer hold the chat.
+- A new optional `theme` capability (`tokens(): Promise<ThemeTokens>`) gives the editor the resolved theme, brand included. `themeTokensFromStylesheets` from `@samva/editor/host` builds `ThemeTokens` from project stylesheets and a brand's CSS, over the compiler's default theme; `brandSpecifier` names a brand import other than `samva:brand`. A token's `source` can be `{ kind: "default" }`, a colour or font the project leaves to the default theme.
+- The assistant contract: `workspace.design` is `{ on }`, `workspace.saveVersionStatus` is replaced by `workspace.version` (`{ status, changes, number?, reason? }`), and `EditorAssistantControls.saveVersion()` saves the draft as a version before a turn. Without `versions` it writes every pending edit and rejects when the draft could not be written. Design edits no longer hold the chat.
 - `workspace.pointedElement` follows a click only outside Design; in Design it is set by "Ask agent about this" and cleared on leaving Design.
