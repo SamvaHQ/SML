@@ -257,8 +257,15 @@ export const saveStatus = (
     };
   const atRevision = savedVersionAt(version, doc.rev);
   if (settled && atRevision !== null) return { kind: "saved", number: atRevision.number };
-  // Undoing back to what this session saved is the saved version again, whatever its revision.
-  if (settled && version.saved !== null && version.saved.source === doc.origin.authoredSource)
+  // Undoing back to what this session saved is the saved version again, whatever its revision,
+  // while every change since is one this session counted: a change to another project file (a
+  // theme or a shared part) leaves the entry as saved but not the version.
+  if (
+    settled &&
+    version.mark !== null &&
+    version.saved !== null &&
+    version.saved.source === doc.origin.authoredSource
+  )
     return { kind: "saved", number: version.saved.number };
   const changes = changeCount(state);
   if (version.head?.revision !== doc.rev && (changes ?? 0) === 0 && settled) return CHECKING;
@@ -697,6 +704,14 @@ export const createEditorBundle = (
   };
   let invalidateMarkdown: () => void = () => {};
   let cancelMarkdownWait: (() => void) | undefined;
+  // Resolves once every pending Markdown edit is written or dropped.
+  let settleMarkdown: () => Promise<void> = () => Promise.resolve();
+  let markdownIdleWaiters: Array<() => void> = [];
+  const releaseMarkdownWaiters = (): void => {
+    const waiters = markdownIdleWaiters;
+    markdownIdleWaiters = [];
+    for (const resolve of waiters) resolve();
+  };
 
   /**
    * An uneditable host, readonly document, active lifecycle operation, or a refresh still waiting
@@ -872,6 +887,7 @@ export const createEditorBundle = (
         ...(ownedGate ? { lifecycleBusy: false } : {}),
         ...(hadEdits ? { sourceEditError: staleMarkdown } : {}),
       });
+      releaseMarkdownWaiters();
     };
     // Keep text typed during an unavailable write until the author's Retry has saved its base.
     // Waiting on the store also lets an external change or disposal cancel the continuation.
@@ -919,7 +935,7 @@ export const createEditorBundle = (
     const drainMarkdown = (): void => {
       if (markdownSaving || markdownTimer !== undefined) return;
       const next = pendingMarkdown.entries().next();
-      if (next.done === true) return;
+      if (next.done === true) return releaseMarkdownWaiters();
       const [instancePath, item] = next.value;
       pendingMarkdown.delete(instancePath);
       const target = markdownTarget(instancePath);
@@ -933,8 +949,10 @@ export const createEditorBundle = (
         refuseMarkdown(staleMarkdown);
         return drainMarkdown();
       }
-      if (target.kind === "project" && !actions.beginLifecycle())
-        return failMarkdown(staleMarkdown);
+      if (target.kind === "project" && !actions.beginLifecycle()) {
+        failMarkdown(staleMarkdown);
+        return releaseMarkdownWaiters();
+      }
       markdownSaving = true;
       markdownEntryRevision = target.kind === "entry" ? item.revision : null;
       markdownEntrySource = target.kind === "entry" ? target.source : null;
@@ -1028,6 +1046,17 @@ export const createEditorBundle = (
           if (target.kind === "project") actions.endLifecycle();
           drainMarkdown();
         });
+    };
+    settleMarkdown = () => {
+      // Text still inside its typing pause is written now rather than after it.
+      if (markdownTimer !== undefined) {
+        clearTimeout(markdownTimer);
+        markdownTimer = undefined;
+        drainMarkdown();
+      }
+      return !markdownSaving && markdownTimer === undefined && pendingMarkdown.size === 0
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => markdownIdleWaiters.push(resolve));
     };
     // Typing in the Source tab is one undo step per burst: a keystroke within this long of the
     // last one joins its step.
@@ -1413,11 +1442,15 @@ export const createEditorBundle = (
         set((current) => {
           if (current.doc === null) return { conflict: false };
           // A version save in flight keeps its status; a failure no longer applies.
-          const version: VersionState =
-            current.version.status === "failed"
-              ? { ...current.version, status: "idle", reason: null }
-              : current.version;
           const same = input.authoredSource === current.doc.origin.authoredSource;
+          // The entry as it was under a new revision: another project file changed, so the
+          // changes this session counted no longer describe the draft.
+          const projectMoved = same && input.rev !== current.doc.rev;
+          const version: VersionState = {
+            ...current.version,
+            ...(current.version.status === "failed" ? { status: "idle", reason: null } : {}),
+            ...(projectMoved ? { mark: null } : {}),
+          };
           // The same source while its render is still on its way: only the revision moves. The
           // edit stays pending, and its own render, when it lands, is the adopted revision's.
           if (same && current.pendingAuthoredSource !== null) {
@@ -1460,7 +1493,22 @@ export const createEditorBundle = (
         const state = get();
         const versions =
           state.versionsCapability?.status === "ready" ? state.versionsCapability.api : undefined;
-        if (versions === undefined) return spine.flushSaves();
+        // Without versions, keeping the draft is the save: every pending edit written, and refused
+        // when a write conflicted or could not be stored.
+        if (versions === undefined)
+          return settleMarkdown()
+            .then(() => spine.flushSaves())
+            .then((revision) => {
+              const settled = get();
+              return settled.doc === null || settled.conflict || settled.storageError !== null
+                ? Promise.reject(
+                    new DocumentUnavailable({
+                      reason:
+                        settled.storageError ?? "Your latest changes haven't reached the draft.",
+                    }),
+                  )
+                : revision;
+            });
         const { doc } = state;
         if (
           doc !== null &&
@@ -1496,6 +1544,7 @@ export const createEditorBundle = (
             }
             const snapshot = settled.doc;
             const saved = await versions.save(revision);
+            const changes = changeCount(get());
             const current = get().doc;
             // Adopt the saved revision only when nothing moved under the save; a later edit owns
             // the revision fence instead.
@@ -1508,7 +1557,6 @@ export const createEditorBundle = (
                 authoredSource: snapshot.origin.authoredSource,
               });
             }
-            const changes = changeCount(get());
             sourceTypingAt = 0;
             set((latest) => ({
               designBase: null,
@@ -2070,7 +2118,17 @@ export const createEditorBundle = (
         if (snapshot.doc.fixture !== change.fixture) invalidateMarkdown();
         if (snapshot.doc.rev !== change.rev) obsoleteMarkdownRevisions.add(snapshot.doc.rev);
       }
+      // A new revision with no entry write of ours on its way and the entry unchanged: another
+      // project file changed (a theme or a shared part), which the change count does not cover.
+      const projectMoved =
+        snapshot.doc !== null &&
+        snapshot.pendingAuthoredSource === null &&
+        change.rev !== snapshot.doc.rev &&
+        (change.authoredSource === undefined ||
+          change.authoredSource === snapshot.doc.origin.authoredSource);
       applyChange(change, true);
+      if (projectMoved)
+        store.setState((current) => ({ version: { ...current.version, mark: null } }));
     },
     onForeignChange: (change, saveInFlight) => {
       const snapshot = store.getState();
@@ -2197,6 +2255,8 @@ export const createEditorBundle = (
         cancelMarkdownWait?.();
         if (markdownTimer !== undefined) clearTimeout(markdownTimer);
         markdownTimer = undefined;
+        markdownSaving = false;
+        releaseMarkdownWaiters();
         store.setState({ lifecycleBusy: false });
         spine.dispose();
       },

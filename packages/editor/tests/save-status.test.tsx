@@ -16,7 +16,7 @@ import { EditorShell } from "../src/chrome/shell";
 import { useEditorStoreApi } from "../src/state/context";
 import { EditorProvider } from "../src/state/provider";
 import { changeCount, type EditorStore } from "../src/state/store";
-import { mockEditor, settle, withVersions } from "./mock-host";
+import { emitChange, mockEditor, settle, withVersions } from "./mock-host";
 
 afterEach(cleanup);
 
@@ -178,6 +178,47 @@ describe("the status bar's save status", () => {
     expect(status(view).textContent).toBe("Couldn't save: Browser storage is full.");
     fireEvent.click(view.getByTestId("statusbar.retry"));
     expect(storeOf().getState().storageError).toBeNull();
+  });
+
+  it("does not call a project change the saved version", async () => {
+    for (const origin of ["self", "agent"] as const) {
+      const editor = await mockEditor();
+      // A host can report its own project write (a theme change) as the session's.
+      const open: typeof editor.host.document.open = (onChange, ...rest) =>
+        editor.host.document.open(
+          (change) => onChange(origin === "self" ? { ...change, origin } : change),
+          ...rest,
+        );
+      const view = await mount(
+        withVersions({ ...editor.host, document: { open } }, async (revision) => ({
+          revision,
+          number: 13,
+        })),
+      );
+      await edit("// kept");
+      fireEvent.click(view.getByTestId("topbar.save-version"));
+      await waitFor(() => expect(status(view).textContent).toBe("Saved as version 13"));
+      const saved = storeOf().getState().doc!;
+      // The theme or a shared part changed: a new revision, the entry as it was saved.
+      await act(() => emitChange(editor, { origin: "agent" }));
+      await waitFor(() => expect(storeOf().getState().doc?.rev).not.toBe(saved.rev));
+      expect(storeOf().getState().doc?.origin.authoredSource).toBe(saved.origin.authoredSource);
+      await waitFor(() => expect(status(view).textContent).toBe("Changes not in a version yet"));
+      expect(view.getByTestId("topbar.save-version")).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("refuses to keep the draft for a turn when a write conflicted, without versions", async () => {
+    await mount((await mockEditor()).host);
+    act(() => storeOf().setState({ conflict: true }));
+    await expect(storeOf().getState().actions.saveVersion()).rejects.toMatchObject({
+      reason: "Your latest changes haven't reached the draft.",
+    });
+    act(() => storeOf().setState({ conflict: false, storageError: "Browser storage is full." }));
+    await expect(storeOf().getState().actions.saveVersion()).rejects.toMatchObject({
+      reason: "Browser storage is full.",
+    });
   });
 
   it("leaves a guest headline as it was", async () => {

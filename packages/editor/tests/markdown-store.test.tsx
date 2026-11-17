@@ -197,6 +197,26 @@ describe("Markdown editing through the real editor store", () => {
     await waitFor(() => expect(editor.probe.render?.html).toContain("Welcome"));
   });
 
+  it("writes text still in its typing pause before keeping the draft for a turn", async () => {
+    const editor = await harness();
+    act(() => editor.probe.editMarkdownText(editor.path, "Welcome"));
+    let kept = false;
+    const keeping = editor.store
+      .getState()
+      .actions.saveVersion()
+      .then((revision) => {
+        kept = true;
+        return revision;
+      });
+    // Written now, not after the pause, and the draft is kept only once it is rendered.
+    await waitFor(() => expect(editor.fileWrites).toHaveLength(1), { timeout: 200 });
+    expect(editor.fileWrites[0]?.content).toBe(metadata + "Welcome");
+    expect(kept).toBe(false);
+    await act(() => editor.publish());
+    await act(() => keeping);
+    expect(kept).toBe(true);
+  });
+
   it("coalesces a burst of typing into the latest text", async () => {
     const editor = await harness();
     act(() => editor.probe.editMarkdownText(editor.path, "W"));
