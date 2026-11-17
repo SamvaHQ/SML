@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { basename, join } from "node:path";
@@ -1080,7 +1080,7 @@ describe("samvaEditor theme route", () => {
     const root = await tempProject({ "templates/welcome.tsx": EMAIL, ...files });
     const booted = await bootServer(root, ROUTE, options);
     open.push(booted);
-    return booted;
+    return { ...booted, root };
   };
 
   it("serves the theme and the project stylesheets it imports", async () => {
@@ -1109,6 +1109,57 @@ describe("samvaEditor theme route", () => {
     const { body } = await json(origin, THEME_ROUTE);
     expect(Object.keys((body as { files: object }).files)).toEqual(["theme.css"]);
     expect(JSON.stringify(body)).not.toContain("#f00");
+  });
+
+  it("does not follow a link out of the project root", async () => {
+    const outside = await tempProject({ "secret.css": "@theme { --color-secret: #f00; }\n" });
+    const { origin, root } = await boot({
+      "theme.css": `@import "./linked.css";\n@theme { --color-brand: #4f46e5; }\n`,
+    });
+    await symlink(join(outside, "secret.css"), join(root, "linked.css"));
+    const { body } = await json(origin, THEME_ROUTE);
+    expect(Object.keys((body as { files: object }).files)).toEqual(["theme.css"]);
+    expect(JSON.stringify(body)).not.toContain("#f00");
+  });
+
+  it("follows an unquoted url() import", async () => {
+    const { origin } = await boot({
+      "theme.css": `@import url(./starter.css);\n@theme { --color-brand: #4f46e5; }\n`,
+      "starter.css": `@theme { --color-ink: #111; }\n`,
+    });
+    const { body } = await json(origin, THEME_ROUTE);
+    expect((body as { files: object }).files).toEqual({
+      "theme.css": expect.stringContaining("#4f46e5"),
+      "starter.css": expect.stringContaining("#111"),
+    });
+  });
+
+  it("names the brand specifier the editor is configured with", async () => {
+    const { origin } = await boot(
+      { "theme.css": `@import "studio:brand";\n` },
+      {
+        brandPlugin: {
+          specifier: "studio:brand",
+          footerAttribute: "data-studio-footer",
+          unsubscribeRowAttribute: "data-studio-unsubscribe",
+          unsubscribeUrlPlaceholder: "{{studio.unsubscribe}}",
+          noTrackAttribute: "data-studio-no-track",
+        },
+        brandResolver: {
+          resolve: async () => ({
+            ok: true,
+            brand: { slug: "studio", css: "@theme { --color-brand: #e11d48; }" },
+            source: "studio",
+            warnings: [],
+          }),
+        },
+      },
+    );
+    const { body } = await json(origin, THEME_ROUTE);
+    expect(body).toMatchObject({
+      brandSpecifier: "studio:brand",
+      brand: { name: "studio" },
+    });
   });
 
   it("returns no files when theming is off", async () => {

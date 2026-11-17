@@ -37,8 +37,8 @@ Samva authoring:
 
 - editor UI: `/`
 - editor API and event streams: `/api/*`; `/api/theme` serves the theme's stylesheets (the theme and
-  its relative `@import` closure under the project root, plus the resolved brand) so the inspector
-  paints real colours and font roles
+  its relative `@import` closure under the project root, plus the resolved brand and the brand
+  specifier) so the inspector paints real colours and font roles
 - bundled editor assets: `/assets/*`
 
 To share a Vite server with another app, choose a route:

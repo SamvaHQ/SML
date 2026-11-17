@@ -504,6 +504,7 @@ export const samvaEditor = (options: SamvaEditorPluginOptions = {}): Plugin => {
                 root,
                 theme: options.theme,
                 brand: await store.brand(),
+                brandSpecifier: options.brandPlugin?.specifier,
               }),
             );
           }
