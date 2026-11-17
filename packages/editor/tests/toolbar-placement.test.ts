@@ -73,6 +73,14 @@ describe("placeToolbar", () => {
     ).toMatchObject({ side: "below" });
   });
 
+  it("prefers the row that stays on screen over empty space scrolled out of view", () => {
+    // Scrolled so the heading sits 20px below the canvas's top edge: a row over it is off screen.
+    const placement = placeToolbar(
+      input({ column: box(0, -400, 680, 1600), element: box(80, 20, 400, 40) }),
+    );
+    expect(placement).toMatchObject({ side: "below", top: 20 + 40 + TOOLBAR_GAP });
+  });
+
   it("keeps a row inside the column, then on screen", () => {
     const right = placeToolbar(
       input({ column: box(20, 40, 640, 1200), element: box(560, 240, 100, 40) }),

@@ -101,7 +101,8 @@ const customComponent = (
 /** `{/* Order card *\/}` directly before the element, or nothing. */
 const commentLabel = (source: string, target: SourceElement): string | undefined => {
   const before = source.slice(0, target.start).trimEnd();
-  const text = /\{\s*\/\*([\s\S]*?)\*\/\s*\}$/.exec(before)?.[1]?.trim();
+  // The comment's text never holds `*/`, so the match cannot start at an earlier comment.
+  const text = /\{\s*\/\*((?:(?!\*\/)[\s\S])*)\*\/\s*\}$/.exec(before)?.[1]?.trim();
   return text === undefined || text === "" ? undefined : text;
 };
 

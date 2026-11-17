@@ -59,6 +59,16 @@ describe("elementRole", () => {
     expect(roleOf(source, "<Section")).toEqual({ label: "Order summary", named: true });
   });
 
+  it("reads only the comment right before the element when earlier ones precede it", () => {
+    const source = `<Email>
+  {/* Header */}
+  <Section>a</Section>
+  {/* Order summary */}
+  <Section className="bg-card">x</Section>
+</Email>`;
+    expect(roleOf(source, `<Section className`)).toEqual({ label: "Order summary", named: true });
+  });
+
   it("reads aria-label, title, id and data-name, humanising ids", () => {
     const source = `<>\n${[
       `<Section aria-label="Shipping details">a</Section>`,

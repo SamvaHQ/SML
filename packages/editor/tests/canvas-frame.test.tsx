@@ -174,6 +174,35 @@ describe("neighbourBoxes", () => {
       { top: 2, left: 1, width: 3, height: 4 },
     ]);
   });
+
+  it("counts the text a neighbour holds beside its stamped children", () => {
+    const view = render(
+      <div {...{ [INSTANCE_PATH_ATTRIBUTE]: "0" }}>
+        {"  "}
+        <h1 {...{ [INSTANCE_PATH_ATTRIBUTE]: "0.0" }}>Thanks</h1>
+        <p {...{ [INSTANCE_PATH_ATTRIBUTE]: "0.1" }}>
+          Confirmed <b {...{ [INSTANCE_PATH_ATTRIBUTE]: "0.1.0" }}>today</b>
+        </p>
+      </div>,
+    );
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(() =>
+      DOMRect.fromRect({ x: 60, y: 30, width: 40, height: 10 }),
+    );
+    vi.spyOn(Range.prototype, "getClientRects").mockImplementation(function (this: Range) {
+      const rects = (this.startContainer.textContent ?? "").includes("Confirmed")
+        ? [DOMRect.fromRect({ x: 0, y: 30, width: 50, height: 10 })]
+        : [];
+      const list: DOMRectList = Object.assign([...rects], {
+        item: (index: number) => rects[index] ?? null,
+      });
+      return list;
+    });
+    // The bold word and the paragraph's own "Confirmed"; the heading's text is the heading.
+    expect(neighbourBoxes(view.container, "0.0")).toEqual([
+      { top: 30, left: 0, width: 50, height: 10 },
+      { top: 30, left: 60, width: 40, height: 10 },
+    ]);
+  });
 });
 
 describe("SelectionOverlay", () => {

@@ -66,8 +66,8 @@ const covered = (box: Box, neighbours: ReadonlyArray<Box>): number => {
  *
  * Without that room the toolbar is a row over the element, then under it, starting at the
  * element's left edge and kept inside the column. The first of the two that stays inside the
- * column and clear of neighbouring content wins; when both cover something, the one covering
- * least. When neither fits inside the column, the element fills it, and the row sits at the
+ * column and clear of neighbouring content wins, a row on screen before one scrolled out of
+ * view; when both cover something, the one covering least. When neither fits inside the column, the element fills it, and the row sits at the
  * column's top.
  */
 export const placeToolbar = (input: ToolbarPlacementInput): ToolbarPlacement => {
@@ -105,14 +105,20 @@ export const placeToolbar = (input: ToolbarPlacementInput): ToolbarPlacement => 
     .filter(({ top }) => top >= column.top && top + horizontal.height <= columnBottom)
     .map((candidate) => ({
       ...candidate,
+      onScreen:
+        candidate.top >= viewport.top && candidate.top + horizontal.height <= viewportBottom,
       covers: covered(
         { top: candidate.top, left: rowLeft, width: horizontal.width, height: horizontal.height },
         neighbours,
       ),
     }));
+  const better = (
+    candidate: (typeof candidates)[number],
+    chosen: (typeof candidates)[number],
+  ): boolean =>
+    candidate.onScreen === chosen.onScreen ? candidate.covers < chosen.covers : candidate.onScreen;
   const best = candidates.reduce<(typeof candidates)[number] | undefined>(
-    (chosen, candidate) =>
-      chosen === undefined || candidate.covers < chosen.covers ? candidate : chosen,
+    (chosen, candidate) => (chosen === undefined || better(candidate, chosen) ? candidate : chosen),
     undefined,
   );
   return {
