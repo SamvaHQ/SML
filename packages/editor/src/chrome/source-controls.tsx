@@ -16,6 +16,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore } from "../state/context";
 import { pendingDesignEdit } from "../state/store";
+import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { useContribution } from "./contributions";
 import { DesignProperties } from "./design-properties";
@@ -728,14 +729,16 @@ function SourceControlsSession({ selection }: { readonly selection: EmailElement
         >
           <p className="min-w-0 flex-1">{shownError}</p>
           {canUndo && (
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               data-testid="source.edit-error-undo"
-              className={buttonClass}
+              data-editor-control=""
               onClick={undo}
+              className="bg-background shrink-0"
             >
               Undo
-            </button>
+            </Button>
           )}
         </div>
       )}

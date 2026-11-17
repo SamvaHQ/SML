@@ -111,7 +111,7 @@ function BuildFailure() {
       data-testid="inspector.document.error"
       className="border-status-error/35 bg-status-error/10 text-status-error mt-3 flex flex-col gap-2 rounded-lg border p-2.5 text-xs"
     >
-      <p className="font-medium">The preview can't build.</p>
+      <p className="font-medium">The preview couldn't be shown.</p>
       <p className="text-foreground break-words">{reason}</p>
       {canUndo && (
         <Button
