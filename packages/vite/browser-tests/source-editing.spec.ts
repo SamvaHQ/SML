@@ -80,6 +80,7 @@ test("local host preserves source intent through visual edits, undo, fixtures an
   await page.getByTestId("preview-bar.fixture").selectOption("second");
   await expect(frame.getByText(COPY.grace, { exact: true })).toBeVisible();
   await page.getByTestId("inspector.document").click();
+  await page.getByTestId("inspector.document.sample-data-toggle").click();
   await page.getByTestId("source.fixture-data").fill('{ name: "Lin" }');
   await page.getByTestId("source.fixture-review").click();
   await page.getByTestId("source.fixture-apply").click();
