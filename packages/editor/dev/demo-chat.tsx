@@ -54,15 +54,17 @@ function TurnRow({
 
 /** What the composer reads from the editor and may do to its pins. */
 export interface DemoComposerProps {
-  readonly design: EditorAssistantWorkspace["design"];
   readonly pins: EditorAssistantWorkspace["pins"];
   readonly removePin: (id: string) => void;
   readonly clearPins: () => void;
+  /** Keep the draft as a version before the turn, as a host's chat does before each send. */
+  readonly saveVersion: () => Promise<string>;
 }
 
-function Composer({ design, pins, removePin, clearPins }: DemoComposerProps) {
+function Composer({ pins, removePin, clearPins, saveVersion }: DemoComposerProps) {
   const [sent, setSent] = useState<string | null>(null);
-  const waiting = design.waiting;
+  const [sending, setSending] = useState(false);
+  const waiting = sending;
   return (
     <div
       data-testid="dev-app.composer"
@@ -104,7 +106,7 @@ function Composer({ design, pins, removePin, clearPins }: DemoComposerProps) {
         disabled={waiting}
         placeholder={
           waiting
-            ? "Apply or reset your Design edits to keep talking"
+            ? "Saving your changes as a version…"
             : pins.length > 0
               ? `Ask about ${pins.length === 1 ? "this pin" : "these pins"}…`
               : (sent ?? "Ask for a change…")
@@ -114,7 +116,7 @@ function Composer({ design, pins, removePin, clearPins }: DemoComposerProps) {
       <div className="flex items-center gap-2 px-2 pb-2 pl-3.5">
         {waiting ? (
           <span data-testid="dev-app.chat-waits" className="text-muted-foreground flex-1 text-xs">
-            Chat waits while edits are pending.
+            Saving your changes as a version first.
           </span>
         ) : (
           <span className="flex-1" />
@@ -125,8 +127,15 @@ function Composer({ design, pins, removePin, clearPins }: DemoComposerProps) {
           data-testid="dev-app.send"
           disabled={waiting}
           onClick={() => {
-            setSent(`Sent with ${pins.length} ${pins.length === 1 ? "pin" : "pins"}`);
-            clearPins();
+            setSending(true);
+            const count = pins.length;
+            void saveVersion()
+              .then(() => {
+                setSent(`Sent with ${count} ${count === 1 ? "pin" : "pins"}`);
+                clearPins();
+              })
+              .catch(() => setSent("Couldn't save your changes, so nothing was sent"))
+              .finally(() => setSending(false));
           }}
           className="bg-primary text-primary-foreground grid size-7 place-items-center rounded-lg opacity-90 disabled:opacity-40"
         >

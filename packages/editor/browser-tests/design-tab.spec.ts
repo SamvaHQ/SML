@@ -28,7 +28,7 @@ test("layers list the authored blocks by name, with no compiler scaffolding", as
     expect(text).not.toContain(scaffold);
 });
 
-test("a block's background is a theme color, and the change is staged", async ({ page }) => {
+test("a block's background is a theme color, and the change is counted", async ({ page }) => {
   await open(page);
   await layers(page).locator('[data-layer-name="Section"]').nth(1).click();
   await expect(page.getByTestId("inspector.element-name")).toHaveText("Section");
@@ -37,7 +37,9 @@ test("a block's background is a theme color, and the change is staged", async ({
     "true",
   );
   await page.getByTestId("design-properties.color.bg.secondary").click();
-  await expect(page.getByTestId("preview-bar.design-count")).toContainText("1");
+  await expect(page.getByTestId("statusbar.save-version")).toHaveText(
+    "1 change not in a version yet",
+  );
   await expect(source(page)).toContainText('className="rounded-xl px-8 py-10 bg-secondary"');
   const inspector = page.getByTestId("design-panel").getByTestId("inspector");
   await expect(inspector).not.toContainText("0.1.1");

@@ -1,9 +1,10 @@
+import type { RevisionToken } from "@samva/editor/host";
 import { createContext, useContext, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useEditorStore, useEditorStoreApi } from "../state/context";
 import { summarizeChecks } from "../state/derive";
-import { designWaiting, pendingDesignEdits, type EditorLayoutMode } from "../state/store";
+import { saveStatus, type EditorLayoutMode, type SaveStatus } from "../state/store";
 import type { CheckItem, EditorPin } from "../state/types";
 import { useContribution } from "./contributions";
 import {
@@ -16,6 +17,18 @@ import {
 /** What the `rail.assistant` contribution may call. */
 export interface EditorAssistantControls {
   readonly flushSaves: () => Promise<string>;
+  /**
+   * Save the draft as a version before an assistant turn so the turn builds on kept work;
+   * resolves the saved revision (immediately when nothing changed).
+   *
+   * Call it before each send and start the turn on the revision it resolves: it writes every
+   * edit still on its way (Design and Source alike), saves them as one version unless the open
+   * revision already is the saved version, and makes that revision the open one. It rejects with
+   * the reason when the save fails, which `workspace.version` also reports as `failed`; hold the
+   * send then. Concurrent calls share one save. Without the host's `versions` it only writes the
+   * draft and resolves its revision.
+   */
+  readonly saveVersion: () => Promise<RevisionToken>;
   readonly workspace: EditorAssistantWorkspace;
   readonly exportHtml: () => void;
   readonly canExport: boolean;
@@ -33,7 +46,19 @@ export interface EditorAssistantControls {
 /** Read-only editor state projected into the host's assistant. */
 export interface EditorAssistantWorkspace {
   readonly draftRevision: string | null;
-  readonly saveVersionStatus: "unavailable" | "idle" | "saving" | "saved" | "error";
+  /**
+   * Where the draft stands against its saved versions, as the status bar says it. `unsaved`
+   * holds `changes` made here since the last saved version (0 when they are not counted, such as
+   * changes made before the editor opened); `saved` names the version's `number` when the host
+   * counts them; `failed` carries the `reason`. `unavailable` means the host offers no
+   * `versions`.
+   */
+  readonly version: {
+    readonly status: "unavailable" | "unsaved" | "saving" | "saved" | "failed";
+    readonly changes: number;
+    readonly number?: number | undefined;
+    readonly reason?: string | undefined;
+  };
   readonly checks: {
     readonly errors: number;
     readonly warnings: number;
@@ -47,8 +72,10 @@ export interface EditorAssistantWorkspace {
     readonly check: CheckItem;
   } | null;
   /**
-   * Canvas selection while the assistant is pointing, not editing: the rendered instance and the
-   * fixture it was taken in, which is what identifies it to the host.
+   * The element the assistant is pointed at: the rendered instance and the fixture it was taken
+   * in, which is what identifies it to the host. In point mode a selection points it; in Design
+   * and pin mode only the element panel's "Ask agent about this" does, and changing the canvas
+   * mode clears it.
    */
   readonly pointedElement: {
     readonly originIndex?: number;
@@ -57,18 +84,10 @@ export interface EditorAssistantWorkspace {
     readonly label: string;
   } | null;
   /**
-   * Design edits on the draft. The chat must not send while `waiting` is true: edits are staged,
-   * Apply is saving them, or an undo or reset has not reached the host yet. An assistant turn
-   * would otherwise build on edits the author has not kept, and a version it saved would carry
-   * them. `pending` counts the staged edits, `applying` is an Apply in flight, and `on` says
-   * Design is the canvas's mode.
+   * Design is the canvas's mode. Its edits are ordinary changes to the draft; they never hold
+   * the chat, and `saveVersion` keeps them before a turn.
    */
-  readonly design: {
-    readonly on: boolean;
-    readonly pending: number;
-    readonly applying: boolean;
-    readonly waiting: boolean;
-  };
+  readonly design: { readonly on: boolean };
   /** The pins on the email, in tray order, for the next message. */
   readonly pins: ReadonlyArray<EditorPin>;
   /** Instance paths present in the render on screen. */
@@ -91,8 +110,30 @@ export interface EditorAssistantWorkspace {
 export interface AssistantShellState {
   readonly exportHtml: () => void;
   readonly canExport: boolean;
-  readonly saveVersionStatus: EditorAssistantWorkspace["saveVersionStatus"];
 }
+
+/** The save status in the assistant's terms. */
+const versionOf = (
+  status: SaveStatus,
+  versioned: boolean,
+  changes: number | null,
+): EditorAssistantWorkspace["version"] => {
+  const counted = changes ?? 0;
+  if (!versioned)
+    return status.kind === "failed"
+      ? { status: "failed", changes: counted, reason: status.reason }
+      : { status: "unavailable", changes: counted };
+  switch (status.kind) {
+    case "saving":
+      return { status: "saving", changes: counted };
+    case "saved":
+      return { status: "saved", changes: 0, number: status.number };
+    case "failed":
+      return { status: "failed", changes: counted, reason: status.reason };
+    default:
+      return { status: "unsaved", changes: counted };
+  }
+};
 
 const AssistantShellContext = createContext<AssistantShellState | null>(null);
 
@@ -116,15 +157,15 @@ export function useAssistant(): {
     render,
     outline,
     selection,
+    target,
     originIndex,
     checks,
     diagnosticAssistance,
     layout,
     canFix,
     designOn,
-    designPending,
-    designApplying,
-    designWaits,
+    versioned,
+    changes,
     pins,
   } = useEditorStore(
     useShallow((state) => ({
@@ -132,14 +173,14 @@ export function useAssistant(): {
       render: state.render,
       outline: state.outline,
       selection: state.selection,
+      target: state.assistantTarget,
       originIndex: state.assistantOriginIndex,
       checks: state.checks,
       diagnosticAssistance: state.diagnosticAssistance,
       layout: state.layoutMode,
       designOn: state.canvasMode === "design",
-      designPending: pendingDesignEdits(state),
-      designApplying: state.designApply.status === "applying",
-      designWaits: designWaiting(state),
+      versioned: state.versionsCapability?.status === "ready",
+      changes: state.version.changes,
       pins: state.pins,
       canFix:
         state.sourceEditable &&
@@ -148,18 +189,18 @@ export function useAssistant(): {
         !state.lifecycleBusy,
     })),
   );
+  const status = useEditorStore(useShallow(saveStatus));
   if (assistant === undefined || shell === null) return null;
 
   const checkSummary = summarizeChecks(checks);
-  const pointed =
-    selection.kind === "element" ? (outline?.index.get(selection.instancePath) ?? null) : null;
+  const pointed = target === null ? null : (outline?.index.get(target.instancePath) ?? null);
   const pointedElement =
-    pointed === null || selection.kind !== "element"
+    pointed === null || target === null
       ? null
       : {
-          originIndex,
+          originIndex: target.originIndex,
           instancePath: pointed.instancePath,
-          fixture: selection.fixture,
+          fixture: target.fixture,
           label: selectionLabel(pointed),
         };
   const fixture = doc?.channel === "email" ? doc.fixture : null;
@@ -181,6 +222,7 @@ export function useAssistant(): {
 
   const panel = assistant.render({
     flushSaves: () => store.getState().actions.flushSaves(),
+    saveVersion: () => store.getState().actions.saveVersion(),
     exportHtml: shell.exportHtml,
     canExport: shell.canExport,
     openReview: review === undefined ? undefined : () => store.getState().actions.openReview(),
@@ -188,7 +230,7 @@ export function useAssistant(): {
     clearPins: () => store.getState().actions.clearPins(),
     workspace: {
       draftRevision: doc?.rev ?? null,
-      saveVersionStatus: shell.saveVersionStatus,
+      version: versionOf(status, versioned, changes),
       checks: {
         errors: checkSummary.errorCount,
         warnings: checkSummary.warnCount,
@@ -196,12 +238,7 @@ export function useAssistant(): {
         canFix,
       },
       diagnosticAssistance,
-      design: {
-        on: designOn,
-        pending: designPending,
-        applying: designApplying,
-        waiting: designWaits,
-      },
+      design: { on: designOn },
       pins,
       pointedElement,
       availableInstancePaths: outline === null ? [] : [...outline.index.keys()],

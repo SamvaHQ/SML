@@ -3,7 +3,7 @@
  * @jsxImportSource react
  */
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
-import type { DocumentChange, EditorDocument } from "@samva/editor/host";
+import type { DocumentChange, EditorDocument, SavedVersion } from "@samva/editor/host";
 import type { AsyncEditableEditorHost } from "@samva/editor/host";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
@@ -90,7 +90,7 @@ describe("container-responsive rail policy", () => {
     const editor = await mockEditor();
     let publish: ((change: DocumentChange) => void) | undefined;
     let initial: EditorDocument | undefined;
-    let savedRevision: string | null = null;
+    let savedRevision: SavedVersion | null = null;
     const unavailable = () => Promise.reject("Lifecycle operation is not arranged");
     const wrappedHost: AsyncEditableEditorHost = {
       ...editor.host,
@@ -128,9 +128,10 @@ describe("container-responsive rail policy", () => {
       incompatibilities: document.incompatibilities,
     });
 
-    savedRevision = "agent_saved";
+    savedRevision = { revision: "agent_saved", number: 7 };
     act(() => publishChange(change("agent_saved")));
     await waitFor(() => expect(status.dataset.saveVersionState).toBe("saved"));
+    expect(status.textContent).toBe("Saved as version 7");
 
     savedRevision = null;
     act(() => publishChange(change("next_draft")));
@@ -174,7 +175,7 @@ describe("container-responsive rail policy", () => {
             diagnostics: current.diagnostics,
             incompatibilities: current.incompatibilities,
           });
-          return materialized;
+          return { revision: materialized, number: 2 };
         })}
       >
         <EditorShell />
@@ -187,8 +188,9 @@ describe("container-responsive rail policy", () => {
     await waitFor(() =>
       expect(view.getByTestId("statusbar.save-version").dataset.saveVersionState).toBe("saved"),
     );
-    fireEvent.click(view.getByTestId("topbar.save-version"));
-    await waitFor(() => expect(revisions).toEqual(["rev_1", "rev_2"]));
+    expect(view.getByTestId("statusbar.save-version").textContent).toBe("Saved as version 2");
+    // A saved draft has nothing to save.
+    expect(view.queryByTestId("topbar.save-version")).toBeNull();
   });
 
   it("splits chat and a tabbed work pane from 1280px and switches Chat | Preview below it", async () => {

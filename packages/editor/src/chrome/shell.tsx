@@ -16,7 +16,7 @@ import { SmsWorkspace } from "../channels/sms-workspace";
 import { WhatsAppWorkspace } from "../channels/whatsapp-workspace";
 import { cn } from "../lib/utils";
 import { useEditorStore, useEditorStoreApi } from "../state/context";
-import { pendingDesignEdits, type EditorLayoutMode } from "../state/store";
+import type { EditorLayoutMode } from "../state/store";
 import { Button } from "../ui/button";
 import type { EditorBrandSource } from "./brand-chip";
 import {
@@ -184,21 +184,13 @@ export function EditorRoot({
   const leftCollapsed = useEditorStore((state) => state.leftCollapsed);
   const rightCollapsed = useEditorStore((state) => state.rightCollapsed);
   const layoutMode = useEditorStore((state) => state.layoutMode);
-  const documentRevision = useEditorStore((state) => state.doc?.rev ?? null);
-  // Undo and redo walk the staged Design edits while there are any, then the source history.
-  const undoCount = useEditorStore(
-    (state) => state.undoHistory.length + (state.designDraft?.edits.length ?? 0),
-  );
-  const redoCount = useEditorStore(
-    (state) => state.redoHistory.length + (state.designDraft?.undone.length ?? 0),
-  );
+  const undoCount = useEditorStore((state) => state.undoHistory.length);
+  const redoCount = useEditorStore((state) => state.redoHistory.length);
   const sourceEditable = useEditorStore((state) => state.sourceEditable);
   const doc = useEditorStore((state) => state.doc);
   const render = useEditorStore((state) => state.render);
   const pendingAuthoredSource = useEditorStore((state) => state.pendingAuthoredSource);
   const lifecycleBusy = useEditorStore((state) => state.lifecycleBusy);
-  const conflict = useEditorStore((state) => state.conflict);
-  const storageError = useEditorStore((state) => state.storageError);
   const slots = useMemo(() => resolveContributions(contributions), [contributions]);
   const frameStart = slots.one("frame.start");
   const guestStatus = slots.one("statusbar.headline");
@@ -217,49 +209,18 @@ export function EditorRoot({
     openWorkTab,
     setFocusedPane,
     setHostBusy,
+    saveVersion,
   } = useEditorStore((state) => state.actions);
   useEffect(() => setHostBusy(previewBusy), [previewBusy, setHostBusy]);
-  const versions = useEditorStore((state) => state.versionsCapability);
+  // Save version comes from the host's `versions` capability, through the store's one save path.
+  const versioned = useEditorStore((state) => state.versionsCapability?.status === "ready");
   const telemetry = useEditorStore((state) => state.telemetry);
-  // Save version comes from the host's `versions` capability; the shell holds no second path.
-  const versionsApi = versions?.status === "ready" ? versions.api : undefined;
-  const onSaveVersion = useMemo(
-    () =>
-      versionsApi === undefined ? undefined : (revision: string) => versionsApi.save(revision),
-    [versionsApi],
-  );
-  const inspectSavedRevision = useMemo(
-    () => (versionsApi === undefined ? undefined : () => versionsApi.savedRevision()),
-    [versionsApi],
-  );
   const onPreview = () => telemetry?.({ name: "preview" });
   const onExport = () => telemetry?.({ name: "export" });
   const [previewOpen, setPreviewOpen] = useState(false);
   const [lifecycleOpen, setLifecycleOpen] = useState(false);
-  const [saveVersionState, setSaveVersionState] = useState<"idle" | "saving" | "error">("idle");
-  const [materializedRevision, setMaterializedRevision] = useState<string | null>(null);
-  const [hostSavedRevision, setHostSavedRevision] = useState<string | null>(null);
   const store = useEditorStoreApi();
   const idBase = useId();
-  useEffect(() => {
-    if (inspectSavedRevision === undefined || documentRevision === null) return;
-    let current = true;
-    void inspectSavedRevision()
-      .then((revision) => {
-        if (!current) return;
-        setHostSavedRevision(revision === documentRevision ? revision : null);
-      })
-      .catch(() => {
-        if (current) setHostSavedRevision(null);
-      });
-    return () => {
-      current = false;
-    };
-  }, [documentRevision, inspectSavedRevision]);
-  // React state only disables the affordance after a render. Keep the operation
-  // lock outside that render cycle so a click and Cmd/Ctrl+S in the same tick
-  // cannot each flush and materialize the same draft revision.
-  const saveVersionInFlight = useRef<Promise<void> | null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
 
@@ -275,59 +236,11 @@ export function EditorRoot({
     onExport?.();
   };
 
-  const saveVersion = (): Promise<void> => {
-    if (onSaveVersion === undefined) return Promise.resolve();
-    // Staged Design edits are saved by Apply, as one version named for them.
-    if (pendingDesignEdits(store.getState()) > 0) {
-      store.getState().actions.applyDesign();
-      return Promise.resolve();
-    }
-    if (saveVersionInFlight.current !== null) return saveVersionInFlight.current;
-    if (!beginLifecycle()) return Promise.resolve();
-    let releaseInFlight: () => void = () => {};
-    const inFlight = new Promise<void>((resolve) => {
-      releaseInFlight = resolve;
-    });
-    // Set before flushSaves: the command may be reached again before React
-    // commits the `saving` state update.
-    saveVersionInFlight.current = inFlight;
-    setSaveVersionState("saving");
-    void store
-      .getState()
-      .actions.flushSaves()
-      .then(async (revision) => {
-        const snapshot = store.getState().doc;
-        const materialized = await onSaveVersion(revision);
-        const current = store.getState().doc;
-        // Adopt the materialized revision only when nothing moved under the
-        // save; a later edit owns the revision fence instead.
-        if (
-          snapshot !== null &&
-          (current?.rev === revision || current?.rev === materialized) &&
-          current.origin.authoredSource === snapshot.origin.authoredSource
-        ) {
-          store.getState().actions.adoptLifecycleSnapshot({
-            rev: materialized,
-            authoredSource: snapshot.origin.authoredSource,
-          });
-        }
-        setMaterializedRevision(materialized);
-        setSaveVersionState("idle");
-      })
-      .catch(() => setSaveVersionState("error"))
-      .finally(() => {
-        endLifecycle();
-        if (saveVersionInFlight.current === inFlight) saveVersionInFlight.current = null;
-        releaseInFlight();
-      });
-    return inFlight;
-  };
-
   // Choosing a brand writes its import into the theme, and into every script that imports brand
   // components, through the lifecycle file write (a project compiles against one brand), then
   // saves a version through the same path as Save version.
   const applyBrand =
-    brand === undefined || onSaveVersion === undefined
+    brand === undefined || !versioned
       ? undefined
       : async (chosen: EditorBrand) => {
           const lifecycle = store.getState().lifecycleCapability;
@@ -358,27 +271,6 @@ export function EditorRoot({
           }
           await saveVersion();
         };
-
-  let saveVersionStatus: "idle" | "saving" | "saved" | "error" = "idle";
-  if (saveVersionState === "saving") saveVersionStatus = "saving";
-  else if (saveVersionState === "error") saveVersionStatus = "error";
-  else if (
-    documentRevision !== null &&
-    (materializedRevision === documentRevision || hostSavedRevision === documentRevision) &&
-    pendingAuthoredSource === null &&
-    !conflict &&
-    storageError === null
-  ) {
-    saveVersionStatus = "saved";
-  }
-
-  let saveVersionStatusText: string | undefined;
-  if (onSaveVersion !== undefined) {
-    saveVersionStatusText = "Unsaved changes";
-    if (saveVersionStatus === "saving") saveVersionStatusText = "Saving version…";
-    else if (saveVersionStatus === "saved") saveVersionStatusText = "Saved version";
-    else if (saveVersionStatus === "error") saveVersionStatusText = "Couldn’t save version";
-  }
 
   const lifecycleControls: EditorLifecycleControls = {
     flushSaves,
@@ -422,15 +314,20 @@ export function EditorRoot({
 
   // ⌘S / Ctrl+S saves a version from anywhere in the editor frame, fields and the code editor
   // included, but not from a menu or dialog that holds focus over it.
-  const saveVersionKeys = useHotkeys<HTMLDivElement>("mod+s", () => void saveVersion(), {
-    enabled: onSaveVersion !== undefined,
-    preventDefault: true,
-    enableOnFormTags: true,
-    enableOnContentEditable: true,
-    ignoreEventWhen: (event) =>
-      event.target instanceof Element &&
-      event.target.closest('[role="menu"], [role="dialog"], [data-base-ui-portal]') !== null,
-  });
+  const saveVersionKeys = useHotkeys<HTMLDivElement>(
+    "mod+s",
+    // A failed save says why in the status bar.
+    () => void saveVersion().catch(() => {}),
+    {
+      enabled: versioned,
+      preventDefault: true,
+      enableOnFormTags: true,
+      enableOnContentEditable: true,
+      ignoreEventWhen: (event) =>
+        event.target instanceof Element &&
+        event.target.closest('[role="menu"], [role="dialog"], [data-base-ui-portal]') !== null,
+    },
+  );
   const frameRefs = useCallback(
     (element: HTMLDivElement | null) => {
       frameRef.current = element;
@@ -495,13 +392,8 @@ export function EditorRoot({
     brand,
     onUseBrand: applyBrand,
   };
-  const keepsSaveVersion = guestStatus === undefined || guestStatus.saveVersion;
   const statusBar: StatusBarProps = {
-    saveVersionStatus: keepsSaveVersion ? saveVersionStatusText : undefined,
-    saveVersionState: onSaveVersion === undefined ? undefined : saveVersionStatus,
-    onSaveVersion: keepsSaveVersion && onSaveVersion !== undefined ? saveVersion : undefined,
-    saveVersionBusy: saveVersionStatus === "saving",
-    saveVersionBlocked: lifecycleBusy,
+    saveVersionOffered: guestStatus === undefined || guestStatus.saveVersion,
     guestHeadline: guestStatus?.headline,
   };
 
@@ -522,13 +414,7 @@ export function EditorRoot({
 
   return (
     <ContributionsProvider value={slots}>
-      <AssistantShellProvider
-        value={{
-          exportHtml,
-          canExport,
-          saveVersionStatus: onSaveVersion === undefined ? "unavailable" : saveVersionStatus,
-        }}
-      >
+      <AssistantShellProvider value={{ exportHtml, canExport }}>
         <PreviewChromeProvider value={previewChrome}>
           <ShellChromeProvider value={{ topBar, statusBar, overlayOpen, idBase }}>
             <EditorPortalProvider container={portalContainer}>

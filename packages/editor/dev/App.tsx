@@ -217,7 +217,7 @@ export const App = () => {
         ...mock,
         versions: {
           status: "ready",
-          api: { save: async (revision) => revision, savedRevision: async () => null },
+          api: { save: async (revision) => ({ revision }), savedRevision: async () => null },
         },
       });
     });

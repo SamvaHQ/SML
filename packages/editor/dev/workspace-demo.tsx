@@ -5,6 +5,7 @@ import type {
   EditorDocument,
   ProjectCommit,
   ProjectLifecycleState,
+  SavedVersion,
 } from "@samva/editor/host";
 import { type EditorBrandSource, type EditorContribution, EditorShell } from "@samva/editor/shell";
 import { useState } from "react";
@@ -52,6 +53,8 @@ export const createWorkspaceHost = (controls: CompiledHostControls): AsyncEditab
   const mock = controls.host;
   let rev = "rev_1";
   let source = "";
+  // What the saved head holds: the draft as it opened, then each version saved since.
+  let headSource = "";
   const now = Date.now();
   const commits: ProjectCommit[] = DEMO_VERSIONS.map((version, index) => ({
     commit: `c${DEMO_VERSIONS.length - index}`,
@@ -81,13 +84,15 @@ export const createWorkspaceHost = (controls: CompiledHostControls): AsyncEditab
       publishedAt: new Date(),
     }),
     // Restoring writes the version's source as the next draft, the way a host's restore does.
-    restore: async ({ baseRev }) => {
+    // The harness keeps only the head's source; an older version restores the draft as it is.
+    restore: async ({ commit, baseRev }) => {
+      const restored = commit === commits[0]!.commit ? headSource : source;
       const saved = await mock.writer.save({
         kind: "authoredSource",
         baseRev,
-        authoredSource: source,
+        authoredSource: restored,
       });
-      return { rev: saved.rev, authoredSource: source };
+      return { rev: saved.rev, authoredSource: restored };
     },
     resolveConflict: async () => state(),
     updateFile: async () => state(),
@@ -109,10 +114,13 @@ export const createWorkspaceHost = (controls: CompiledHostControls): AsyncEditab
         );
         rev = opened.initial.rev;
         source = opened.initial.origin.authoredSource;
+        headSource = source;
         return { ...opened, initial: withSentSize(opened.initial) };
       },
     },
-    versions: demoVersions(),
+    versions: demoVersions(() => {
+      headSource = source;
+    }),
     lifecycle: { status: "ready", api: lifecycle },
   };
 };
@@ -159,25 +167,33 @@ const BUSY_FOR_MS = 2_500;
 const SAVE_FOR_MS = 600;
 
 /**
- * Versions the way the dashboard saves them: after a moment, and named. `?applyFail` makes every
- * save fail and `?applyHold` keeps it in flight, so both states can be looked at.
+ * Versions the way the dashboard saves them: after a moment, numbered after the demo's history.
+ * `?saveFail` makes every save fail and `?saveHold` keeps it in flight, so both states can be
+ * looked at.
  */
-function demoVersions(): NonNullable<AsyncEditableEditorHost["versions"]> {
+function demoVersions(onSaved: () => void): NonNullable<AsyncEditableEditorHost["versions"]> {
   const query = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
+  let number = DEMO_VERSIONS.length;
+  let saved: SavedVersion | null = null;
   return {
     status: "ready",
     api: {
       save: (revision) =>
-        new Promise<string>((resolve, reject) => {
-          if (query?.has("applyHold") === true) return;
+        new Promise<SavedVersion>((resolve, reject) => {
+          if (query?.has("saveHold") === true) return;
           setTimeout(() => {
-            if (query?.has("applyFail") === true)
+            if (query?.has("saveFail") === true) {
               // oxlint-disable-next-line samva/no-error-constructor -- the harness stands in for a host whose save rejects with an Error
               reject(new Error("The workspace is out of space."));
-            else resolve(revision);
+              return;
+            }
+            number += 1;
+            saved = { revision, number };
+            onSaved();
+            resolve(saved);
           }, SAVE_FOR_MS);
         }),
-      savedRevision: async () => null,
+      savedRevision: async () => saved,
     },
   };
 }
@@ -228,9 +244,9 @@ export function WorkspaceDemoShell({
         {
           slot: "rail.assistant",
           id: "demo-assistant",
-          render: ({ openReview, workspace, removePin, clearPins }) => (
+          render: ({ openReview, workspace, removePin, clearPins, saveVersion }) => (
             <DemoChat
-              composer={{ design: workspace.design, pins: workspace.pins, removePin, clearPins }}
+              composer={{ pins: workspace.pins, removePin, clearPins, saveVersion }}
               developer={
                 developerControlsRequested ? (
                   <div

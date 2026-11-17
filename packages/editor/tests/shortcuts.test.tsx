@@ -83,7 +83,7 @@ describe("zoom chords inside the canvas frame", () => {
 
 describe("save version shortcut", () => {
   it("saves a version from inside the editor and not from outside it", async () => {
-    const save = vi.fn(async (revision: string) => `${revision}_saved`);
+    const save = vi.fn(async (revision: string) => ({ revision: `${revision}_saved` }));
     const view = render(
       <EditorProvider host={withVersions((await mockEditor()).host, save)}>
         <EditorShell />

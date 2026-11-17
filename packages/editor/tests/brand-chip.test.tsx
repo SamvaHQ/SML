@@ -175,7 +175,7 @@ describe("topbar brand chip", () => {
     stubWideShell();
     const project = arrangeProject(`@import "./starter.css";\n@import 'samva:brand/holiday';\n`);
     const view = render(
-      <EditorProvider host={withVersions(project.host, async (revision) => revision)}>
+      <EditorProvider host={withVersions(project.host, async (revision) => ({ revision }))}>
         <EditorShell brand={brandSource(project.readTheme, [acme, holiday])} />
       </EditorProvider>,
     );
@@ -229,7 +229,7 @@ describe("topbar brand chip", () => {
     const project = arrangeProject(
       `@import "./starter.css";\n@import "samva:brand";\n${OVERRIDES}`,
     );
-    const saveVersion = vi.fn(async (revision: string) => `${revision}_saved`);
+    const saveVersion = vi.fn(async (revision: string) => ({ revision: `${revision}_saved` }));
     const view = render(
       <EditorProvider host={withVersions(project.host, saveVersion)}>
         <EditorShell brand={brandSource(project.readTheme, [acme, holiday])} />
@@ -255,7 +255,9 @@ describe("topbar brand chip", () => {
     const footer = `import { BrandFooter } from "samva:brand";\nexport const Footer = BrandFooter;\n`;
     const project = arrangeProject(`@import "samva:brand";\n`, { "partials/footer.tsx": footer });
     const view = render(
-      <EditorProvider host={withVersions(project.host, async (revision) => `${revision}_saved`)}>
+      <EditorProvider
+        host={withVersions(project.host, async (revision) => ({ revision: `${revision}_saved` }))}
+      >
         <EditorShell brand={brandSource(project.readTheme, [acme, holiday])} />
       </EditorProvider>,
     );
@@ -278,7 +280,7 @@ describe("topbar brand chip", () => {
   it("layers the default brand into the theme and saves a version from the menu", async () => {
     stubWideShell();
     const project = arrangeProject(OVERRIDES);
-    const saveVersion = vi.fn(async (revision: string) => `${revision}_saved`);
+    const saveVersion = vi.fn(async (revision: string) => ({ revision: `${revision}_saved` }));
     const view = render(
       <EditorProvider host={withVersions(project.host, saveVersion)}>
         <EditorShell brand={brandSource(project.readTheme, [holiday, acme])} />
@@ -326,7 +328,7 @@ describe("topbar brand chip", () => {
     stubWideShell();
     const project = arrangeProject(null);
     const view = render(
-      <EditorProvider host={withVersions(project.host, async (revision) => revision)}>
+      <EditorProvider host={withVersions(project.host, async (revision) => ({ revision }))}>
         <EditorShell brand={brandSource(project.readTheme, [acme])} />
       </EditorProvider>,
     );
@@ -349,7 +351,7 @@ describe("topbar brand chip", () => {
       releaseTheme = resolve;
     });
     const view = render(
-      <EditorProvider host={withVersions(project.host, async (revision) => revision)}>
+      <EditorProvider host={withVersions(project.host, async (revision) => ({ revision }))}>
         <EditorShell brand={brandSource(() => theme.then(project.readTheme), [acme, holiday])} />
       </EditorProvider>,
     );
@@ -367,7 +369,7 @@ describe("topbar brand chip", () => {
     stubWideShell();
     const project = arrangeProject(OVERRIDES);
     const view = render(
-      <EditorProvider host={withVersions(project.host, async (revision) => revision)}>
+      <EditorProvider host={withVersions(project.host, async (revision) => ({ revision }))}>
         <EditorShell brand={brandSource(project.readTheme, null)} />
       </EditorProvider>,
     );

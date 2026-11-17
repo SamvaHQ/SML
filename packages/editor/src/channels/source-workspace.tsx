@@ -1,6 +1,5 @@
 import { cn } from "../chrome/ui-classes";
 import { useEditorStore } from "../state/context";
-import { pendingDesignEdits } from "../state/store";
 
 function SourcePanel({
   label,
@@ -42,10 +41,7 @@ function SourcePanel({
 /** The canonical authored entry, for every channel: TSX, or the Markdown issue and its frontmatter. */
 export function SourceWorkspace() {
   const doc = useEditorStore((state) => state.doc);
-  // Staged Design edits are undone and reset in order, so the source waits for them to be applied
-  // or reset rather than changing under them.
-  const staged = useEditorStore((state) => pendingDesignEdits(state) > 0);
-  const sourceEditable = useEditorStore((state) => state.sourceEditable) && !staged;
+  const sourceEditable = useEditorStore((state) => state.sourceEditable);
   const { replaceAuthoredSource } = useEditorStore((state) => state.actions);
   if (doc === null) {
     return (
@@ -55,7 +51,7 @@ export function SourceWorkspace() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       <SourcePanel
-        label={`${doc.origin.kind === "markdown" ? "Authored Markdown" : "Authored TSX"} · ${doc.origin.file}${staged ? " · apply or reset your Design edits to edit it" : ""}`}
+        label={`${doc.origin.kind === "markdown" ? "Authored Markdown" : "Authored TSX"} · ${doc.origin.file}`}
         source={doc.origin.authoredSource}
         editable={sourceEditable}
         testId={
