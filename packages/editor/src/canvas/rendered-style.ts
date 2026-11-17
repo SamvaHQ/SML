@@ -73,8 +73,9 @@ const readStyle = (anchor: Element, instancePath: string): RenderedStyle | null 
 
 /**
  * The computed style of the selected instance in the editing canvas, read again whenever the
- * render or the selection moves. `anchor` is any element inside the editor, which scopes the
- * lookup to that editor's canvas when a page mounts two.
+ * render, the selection or the device width moves, and when the canvas's color scheme changes.
+ * `anchor` is any element inside the editor, which scopes the lookup to that editor's canvas when
+ * a page mounts two.
  */
 export function useRenderedStyle(
   anchor: RefObject<Element | null>,
@@ -82,19 +83,30 @@ export function useRenderedStyle(
 ): RenderedStyle | null {
   const revision = useEditorStore((state) => state.render?.revision ?? null);
   const epoch = useEditorStore((state) => state.previewEpoch);
+  const device = useEditorStore((state) => state.previewDevice);
   const [style, setStyle] = useState<{
     readonly key: string;
     readonly style: RenderedStyle | null;
   } | null>(null);
-  const key = `${revision ?? ""}\u0000${epoch}\u0000${instancePath ?? ""}`;
+  const key = `${revision ?? ""}\u0000${epoch}\u0000${device}\u0000${instancePath ?? ""}`;
   useEffect(() => {
     const element = anchor.current;
     if (element === null || instancePath === null) return;
     const read = () => setStyle({ key, style: readStyle(element, instancePath) });
     read();
-    // The canvas installs a new render's document in the same commit or the next frame.
+    // The canvas installs a new render's document, or lays out at a new width, in the same
+    // commit or the next frame.
     const frame = requestAnimationFrame(read);
-    return () => cancelAnimationFrame(frame);
+    // A color scheme change repaints the email without a new render.
+    const schemes = canvasFrames(element).flatMap((canvas) => {
+      const query = canvas.contentWindow?.matchMedia("(prefers-color-scheme: dark)");
+      return query === undefined ? [] : [query];
+    });
+    for (const query of schemes) query.addEventListener("change", read);
+    return () => {
+      cancelAnimationFrame(frame);
+      for (const query of schemes) query.removeEventListener("change", read);
+    };
   }, [anchor, instancePath, key]);
   return style?.key === key ? style.style : null;
 }

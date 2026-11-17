@@ -769,9 +769,11 @@ export function DesignProperties({
                     className="w-full"
                   >
                     <NativeSelectOption value="">
-                      {renderedSize === null
-                        ? "Default"
-                        : `${formatPx(renderedSize)} px${size === undefined ? " · theme" : ""}`}
+                      {size !== undefined
+                        ? "Inherited"
+                        : renderedSize === null
+                          ? "Default"
+                          : `${formatPx(renderedSize)} px · theme`}
                     </NativeSelectOption>
                     {sizes.map((token) => (
                       <NativeSelectOption key={token} value={token}>
@@ -798,9 +800,11 @@ export function DesignProperties({
                     className="w-full"
                   >
                     <NativeSelectOption value="">
-                      {renderedWeight === null
-                        ? "Default"
-                        : `${weightName(renderedWeight)}${weight === undefined ? " · theme" : ""}`}
+                      {weight !== undefined
+                        ? "Inherited"
+                        : renderedWeight === null
+                          ? "Default"
+                          : `${weightName(renderedWeight)} · theme`}
                     </NativeSelectOption>
                     {[
                       ...(weight !== undefined && !WEIGHTS.some((option) => option.value === weight)

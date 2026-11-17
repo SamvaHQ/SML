@@ -9,12 +9,14 @@ import {
   inspectSourceElement,
   type SourceReplacement,
 } from "@samva/markup/edit";
-import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { useLayoutEffect, useRef } from "react";
 
 import { DesignProperties } from "../src/chrome/design-properties";
 import type { AsyncEditorHost, AsyncLifecycleApi, ThemeTokens } from "../src/host/types";
+import { useEditorStoreApi } from "../src/state/context";
 import { EditorProvider } from "../src/state/provider";
+import type { EditorStore } from "../src/state/store";
 import { mockEditor } from "./mock-host";
 
 afterEach(cleanup);
@@ -126,8 +128,14 @@ const mount = async (
   const refused: string[] = [];
   const editor = await mockEditor();
   const host = options.host?.(editor.host) ?? editor.host;
+  let store!: EditorStore;
+  function StoreProbe() {
+    store = useEditorStoreApi();
+    return null;
+  }
   const view = render(
     <EditorProvider host={host}>
+      <StoreProbe />
       <div className="samva-editor-frame">
         {options.rendered !== undefined && <Canvas html={options.rendered} />}
         <DesignProperties
@@ -143,7 +151,7 @@ const mount = async (
       </div>
     </EditorProvider>,
   );
-  return { view, staged, refused };
+  return { view, staged, refused, store: () => store };
 };
 
 const rendered = (style: string, text = "Hi") =>
@@ -355,7 +363,7 @@ describe("Design properties", () => {
     const { view, staged } = await mount('<p className="text-[13px]">Hi</p>');
     const size = view.getByTestId("design-properties.size") as HTMLSelectElement;
     const labels = [...size.options].map((option) => option.textContent);
-    expect(labels[0]).toBe("Default");
+    expect(labels[0]).toBe("Inherited");
     expect(labels).toEqual(expect.arrayContaining(["13 px", "16 px", "34 px"]));
     fireEvent.change(size, { target: { value: "text-[34px]" } });
     expect(staged.at(-1)?.after).toContain('className="text-[34px]"');
@@ -371,6 +379,49 @@ describe("Design properties", () => {
       field: "align",
       after: expect.stringContaining('className="text-[13px] text-center"'),
     });
+  });
+
+  it("offers clearing an explicit size and weight as Inherited, not as the current value", async () => {
+    const { view, staged } = await mount('<h1 className="text-[34px] font-bold">Hi</h1>', {
+      rendered: rendered("font-size: 34px; font-weight: 700"),
+    });
+    const size = view.getByTestId("design-properties.size") as HTMLSelectElement;
+    await waitFor(() => expect(size.selectedOptions[0]?.textContent).toBe("34 px"));
+    expect(size.options[0]?.textContent).toBe("Inherited");
+    const weight = view.getByTestId("design-properties.weight") as HTMLSelectElement;
+    expect(weight.selectedOptions[0]?.textContent).toBe("Bold");
+    expect(weight.options[0]?.textContent).toBe("Inherited");
+    fireEvent.change(size, { target: { value: "" } });
+    expect(staged.at(-1)?.after).toContain('className="font-bold"');
+  });
+
+  it("names the color a dark variant paints over the base class", async () => {
+    const tokens: ThemeTokens = {
+      colors: [
+        { name: "foreground", value: "#0a0a0a", dark: "#fafafa", source: { kind: "project" } },
+        { name: "card", value: "#ffffff", dark: "#171717", source: { kind: "project" } },
+      ],
+      fonts: [],
+    };
+    const { view } = await mount('<p className="text-foreground dark:text-card">Hi</p>', {
+      host: (host) => withTheme(host, tokens),
+      rendered: rendered("color: #171717"),
+    });
+    const field = view.getByTestId("design-properties.color.text");
+    await waitFor(() => expect(field.textContent).toContain("#171717"));
+    expect(field.textContent).toContain("Card");
+    expect(field.textContent).not.toContain("Text");
+  });
+
+  it("reads the rendered size again when the device width changes", async () => {
+    const { view, store } = await mount("<h1>Hi</h1>", { rendered: rendered("font-size: 28px") });
+    const size = view.getByTestId("design-properties.size") as HTMLSelectElement;
+    await waitFor(() => expect(size.selectedOptions[0]?.textContent).toBe("28 px · theme"));
+    // The phone width's media query renders the heading smaller, with the same render.
+    const frame = view.getByTestId("canvas.frame") as HTMLIFrameElement;
+    frame.contentDocument!.querySelector("p")!.setAttribute("style", "font-size: 22px");
+    act(() => store().getState().actions.setPreviewDevice("mobile"));
+    await waitFor(() => expect(size.selectedOptions[0]?.textContent).toBe("22 px · theme"));
   });
 
   it("marks the control whose edit is still rendering and keeps the rest usable", async () => {
