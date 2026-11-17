@@ -2,7 +2,7 @@ import type { EmailElementSelection } from "@samva/markup/edit";
 import { type CSSProperties, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
 import { selectionLabel } from "../chrome/email-outline";
-import { firstVisibleRect, type Box } from "./instance-dom";
+import { firstVisibleRect, neighbourBoxes, type Box } from "./instance-dom";
 
 const outlineStyle = (box: Box, color: string, weight: number): CSSProperties => ({
   position: "fixed",
@@ -17,9 +17,6 @@ const outlineStyle = (box: Box, color: string, weight: number): CSSProperties =>
   zIndex: 2147483646,
 });
 
-/** The toolbar's height and gap, so it sits above the element or, at the top edge, below it. */
-const TOOLBAR_CLEARANCE = 36;
-
 /** A pin drawn on the email: its number at the top-left corner of the element it names. */
 export interface OverlayPin {
   readonly number: number;
@@ -31,9 +28,23 @@ export interface SelectionOverlayProps {
   readonly renderRevision: string;
   readonly selected: EmailElementSelection | null;
   readonly hovered: EmailElementSelection | null;
-  /** Controls drawn above the selected element in place of its label chip. */
-  readonly toolbar?: ReactNode | undefined;
+  /** Name the selected element on a chip. Design shows its toolbar outside the frame instead. */
+  readonly chip?: boolean | undefined;
+  /**
+   * Where the selected element and the content around it are laid out, in the frame's
+   * coordinates, each time they are measured; null when nothing selected is laid out. The
+   * Design toolbar is placed from it in the page around the frame.
+   */
+  readonly onSelectedGeometry?: ((geometry: SelectedGeometry | null) => void) | undefined;
   readonly pins?: ReadonlyArray<OverlayPin> | undefined;
+}
+
+/** The selected element's layout, read in the email's frame. */
+export interface SelectedGeometry {
+  /** The frame the boxes are measured in. */
+  readonly frame: HTMLIFrameElement;
+  readonly element: Box;
+  readonly neighbours: ReadonlyArray<Box>;
 }
 
 const NO_PINS: ReadonlyArray<OverlayPin> = [];
@@ -45,18 +56,17 @@ const NO_PINS: ReadonlyArray<OverlayPin> = [];
  *
  * The chip names what the selection actually is — the tag, whether the renderer
  * generated it, and which iteration of a repeated authoring it is. In Design the
- * toolbar takes the chip's place; pins number the elements they name.
+ * toolbar outside the frame takes the chip's place; pins number the elements they name.
  */
 export const SelectionOverlay = ({
   renderRevision,
   selected,
   hovered,
-  toolbar,
+  chip = true,
+  onSelectedGeometry,
   pins = NO_PINS,
 }: SelectionOverlayProps): ReactNode => {
   const anchor = useRef<HTMLDivElement>(null);
-  const toolbarRef = useRef<HTMLDivElement>(null);
-  const [toolbarLeft, setToolbarLeft] = useState<number | null>(null);
   const [selectedBox, setSelectedBox] = useState<Box | null>(null);
   const [hoveredBox, setHoveredBox] = useState<Box | null>(null);
   const [pinBoxes, setPinBoxes] = useState<
@@ -64,6 +74,12 @@ export const SelectionOverlay = ({
   >([]);
   const selectedPath = selected?.instancePath ?? null;
   const hoveredPath = hovered?.instancePath ?? null;
+  // Read when measuring, so a new callback identity never re-measures.
+  const report = useRef(onSelectedGeometry);
+  useLayoutEffect(() => {
+    report.current = onSelectedGeometry;
+  }, [onSelectedGeometry]);
+  const reports = onSelectedGeometry !== undefined;
 
   // The email keeps laying out after it mounts (web fonts, images), which moves elements without
   // a new render; a resize of its body measures again.
@@ -86,7 +102,21 @@ export const SelectionOverlay = ({
   useLayoutEffect(() => {
     const root = anchor.current?.ownerDocument;
     if (root === undefined) return;
-    setSelectedBox(selectedPath === null ? null : firstVisibleRect(root, selectedPath));
+    const element = selectedPath === null ? null : firstVisibleRect(root, selectedPath);
+    setSelectedBox(element);
+    const frame = root.defaultView?.frameElement;
+    report.current?.(
+      selectedPath === null || element === null || !(frame instanceof HTMLIFrameElement)
+        ? null
+        : { frame, element, neighbours: neighbourBoxes(root, selectedPath) },
+    );
+    // A replaced render moves geometry without changing the selected path.
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- renderRevision and layout are the identity of the geometry being measured, and `reports` measures again for a new listener.
+  }, [renderRevision, selectedPath, layout, reports]);
+
+  useLayoutEffect(() => {
+    const root = anchor.current?.ownerDocument;
+    if (root === undefined) return;
     setHoveredBox(
       hoveredPath === null || hoveredPath === selectedPath
         ? null
@@ -102,18 +132,8 @@ export const SelectionOverlay = ({
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- renderRevision and layout are the identity of the geometry being measured, not values read in the effect body.
   }, [renderRevision, selectedPath, hoveredPath, pins, layout]);
 
-  // The toolbar starts at the element's left edge and moves left as far as it must to stay
-  // inside the frame, so a right-hand element in a narrow preview keeps every action reachable.
-  const hasToolbar = toolbar !== undefined && toolbar !== null;
-  useLayoutEffect(() => {
-    const element = toolbarRef.current;
-    if (!hasToolbar || element === null || selectedBox === null) {
-      setToolbarLeft(null);
-      return;
-    }
-    const room = element.ownerDocument.documentElement.clientWidth;
-    setToolbarLeft(Math.max(4, Math.min(selectedBox.left, room - element.offsetWidth - 4)));
-  }, [hasToolbar, selectedBox]);
+  // A frame that goes away takes its geometry with it.
+  useLayoutEffect(() => () => report.current?.(null), []);
 
   return (
     <div
@@ -135,21 +155,7 @@ export const SelectionOverlay = ({
               2,
             )}
           />
-          {toolbar !== undefined && toolbar !== null ? (
-            <div
-              ref={toolbarRef}
-              className="samva-tb-anchor"
-              style={{
-                top:
-                  selectedBox.top >= TOOLBAR_CLEARANCE
-                    ? selectedBox.top - TOOLBAR_CLEARANCE
-                    : selectedBox.top + selectedBox.height + 6,
-                left: toolbarLeft ?? Math.max(4, selectedBox.left),
-              }}
-            >
-              {toolbar}
-            </div>
-          ) : (
+          {chip && (
             <div
               data-samva-chip
               style={{

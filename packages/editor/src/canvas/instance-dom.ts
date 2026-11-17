@@ -33,6 +33,26 @@ export const firstVisibleRect = (root: ParentNode, instancePath: string): Box | 
   return fallback;
 };
 
+const INSTANCE_SELECTOR = `[${INSTANCE_PATH_ATTRIBUTE}]`;
+
+/**
+ * The rendered content around an instance: every innermost stamped element that is not the
+ * instance or inside it, as laid out. Innermost elements are the content a reader sees (text,
+ * images, buttons); the tables and cells around them are mostly empty space. An ancestor of the
+ * instance is never innermost, so it is never counted.
+ */
+export const neighbourBoxes = (root: ParentNode, instancePath: string): ReadonlyArray<Box> => {
+  const selected = [
+    ...root.querySelectorAll(`[${INSTANCE_PATH_ATTRIBUTE}="${CSS.escape(instancePath)}"]`),
+  ];
+  return [...root.querySelectorAll(INSTANCE_SELECTOR)].flatMap((element) => {
+    if (element.querySelector(INSTANCE_SELECTOR) !== null) return [];
+    if (selected.some((own) => own.contains(element))) return [];
+    const box = boxOf(element.getBoundingClientRect());
+    return box.width > 0 && box.height > 0 ? [box] : [];
+  });
+};
+
 const INTERACTIVE_SELECTOR =
   'a[href],button,input[type="button"],input[type="submit"],input[type="image"]';
 
