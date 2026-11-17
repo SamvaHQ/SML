@@ -1054,9 +1054,30 @@ export const createEditorBundle = (
         markdownTimer = undefined;
         drainMarkdown();
       }
-      return !markdownSaving && markdownTimer === undefined && pendingMarkdown.size === 0
-        ? Promise.resolve()
-        : new Promise<void>((resolve) => markdownIdleWaiters.push(resolve));
+      if (!markdownSaving && markdownTimer === undefined && pendingMarkdown.size === 0)
+        return Promise.resolve();
+      // A write that conflicts or cannot be stored refuses the wait; the text stays queued for
+      // the author's Retry.
+      const failure = (state: EditorState): DocumentUnavailable | null =>
+        state.conflict || state.storageError !== null
+          ? new DocumentUnavailable({
+              reason: state.storageError ?? "Your latest changes haven't reached the draft.",
+            })
+          : null;
+      const failed = failure(get());
+      if (failed !== null) return Promise.reject(failed);
+      return new Promise<void>((resolve, reject) => {
+        const unsubscribe = store.subscribe((state) => {
+          const cause = failure(state);
+          if (cause === null) return;
+          unsubscribe();
+          reject(cause);
+        });
+        markdownIdleWaiters.push(() => {
+          unsubscribe();
+          resolve();
+        });
+      });
     };
     // Typing in the Source tab is one undo step per burst: a keystroke within this long of the
     // last one joins its step.

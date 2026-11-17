@@ -375,6 +375,27 @@ describe("Markdown as the open source document", () => {
     expect(editor.probe.doc?.origin.authoredSource).toBe(editor.source);
   });
 
+  it("refuses to keep the draft for a turn while its text cannot be saved, keeping the text", async () => {
+    const editor = await harness("Hello\n\nNeighbor", true);
+    let reject!: (cause: unknown) => void;
+    editor.save.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    act(() => editor.probe.editMarkdownText(editor.path, "Kept for Retry"));
+    const keeping = editor.probe.saveVersion().then(
+      () => null,
+      (cause: unknown) => cause,
+    );
+    await waitFor(() => expect(editor.save).toHaveBeenCalledTimes(1));
+    await act(async () => reject(new DocumentUnavailable({ reason: "Offline" })));
+    expect(await keeping).toMatchObject({ reason: "Offline" });
+    fireEvent.click(await editor.view.findByTestId("storage.retry"));
+    await waitFor(() => expect(editor.source).toContain("Kept for Retry"));
+  });
+
   it("fences every earlier Source revision when several renders are delayed", async () => {
     const editor = await harness();
     editor.delayRender();
