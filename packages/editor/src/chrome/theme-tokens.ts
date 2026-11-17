@@ -147,22 +147,25 @@ export const matchColor = (
 /**
  * Which scheme the canvas renders in, told by the element's rendered colors: one that is a
  * token's dark value and not its light one means dark, and the reverse light. Colors that do not
- * tell leave `fallback`, the frame's own `prefers-color-scheme`.
+ * tell, or that tell both ways (one theme's text is another's dark background), leave
+ * `fallback`, the frame's own `prefers-color-scheme`.
  */
 export const renderedScheme = (
   colors: ReadonlyArray<PaletteColor>,
   rendered: ReadonlyArray<string>,
   fallback: ColorScheme,
 ): ColorScheme => {
+  let dark = false;
+  let light = false;
   for (const value of rendered)
     for (const color of colors) {
       if (color.dark === undefined || color.value === null) continue;
-      const light = sameColor(color.value, value);
-      const dark = sameColor(color.dark, value);
-      if (dark && !light) return "dark";
-      if (light && !dark) return "light";
+      const isLight = sameColor(color.value, value);
+      const isDark = sameColor(color.dark, value);
+      if (isDark && !isLight) dark = true;
+      if (isLight && !isDark) light = true;
     }
-  return fallback;
+  return dark === light ? fallback : dark ? "dark" : "light";
 };
 
 /** Whether a rendered color paints nothing. */

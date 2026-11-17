@@ -7,6 +7,7 @@ import {
   fontRoleLabel,
   matchColor,
   parseRgba,
+  renderedScheme,
   sourceLabel,
 } from "../src/chrome/theme-tokens";
 import { themeTokensFromStylesheets } from "../src/host/types";
@@ -213,6 +214,15 @@ describe("theme resolution", () => {
 });
 
 describe("color matching", () => {
+  it("keeps the frame's scheme when the rendered colors tell both ways", () => {
+    const { colors } = themeTokensFromStylesheets({ themePath: "theme.css", files: {} });
+    // `#0a0a0a` is the default theme's light text and its dark background.
+    expect(renderedScheme(colors, ["rgb(10, 10, 10)"], "light")).toBe("light");
+    expect(renderedScheme(colors, ["rgb(10, 10, 10)", "rgba(0, 0, 0, 0)"], "dark")).toBe("dark");
+    // A color only the dark scheme paints still tells.
+    expect(renderedScheme(colors, ["rgb(163, 163, 163)"], "light")).toBe("dark");
+  });
+
   it("reads percentage channels out of 255 and a percentage alpha out of 1", () => {
     expect(parseRgba("rgb(100% 0% 0%)")).toEqual([255, 0, 0, 1]);
     expect(parseRgba("rgb(255 0 0 / 50%)")).toEqual([255, 0, 0, 0.5]);
