@@ -27,6 +27,7 @@ Read this file, then the package's own `AGENTS.md`.
 
 ## Rules
 
+- A review of a diff, by a person or a tool, applies the rules in `REVIEW.md`.
 - Generated files are regenerated, not edited: `packages/markup/generated/*` through
   `bun run --filter @samva/markup codegen:contract`, and
   `packages/markup/src/email/tailwind-stylesheets.gen.ts` through `codegen:tailwind`.
