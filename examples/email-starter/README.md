@@ -22,6 +22,11 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
+Use Bun: `bun.lock` is the only tracked lockfile. A lockfile from npm, Yarn or pnpm
+(`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`) is git-ignored, so installing with one of them
+leaves the working tree clean for `samva templates publish`, but it resolves versions the starter
+does not pin.
+
 Open `http://localhost:5173/` and edit `templates/welcome.tsx`. Choose a fixture to render concrete
 input. Supported visual edits update the authored TSX; source remains canonical.
 
